@@ -6,6 +6,7 @@
 <title>Airsent — Parameters</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<script src="fit-screen.js"></script>
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 :root {
@@ -14,7 +15,7 @@
   --green:#4ade80; --amber:#fbbf24; --red:#f87171; --blue:#60a5fa;
   --muted:#4b6275; --text:#e2eaf0; --text2:#7a95a8;
 }
-body { height:100vh; overflow:hidden; background:var(--bg0); color:var(--text); font-family:'DM Sans',Arial,sans-serif; display:flex; flex-direction:column; }
+body { height:100dvh; overflow:hidden; background:var(--bg0); color:var(--text); font-family:'DM Sans',Arial,sans-serif; display:flex; flex-direction:column; }
 
 /* Nav */
 .logo-dropdown { position:relative; display:inline-block; }
@@ -158,11 +159,11 @@ body { height:100vh; overflow:hidden; background:var(--bg0); color:var(--text); 
 .d-note { font-size:10px; color:var(--muted); line-height:1.5; padding:8px; background:rgba(251,191,36,.04); border:1px solid rgba(251,191,36,.1); border-radius:4px; }
 </style>
 </head>
-<body>
+<body class="console-fit">
 
 <div class="topbar">
   <div class="logo-dropdown">
-    <button class="logo-dropdown-btn"><img src="logo.png" style="height:24px;" alt="Airsent"></button>
+    <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
     <div class="logo-dropdown-menu">
       <a href="dashboard.html">Main Dashboard</a>
       <a href="mission.html">Mission Planner</a>
@@ -170,6 +171,7 @@ body { height:100vh; overflow:hidden; background:var(--bg0); color:var(--text); 
       <a href="parameters.html">Parameters</a>
       <a href="logs.html">Flight Logs</a>
       <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
       <a href="health.html">System Health</a>
       <a href="sensor-status.html">Sensor Status</a>
       <a href="actuators.html">Actuators</a>

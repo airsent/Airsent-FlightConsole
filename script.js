@@ -72,6 +72,9 @@ const telemetryEls = {
   ekfTop: document.getElementById("ekfTop"),
   linkTop: document.getElementById("linkTop"),
   missionDistanceVal: document.getElementById("missionDistanceVal"),
+  consoleUsersTotal: document.getElementById("consoleUsersTotal"),
+  consoleOperators: document.getElementById("consoleOperators"),
+  consoleViewers: document.getElementById("consoleViewers"),
   ltVal: document.getElementById("ltVal"),
   mapModeVal: document.getElementById("mapModeVal"),
   positionVal: document.getElementById("positionVal"),
@@ -88,7 +91,51 @@ const telemetryEls = {
 };
  
 const appMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
-const isRealMode = appMode === "actual";
+const isDemoMode = appMode === "demo";
+const isViewerMode = appMode === "viewer";
+const canSendCommands = appMode === "operator" || appMode === "actual" || appMode === "real";
+const isRealMode = !isDemoMode;
+window.airsentMode = appMode;
+window.airsentCanCommand = canSendCommands;
+
+/* COMMAND CHANNEL — sends real commands to the drone through the VPS relay.
+   Browser -> wss://console.airsent.tech/cmd -> VPS:9104 -> VPS:9004 -> Jetson.
+   Mirrors pilot.html. Real mode only; demo mode commands are no-ops. */
+let cmdSocket = null;
+let cmdReconnectTimer = null;
+
+function connectCmd() {
+  if (!canSendCommands) return;
+  if (cmdSocket && (cmdSocket.readyState === WebSocket.OPEN ||
+                    cmdSocket.readyState === WebSocket.CONNECTING)) return;
+  cmdSocket = new WebSocket("wss://console.airsent.tech/cmd");
+  cmdSocket.onopen  = () => { console.log("\u2705 Command channel connected"); };
+  cmdSocket.onclose = () => {
+    cmdSocket = null;
+    if (cmdReconnectTimer) clearTimeout(cmdReconnectTimer);
+    cmdReconnectTimer = setTimeout(connectCmd, 3000);
+  };
+  cmdSocket.onerror = () => {};
+  cmdSocket.onmessage = (ev) => {
+    try {
+      const r = JSON.parse(ev.data);
+      if (r && r.msg) prependEvent("DRONE: " + r.msg);
+    } catch (e) {}
+  };
+}
+
+function sendCmd(obj) {
+  if (!canSendCommands) {
+    if (!isViewerMode) console.log("[demo] would send:", obj);
+    return false;
+  }
+  if (cmdSocket && cmdSocket.readyState === WebSocket.OPEN) {
+    cmdSocket.send(JSON.stringify(obj));
+    return true;
+  }
+  prependEvent("CMD FAILED — no link to drone");
+  return false;
+}
  
 let missionSeconds = 25 * 60 + 38;
 let missionTimerPaused = false;
@@ -306,7 +353,33 @@ function normalizeCommandToMode(command) {
 function executeFlightCommand(buttonEl) {
   const command = buttonEl.dataset.command || "COMMAND";
   const mappedMode = normalizeCommandToMode(command);
- 
+
+  if (isViewerMode) return;
+
+  if (isRealMode) {
+    let sent = false;
+    switch (command) {
+      case "ARM / DISARM": {
+        const armedNow = (telemetryEls.statusSelect &&
+                          telemetryEls.statusSelect.value === "armed");
+        sent = sendCmd({ action: armedNow ? "disarm" : "arm" });
+        break;
+      }
+      case "TAKEOFF":        sent = sendCmd({ action: "takeoff", alt: 2.0 }); break;
+      case "LAND":           sent = sendCmd({ action: "set_land" });         break;
+      case "HOLD":           sent = sendCmd({ action: "set_loiter" });       break;
+      case "RETURN TO BASE": sent = sendCmd({ action: "set_rtl" });          break;
+      case "MISSION START":  sent = sendCmd({ action: "set_auto" });         break;
+      case "GUIDED":         sent = sendCmd({ action: "set_guided" });       break;
+      case "EMERGENCY STOP": sent = sendCmd({ action: "disarm" });           break;
+      default:               sent = false;
+    }
+    setFlightCommandState(buttonEl, command);
+    prependEvent(sent ? `CMD SENT: ${command}` : `CMD FAILED: ${command}`);
+    return;
+  }
+
+  // Demo mode: original local-only behaviour
   if (command === "ARM / DISARM") {
     if (telemetryEls.statusSelect) {
       telemetryEls.statusSelect.value =
@@ -314,15 +387,12 @@ function executeFlightCommand(buttonEl) {
       updateStatusSelectClass();
     }
   }
- 
   if (mappedMode && telemetryEls.flightModeSelect) {
     telemetryEls.flightModeSelect.value = mappedMode;
   }
- 
   if (telemetryEls.mapModeVal && mappedMode) {
     telemetryEls.mapModeVal.textContent = mappedMode;
   }
- 
   setFlightCommandState(buttonEl, command);
   prependEvent(`COMMAND ACCEPTED: ${command}`);
 }
@@ -351,6 +421,11 @@ function bindConfirmButtons() {
   }
 }
  
+function sendModeCommand(modeName) {
+  const m = (modeName || "").toUpperCase().trim();
+  return sendCmd({ action: "set_mode", mode: m });
+}
+
 function bindTopbarControls() {
   if (telemetryEls.statusSelect) {
     telemetryEls.statusSelect.addEventListener("change", () => {
@@ -360,38 +435,178 @@ function bindTopbarControls() {
     updateStatusSelectClass();
   }
  
-  if (telemetryEls.flightModeSelect) {
-    telemetryEls.flightModeSelect.addEventListener("change", () => {
-      telemetryEls.flightModeSelect.classList.remove("blink-red");
-      if (telemetryEls.flightActionIndicator) {
-        telemetryEls.flightActionIndicator.classList.add("hidden");
-        telemetryEls.flightActionIndicator.textContent = "";
+	  if (telemetryEls.flightModeSelect) {
+	    let lastModeValue = telemetryEls.flightModeSelect.value;
+	    telemetryEls.flightModeSelect.addEventListener("focus", () => {
+	      lastModeValue = telemetryEls.flightModeSelect.value;
+	    });
+	    telemetryEls.flightModeSelect.addEventListener("change", () => {
+	      const chosen = telemetryEls.flightModeSelect.value;
+	      if (isViewerMode) {
+	        telemetryEls.flightModeSelect.value = lastModeValue;
+	        return;
+	      }
+	      if (!isRealMode) {
+	        if (telemetryEls.mapModeVal) telemetryEls.mapModeVal.textContent = chosen;
+	        prependEvent(`MODE CHANGE: ${chosen}`);
+	        lastModeValue = chosen;
+        return;
       }
-      flightButtons.forEach((btn) => btn.classList.remove("active-command"));
-      if (telemetryEls.mapModeVal) {
-        telemetryEls.mapModeVal.textContent = telemetryEls.flightModeSelect.value;
-      }
-      prependEvent(`MODE CHANGE: ${telemetryEls.flightModeSelect.value}`);
+      // Real mode: confirm, and revert the dropdown until telemetry confirms.
+      const revert = lastModeValue;
+      telemetryEls.flightModeSelect.value = revert;
+      openConfirm(`Change flight mode to ${chosen}?`, () => {
+        if (sendModeCommand(chosen)) prependEvent(`MODE CMD SENT: ${chosen}`);
+      });
     });
   }
 }
  
 function bindFailsafeControls() {
-  failsafeSelects.forEach((select) => {
-    select.addEventListener("change", () => {
-      const label = select.closest(".failsafe-row")?.querySelector("span")?.textContent || "FAILSAFE";
-      prependEvent(`${label} SET TO ${select.value}`);
-    });
+	  failsafeSelects.forEach((select) => {
+	    select.addEventListener("change", () => {
+	      const label = select.closest(".failsafe-row")?.querySelector("span")?.textContent || "FAILSAFE";
+	      prependEvent(`${label} SET TO ${select.value}`);
+	    });
+	  });
+}
+
+function isViewerReadOnly() {
+  return isViewerMode;
+}
+
+window.airsentIsViewer = isViewerReadOnly;
+
+let pendingFlightSliderButton = null;
+let flightSliderIdleTimer = null;
+let flightSliderOutsideArmed = false;
+
+function resetFlightSliderIdle() {
+  if (flightSliderIdleTimer) clearTimeout(flightSliderIdleTimer);
+  flightSliderIdleTimer = setTimeout(closeFlightSlider, 5000);
+}
+
+function resetFlightSliderPosition() {
+  const knob = document.getElementById("flightSlideKnob");
+  const fill = document.getElementById("flightSlideFill");
+  if (knob) {
+    knob.style.left = "3px";
+    knob.classList.remove("dragging");
+  }
+  if (fill) fill.style.width = "0%";
+}
+
+function closeFlightSlider() {
+  const box = document.getElementById("flightSlideConfirm");
+  if (box) box.classList.add("hidden");
+  pendingFlightSliderButton = null;
+  resetFlightSliderPosition();
+  if (flightSliderIdleTimer) {
+    clearTimeout(flightSliderIdleTimer);
+    flightSliderIdleTimer = null;
+  }
+  flightSliderOutsideArmed = false;
+  document.removeEventListener("pointerdown", handleFlightSliderOutside, true);
+}
+
+function handleFlightSliderOutside(ev) {
+  if (!flightSliderOutsideArmed) return;
+  const box = document.getElementById("flightSlideConfirm");
+  if (!box || box.classList.contains("hidden")) return;
+  if (box.contains(ev.target) || ev.target.closest(".flight-btn")) return;
+  closeFlightSlider();
+}
+
+function openFlightSlider(buttonEl) {
+  const box = document.getElementById("flightSlideConfirm");
+  const title = document.getElementById("flightSlideTitle");
+  if (!box || !buttonEl) return;
+  closeFlightSlider();
+  pendingFlightSliderButton = buttonEl;
+  const command = buttonEl.dataset.command || "COMMAND";
+  if (title) title.textContent = command === "EMERGENCY STOP" ? "EMERGENCY STOP" : `CONFIRM ${command}`;
+  box.classList.remove("hidden");
+  resetFlightSliderPosition();
+  resetFlightSliderIdle();
+  setTimeout(() => {
+    flightSliderOutsideArmed = true;
+    document.addEventListener("pointerdown", handleFlightSliderOutside, true);
+  }, 0);
+}
+
+function bindFlightSlider() {
+  const box = document.getElementById("flightSlideConfirm");
+  const closeBtn = document.getElementById("flightSlideClose");
+  const track = document.getElementById("flightSlideTrack");
+  const knob = document.getElementById("flightSlideKnob");
+  const fill = document.getElementById("flightSlideFill");
+  if (!box || !track || !knob || !fill) return;
+
+  let dragging = false;
+  let startX = 0;
+  let startLeft = 3;
+  const pad = 3;
+
+  const maxX = () => Math.max(pad, track.clientWidth - knob.offsetWidth - pad);
+  const setX = (x) => {
+    const mx = maxX();
+    const left = Math.max(pad, Math.min(mx, x));
+    knob.style.left = `${left}px`;
+    fill.style.width = `${((left - pad) / Math.max(1, mx - pad)) * 100}%`;
+    return left >= mx - 2;
+  };
+
+  box.addEventListener("pointerdown", resetFlightSliderIdle);
+  box.addEventListener("pointermove", resetFlightSliderIdle);
+  closeBtn?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    closeFlightSlider();
+  });
+
+  knob.addEventListener("pointerdown", (ev) => {
+    if (!pendingFlightSliderButton) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    resetFlightSliderIdle();
+    dragging = true;
+    startX = ev.clientX;
+    startLeft = parseFloat(knob.style.left) || pad;
+    knob.classList.add("dragging");
+    knob.setPointerCapture?.(ev.pointerId);
+  });
+
+  knob.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    ev.preventDefault();
+    resetFlightSliderIdle();
+    const done = setX(startLeft + ev.clientX - startX);
+    if (done) {
+      const button = pendingFlightSliderButton;
+      closeFlightSlider();
+      if (button) executeFlightCommand(button);
+    }
+  });
+
+  knob.addEventListener("pointerup", (ev) => {
+    if (!dragging) return;
+    dragging = false;
+    knob.classList.remove("dragging");
+    knob.releasePointerCapture?.(ev.pointerId);
+    if (!document.getElementById("flightSlideConfirm")?.classList.contains("hidden")) {
+      resetFlightSliderPosition();
+      resetFlightSliderIdle();
+    }
   });
 }
- 
+	 
 function bindFlightButtons() {
   flightButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const msg = btn.dataset.confirm || "Confirm command?";
-      openConfirm(msg, () => executeFlightCommand(btn));
+      if (isViewerMode) return;
+      openFlightSlider(btn);
     });
   });
+  bindFlightSlider();
 }
  
 function bindMissionButtons() {
@@ -531,6 +746,9 @@ function applyMotorFaultState(pwmVals, outVals) {
     oscillationState = "HIGH";
     statusText = "MOTOR FAULT";
     failsafeText = "MOTOR";
+    if (typeof triggerFaultAlert === 'function') triggerFaultAlert('fault', 'motor', 'MOTOR FAULT — Check motor outputs');
+  } else {
+    if (typeof clearFaultAlert === 'function') clearFaultAlert('motor');
   }
  
   if (telemetryEls.diagOscillation) telemetryEls.diagOscillation.textContent = oscillationState;
@@ -666,9 +884,10 @@ if (leafletMapEl && typeof L !== "undefined") {
   }).setView(isRealMode ? [usaLat, usaLon] : [initialLat, initialLon], isRealMode ? 4 : 16);
  
   // Dark map with full road/terrain detail — Stadia Alidade Smooth Dark
-  L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", {
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     maxZoom: 20,
-    attribution: "&copy; Stadia Maps &copy; OpenMapTiles &copy; OpenStreetMap"
+    subdomains: "abcd",
+    attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>"
   }).addTo(map);
  
   droneMarker = L.circleMarker(isRealMode ? [usaLat, usaLon] : [initialLat, initialLon], {
@@ -975,6 +1194,7 @@ drawChart("chart7", [
    INIT
 ---------------------------- */
 bindConfirmButtons();
+connectCmd();
 bindTopbarControls();
 bindFailsafeControls();
 bindFlightButtons();

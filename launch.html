@@ -6,6 +6,7 @@
 <title>Airsent — Launch Sequencer</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap">
+<script src="fit-screen.js"></script>
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
  
@@ -451,14 +452,14 @@ body::after {
 .mtl-ev-dist { color: var(--muted); font-family: var(--mono); font-size: 9px; margin-left: auto; }
 </style>
 </head>
-<body>
+<body class="console-fit">
 <div class="launch-flash" id="launchFlash"></div>
  
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="tb-seg">
     <div class="logo-dropdown">
-      <button class="logo-dropdown-btn"><img src="logo.png" style="height:24px" alt="Airsent"></button>
+      <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
       <div class="logo-dropdown-menu">
       <a href="dashboard.html">Main Dashboard</a>
       <a href="mission.html">Mission Planner</a>
@@ -466,6 +467,7 @@ body::after {
       <a href="parameters.html">Parameters</a>
       <a href="logs.html">Flight Logs</a>
       <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
       <a href="health.html">System Health</a>
       <a href="sensor-status.html">Sensor Status</a>
       <a href="actuators.html">Actuators</a>
@@ -644,7 +646,9 @@ const LS_HANDOVER = 'airsent_launch_handover';
 const LS_CMD    = 'airsent_launch_cmd_v1';
  
 const airsentMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
-const isActual = airsentMode === "actual";
+const isViewerMode = airsentMode === "viewer";
+const canSendCommands = airsentMode === "actual" || airsentMode === "operator" || airsentMode === "real";
+const isActual = canSendCommands || isViewerMode;
  
 let telemetry = {};
 let ws = null;
@@ -1087,12 +1091,13 @@ el('handoffInput').addEventListener('change', () => {
 });
  
 // ── Buttons ───────────────────────────────────────────────
-el('btnStart').addEventListener('click', () => { if(seqState==='standby') startCountdown(); });
-el('btnHold').addEventListener('click',  () => { if(seqState==='counting') holdSequencer(); else if(seqState==='hold') resumeSequencer(); });
-el('btnAbort').addEventListener('click', () => { if(seqState!=='standby') abortSequence('Manual abort by operator'); });
+el('btnStart').addEventListener('click', () => { if(isViewerMode) return; if(seqState==='standby') startCountdown(); });
+el('btnHold').addEventListener('click',  () => { if(isViewerMode) return; if(seqState==='counting') holdSequencer(); else if(seqState==='hold') resumeSequencer(); });
+el('btnAbort').addEventListener('click', () => { if(isViewerMode) return; if(seqState!=='standby') abortSequence('Manual abort by operator'); });
  
 // ── Command polling (handles same-tab dashboard buttons) ──
 function processCmd() {
+  if (isViewerMode) return;
   try {
     const raw = localStorage.getItem(LS_CMD); if (!raw) return;
     const cmd = JSON.parse(raw);
@@ -1110,6 +1115,7 @@ setInterval(processCmd, 300); // poll every 300ms — catches same-tab commands
  
 var RESET_PASSWORD = 'airsent';
 function showResetModal() {
+  if (isViewerMode) return;
   var m = document.getElementById('resetModal');
   if (m) { m.style.display = 'flex'; }
   var inp = document.getElementById('resetPwdInput');

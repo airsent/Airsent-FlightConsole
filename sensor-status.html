@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<script src="fit-screen.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -34,7 +35,6 @@ body {
   flex-direction: column;
 }
 
-/* ── Nav ─────────────────────────────────────────────────── */
 .logo-dropdown { position:relative; display:inline-block; }
 .logo-dropdown-btn { background:transparent; border:none; padding:0; display:flex; align-items:center; cursor:pointer; }
 .logo-dropdown-menu {
@@ -47,7 +47,6 @@ body {
 .logo-dropdown-menu a:hover { background:rgba(255,255,255,.05); color:#fff; }
 .logo-dropdown:hover .logo-dropdown-menu, .logo-dropdown:focus-within .logo-dropdown-menu { display:block; }
 
-/* ── Top bar ─────────────────────────────────────────────── */
 .topbar {
   flex-shrink: 0;
   height: 48px;
@@ -80,19 +79,17 @@ body {
 .topbar-val.blue  { color: var(--blue); }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
-/* ── Body ────────────────────────────────────────────────── */
 .body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr) 220px;
-  grid-template-rows: 1fr 1fr 1fr 90px;
+  grid-template-rows: 1fr 1fr 1fr 1fr 90px;
   gap: 1px;
   background: var(--line);
   overflow: hidden;
 }
 
-/* ── Sensor card ─────────────────────────────────────────── */
 .card {
   background: var(--bg0);
   display: flex;
@@ -100,8 +97,6 @@ body {
   overflow: hidden;
   position: relative;
 }
-
-/* top color stripe */
 .card::after {
   content: '';
   position: absolute;
@@ -111,9 +106,10 @@ body {
   opacity: .4;
   transition: all .3s;
 }
-.card.ok::after    { background: var(--green); opacity: 1; }
-.card.warn::after  { background: var(--amber); opacity: 1; }
-.card.fault::after { background: var(--red);   opacity: 1; }
+.card.ok::after      { background: var(--green); opacity: 1; }
+.card.warn::after    { background: var(--amber); opacity: 1; }
+.card.fault::after   { background: var(--red);   opacity: 1; }
+.card.offline::after { background: var(--red);   opacity: 1; }
 
 .card-head {
   display: flex;
@@ -150,7 +146,6 @@ body {
 .chip.fault  { color: var(--red);   border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.08); }
 .chip.offline{ color: var(--muted); border-color: rgba(75,98,117,.2);   background: transparent; }
 
-/* Metric list */
 .card-metrics {
   flex: 1;
   display: flex;
@@ -188,7 +183,6 @@ body {
 .row-val.blue  { color: var(--blue); }
 .row-val.muted { color: var(--muted); }
 
-/* bar row */
 .bar-row {
   padding: 0 14px;
   display: flex;
@@ -224,9 +218,8 @@ body {
   flex-shrink: 0;
 }
 
-/* ── GO/NO-GO panel ──────────────────────────────────────── */
 .gono {
-  grid-row: 1 / 5;
+  grid-row: 1 / 6;
   grid-column: 4;
   background: var(--bg0);
   display: flex;
@@ -305,9 +298,8 @@ body {
 .go-chip.hold { color: var(--amber); border-color: rgba(251,191,36,.3);  background: rgba(251,191,36,.08); }
 .go-chip.un   { color: var(--muted); border-color: rgba(75,98,117,.2); }
 
-/* ── Log bar ─────────────────────────────────────────────── */
 .log-bar {
-  grid-row: 4;
+  grid-row: 5;
   grid-column: 1 / 4;
   background: var(--bg1);
   border-top: 1px solid var(--line);
@@ -331,10 +323,6 @@ body {
   color: var(--muted);
 }
 .log-fault-count { font-size: 10px; color: var(--red); font-family: 'DM Mono', monospace; }
-
-/* inline stats in log header */
-.log-stat { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
-.log-stat b { font-family: 'DM Mono', monospace; font-weight: 600; }
 
 .log-rows {
   flex: 1;
@@ -363,26 +351,46 @@ body {
 .log-cat.fault { color: var(--red); }
 .log-cat.info  { color: var(--blue); }
 .log-msg { color: var(--text2); font-size: 11px; }
+
+/* First-data reveal on cards */
+@keyframes card-reveal { from { opacity: 0.1; } to { opacity: 1; } }
+.card-reveal { animation: card-reveal 0.45s ease forwards; }
+
+/* Camera cards — front cam spans 2 of the 3 columns */
+.cam-wide { grid-column: span 2; }
+
+/* Two-column metric layout inside wide camera card */
+.cam-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(4, 1fr);
+  overflow: hidden;
+}
+.cam-grid .row { border-right: 1px solid var(--line); }
+.cam-grid .row:nth-child(2n) { border-right: none; }
+.cam-grid .row:nth-last-child(-n+2) { border-bottom: none; }
 </style>
 </head>
-<body>
+<body class="console-fit">
 
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-logo">
     <div class="logo-dropdown">
-      <button class="logo-dropdown-btn"><img src="logo.png" style="height:26px;" alt="Airsent"></button>
+      <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
       <div class="logo-dropdown-menu">
-      <a href="dashboard.html">Main Dashboard</a>
-      <a href="mission.html">Mission Planner</a>
-      <a href="preflight.html">Pre-Flight Checklist</a>
-      <a href="parameters.html">Parameters</a>
-      <a href="logs.html">Flight Logs</a>
-      <a href="launch.html">Launch Sequencer</a>
-      <a href="health.html">System Health</a>
-      <a href="sensor-status.html">Sensor Status</a>
-      <a href="actuators.html">Actuators</a>
-    </div>
+        <a href="dashboard.html">Main Dashboard</a>
+        <a href="mission.html">Mission Planner</a>
+        <a href="preflight.html">Pre-Flight Checklist</a>
+        <a href="parameters.html">Parameters</a>
+        <a href="logs.html">Flight Logs</a>
+        <a href="launch.html">Launch Sequencer</a>
+        <a href="pilot.html">Pilot</a>
+        <a href="health.html">System Health</a>
+        <a href="sensor-status.html">Sensor Status</a>
+        <a href="actuators.html">Actuators</a>
+      </div>
     </div>
   </div>
   <div class="topbar-divider"></div>
@@ -516,7 +524,7 @@ body {
     </div>
   </div>
 
-  <!-- RC + Vibration -->
+  <!-- RC -->
   <div class="card" id="c-rc">
     <div class="card-head">
       <div><div class="card-title">RC · Telemetry</div><div class="card-sub">SBUS · MAVLink v2</div></div>
@@ -548,7 +556,7 @@ body {
     </div>
   </div>
 
-  <!-- Spare slot — ESC / Motors summary -->
+  <!-- ESC / Motors -->
   <div class="card" id="c-esc">
     <div class="card-head">
       <div><div class="card-title">ESC · Motors</div><div class="card-sub">PWM · DSHOT · 4× outputs</div></div>
@@ -562,6 +570,40 @@ body {
     </div>
   </div>
 
+  <!-- Front Camera (wide — spans 2 cols) -->
+  <div class="card cam-wide" id="c-camfront">
+    <div class="card-head">
+      <div><div class="card-title">Front Camera</div><div class="card-sub">USB3 · OAK-D Lite · Stereo AI Vision</div></div>
+      <span class="chip offline" id="chip-camfront">Offline</span>
+    </div>
+    <div class="cam-grid">
+      <div class="row"><span class="row-label">Stream</span><span class="row-val" id="cf-stream">--</span></div>
+      <div class="row"><span class="row-label">FPS</span><span class="row-val" id="cf-fps">--</span></div>
+      <div class="row"><span class="row-label">AprilTag Detection</span><span class="row-val" id="cf-apriltag">--</span></div>
+      <div class="row"><span class="row-label">Tags Visible</span><span class="row-val" id="cf-tags">--</span></div>
+      <div class="row"><span class="row-label">Object Detection</span><span class="row-val" id="cf-objdet">--</span></div>
+      <div class="row"><span class="row-label">Detections</span><span class="row-val" id="cf-dets">--</span></div>
+      <div class="row"><span class="row-label">Obstacle Avoidance</span><span class="row-val" id="cf-obst">--</span></div>
+      <div class="row"><span class="row-label">Avg Confidence</span><span class="row-val" id="cf-conf">--</span></div>
+    </div>
+  </div>
+
+  <!-- Downward Camera -->
+  <div class="card" id="c-camdown">
+    <div class="card-head">
+      <div><div class="card-title">Downward Camera</div><div class="card-sub">CSI · IMX219 · Precision Landing</div></div>
+      <span class="chip offline" id="chip-camdown">Offline</span>
+    </div>
+    <div class="card-metrics">
+      <div class="row"><span class="row-label">Stream</span><span class="row-val" id="cd-stream">--</span></div>
+      <div class="row"><span class="row-label">FPS</span><span class="row-val" id="cd-fps">--</span></div>
+      <div class="row"><span class="row-label">Landing Zone</span><span class="row-val" id="cd-lz">--</span></div>
+      <div class="row"><span class="row-label">Precision Landing</span><span class="row-val" id="cd-precland">--</span></div>
+      <div class="row"><span class="row-label">Visual Odometry</span><span class="row-val" id="cd-vodom">--</span></div>
+      <div class="row"><span class="row-label">Vision Altitude</span><span class="row-val" id="cd-alt">--</span></div>
+    </div>
+  </div>
+
   <!-- GO/NO-GO panel -->
   <div class="gono">
     <div class="gono-head"><span class="gono-head-title">Launch Readiness</span></div>
@@ -570,7 +612,6 @@ body {
       <span class="verdict hold" id="verdict">HOLD</span>
     </div>
     <div class="go-list" id="goList"></div>
-    <!-- Live RC + Vib stats at bottom of gono -->
     <div style="border-top:1px solid var(--line);flex-shrink:0;display:flex;flex-direction:column;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 14px;border-bottom:1px solid var(--line);">
         <span style="font-size:10px;color:var(--text2)">RC Link</span>
@@ -608,13 +649,12 @@ body {
 
 <script>
 const airsentMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
-const isActual = airsentMode === "actual";
+const isActual = airsentMode === "actual" || airsentMode === "operator" || airsentMode === "viewer" || airsentMode === "real";
 let faultCount = 0;
 
 function pad(n) { return String(n).padStart(2,"0"); }
 function now()  { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function el(id) { return document.getElementById(id); }
-function r2d(r) { return r * 180 / Math.PI; }
 
 function setVal(id, text, cls) {
   const e = el(id); if (!e) return;
@@ -631,7 +671,17 @@ function setBar(trackId, pct, fillCls, pctId) {
 
 function setCard(id, state) {
   const card = el("c-"+id); const chip = el("chip-"+id);
-  if (card) { card.classList.remove("ok","warn","fault"); if(state!=="offline") card.classList.add(state); }
+  if (card) {
+    const wasOffline = card.classList.contains("offline");
+    card.classList.remove("ok","warn","fault","offline");
+    card.classList.add(state==="offline"?"offline":state);
+    if (wasOffline && state !== "offline") {
+      card.classList.remove("card-reveal");
+      void card.offsetWidth;
+      card.classList.add("card-reveal");
+      card.addEventListener("animationend", ()=>card.classList.remove("card-reveal"), {once:true});
+    }
+  }
   if (chip) {
     chip.classList.remove("ok","warn","fault","offline");
     chip.classList.add(state === "offline" ? "offline" : state === "ok" ? "ok" : state === "warn" ? "warn" : "fault");
@@ -639,7 +689,6 @@ function setCard(id, state) {
   }
 }
 
-// GO/NO-GO
 const GO_ITEMS = [
   {id:"go-gps",    name:"GPS Fix"},
   {id:"go-ekf",    name:"EKF Health"},
@@ -652,7 +701,9 @@ const GO_ITEMS = [
   {id:"go-lidar",  name:"Rangefinder"},
   {id:"go-flow",   name:"Optical Flow"},
   {id:"go-esc",    name:"ESC / Motors"},
-  {id:"go-prearm", name:"Pre-Arm Checks"},
+  {id:"go-prearm",   name:"Pre-Arm Checks"},
+  {id:"go-camfront", name:"Front Camera"},
+  {id:"go-camdown",  name:"Down Camera"},
 ];
 
 (function() {
@@ -664,6 +715,36 @@ const GO_ITEMS = [
     list.appendChild(div);
   });
 })();
+
+function setCameraCard(id, live, meta) {
+  setCard(id, live ? 'ok' : 'offline');
+  if (id === 'camfront') {
+    setVal('cf-stream', live ? 'LIVE' : 'OFFLINE', live ? 'green' : 'red');
+    setVal('cf-fps',    live && meta?.fps != null ? `${Math.round(meta.fps)} fps` : '--');
+    const atOn = live && meta?.apriltag_active !== false;
+    setVal('cf-apriltag', live ? (atOn ? 'Active' : 'Inactive') : '--', atOn ? 'green' : 'muted');
+    setVal('cf-tags',  live ? String(meta?.tags ?? 0) : '--', (meta?.tags ?? 0) > 0 ? 'blue' : '');
+    const odOn = live && meta?.obj_detect_active !== false;
+    setVal('cf-objdet', live ? (odOn ? 'Active' : 'Inactive') : '--', odOn ? 'green' : 'muted');
+    setVal('cf-dets',  live ? String(meta?.dets ?? 0) : '--', (meta?.dets ?? 0) > 0 ? 'blue' : '');
+    const obOn = live && meta?.obst_active !== false;
+    setVal('cf-obst',  live ? (obOn ? 'Active' : 'Inactive') : '--', obOn ? 'green' : 'muted');
+    const conf = meta?.confidence ?? 0;
+    setVal('cf-conf',  live ? `${Math.round(conf)}%` : '--', conf > 80 ? 'green' : conf > 60 ? 'amber' : 'red');
+    setGo('go-camfront', live ? 'go' : 'hold');
+  } else {
+    setVal('cd-stream',   live ? 'LIVE' : 'OFFLINE', live ? 'green' : 'red');
+    setVal('cd-fps',      live && meta?.fps != null ? `${Math.round(meta.fps)} fps` : '--');
+    const lz = live && meta?.landing_zone;
+    setVal('cd-lz',       live ? (lz ? 'Detected' : 'Searching') : '--', lz ? 'green' : live ? 'amber' : '');
+    const pl = live && meta?.prec_land;
+    setVal('cd-precland', live ? (pl ? 'Active' : 'Inactive') : '--', pl ? 'green' : 'muted');
+    const vo = live && meta?.visual_odom;
+    setVal('cd-vodom',    live ? (vo ? 'Active' : 'Inactive') : '--', vo ? 'green' : 'muted');
+    setVal('cd-alt',      live && meta?.vision_alt != null ? `${meta.vision_alt.toFixed(2)} m` : '--');
+    setGo('go-camdown', live ? 'go' : 'hold');
+  }
+}
 
 function setGo(id, state) {
   const e = el(id); if (!e) return;
@@ -697,117 +778,123 @@ function addLog(msg, cat) {
 function applyData(d) {
   el("hUpd").textContent = now();
 
-  // GPS
-  const gpsOk = d.fix_type && d.fix_type !== "NO FIX";
-  setCard("gps", gpsOk ? "ok" : d.sats > 0 ? "warn" : "offline");
-  setVal("gps-fix",  d.fix_type||"--", gpsOk?"blue":"amber");
-  setVal("gps-sats", d.sats!=null?String(d.sats):"--", d.sats>=10?"green":"amber");
-  setVal("gps-hdop", d.hdop!=null?d.hdop.toFixed(2):"--", d.hdop<1.5?"green":"amber");
-  setVal("gps-lat",  d.lat!=null?d.lat.toFixed(5)+"°":"--");
-  setVal("gps-lon",  d.lon!=null?d.lon.toFixed(5)+"°":"--");
-  setBar("gps-bar", (d.sats||0)/25*100, "blue", "gps-barpct");
-  setGo("go-gps", gpsOk?"go":d.sats>0?"hold":"nogo");
+  const pxOk = d.pixhawk_connected !== false;
 
-  // IMU
-  const imuOk = d.sensors_health ? !!(d.sensors_health & 0x3F) : d.roll!==undefined;
-  const ekfOk = d.ekf_healthy !== false;
-  setCard("imu", imuOk?"ok":"fault");
-  if (d.roll !== undefined) {
-    const rd = r2d(d.roll), pd = r2d(d.pitch||0), yd = ((r2d(d.yaw||0))+360)%360;
+  // ── GPS — comes through FC ────────────────────────────────────────────────
+  const gpsOk = pxOk && d.fix_type && d.fix_type !== "NO FIX";
+  setCard("gps", !pxOk ? "offline" : gpsOk ? "ok" : d.sats > 0 ? "warn" : "offline");
+  setVal("gps-fix",  pxOk?(d.fix_type||"--"):"--", gpsOk?"blue":"amber");
+  setVal("gps-sats", pxOk&&d.sats!=null?String(d.sats):"--", d.sats>=10?"green":"amber");
+  setVal("gps-hdop", pxOk&&d.hdop!=null?d.hdop.toFixed(2):"--", d.hdop<1.5?"green":"amber");
+  setVal("gps-lat",  pxOk&&d.lat!=null?d.lat.toFixed(5)+"°":"--");
+  setVal("gps-lon",  pxOk&&d.lon!=null?d.lon.toFixed(5)+"°":"--");
+  setBar("gps-bar", pxOk?(d.sats||0)/25*100:0, "blue", "gps-barpct");
+  setGo("go-gps", !pxOk?"nogo":gpsOk?"go":d.sats>0?"hold":"nogo");
+
+  // ── IMU ──────────────────────────────────────────────────────────────────
+  const imuOk = pxOk && d.roll !== undefined;
+  const ekfOk = pxOk && d.ekf_healthy !== false;
+  setCard("imu", !pxOk?"offline":imuOk?"ok":"fault");
+  if (pxOk && d.roll !== undefined) {
+    const rd = d.roll, pd = d.pitch||0, yd = ((d.yaw||0)+360)%360;
     setVal("imu-roll",  `${rd>=0?"+":""}${rd.toFixed(1)}°`, Math.abs(rd)<20?"":"amber");
     setVal("imu-pitch", `${pd>=0?"+":""}${pd.toFixed(1)}°`, Math.abs(pd)<20?"":"amber");
     setVal("imu-yaw",   `${Math.round(yd)}°`, "blue");
-    setVal("imu-rollr",  d.rollspeed !=null?`${r2d(d.rollspeed).toFixed(1)}°/s`:"--");
-    setVal("imu-pitchr", d.pitchspeed!=null?`${r2d(d.pitchspeed).toFixed(1)}°/s`:"--");
+    setVal("imu-rollr",  "--");
+    setVal("imu-pitchr", "--");
+  } else {
+    setVal("imu-roll","--"); setVal("imu-pitch","--"); setVal("imu-yaw","--");
+    setVal("imu-rollr","--"); setVal("imu-pitchr","--");
   }
-  setVal("imu-ekf", ekfOk?"Healthy":"Degraded", ekfOk?"green":"red");
-  setGo("go-imu", imuOk?"go":"nogo");
-  setGo("go-ekf", ekfOk?"go":"nogo");
+  setVal("imu-ekf", !pxOk?"Offline":ekfOk?"Healthy":"Degraded", !pxOk?"red":ekfOk?"green":"red");
+  setGo("go-imu", !pxOk?"nogo":imuOk?"go":"nogo");
+  setGo("go-ekf", !pxOk?"nogo":ekfOk?"go":"nogo");
 
-  // Baro
-  setCard("baro", d.alt!==undefined?"ok":"offline");
-  setVal("baro-alt",   d.alt!=null?`${d.alt.toFixed(1)} m`:"--");
-  setVal("baro-msl",   d.alt_msl!=null?`${d.alt_msl.toFixed(1)} m`:"--");
-  setVal("baro-climb", d.climb!=null?`${d.climb.toFixed(2)} m/s`:"--", Math.abs(d.climb||0)<0.5?"":"amber");
-  setVal("baro-spd",   d.groundspeed!=null?`${d.groundspeed.toFixed(1)} m/s`:"--");
-  setVal("baro-cpu",   d.cpu!=null?`${Math.round(d.cpu)}%`:"--", d.cpu<70?"":"amber");
-  setVal("baro-thr",   d.throttle!=null?`${Math.round(d.throttle)}%`:"--");
+  // ── Barometer ────────────────────────────────────────────────────────────
+  setCard("baro", pxOk&&d.alt!==undefined?"ok":"offline");
+  setVal("baro-alt",   pxOk&&d.alt!=null?`${d.alt.toFixed(1)} m`:"--");
+  setVal("baro-msl",   "--");
+  setVal("baro-climb", pxOk&&d.vspd!=null?`${d.vspd.toFixed(2)} m/s`:"--", Math.abs(d.vspd||0)<0.5?"":"amber");
+  setVal("baro-spd",   pxOk&&d.spd!=null?`${d.spd.toFixed(1)} m/s`:"--");
+  setVal("baro-cpu",   "--");
+  setVal("baro-thr",   "--");
 
-  // Mag
-  const magOk = d.sensors_health ? !!(d.sensors_health & 0x100) : true;
-  setCard("mag", magOk?"ok":"fault");
-  setVal("mag-hdg", d.heading!=null?`${d.heading}°`:"--");
-  setVal("mag-cal", magOk?"Calibrated":"Uncalibrated", magOk?"green":"red");
-  const cv = d.ekf_compass_variance;
-  setVal("mag-var", cv!=null?cv.toFixed(4):"--", cv<0.1?"green":cv<0.3?"amber":"red");
-  setVal("mag-int", cv!=null?(cv<0.1?"Low":cv<0.3?"Medium":"High"):"--", cv<0.1?"green":cv<0.3?"amber":"red");
-  setGo("go-mag", magOk?"go":"nogo");
+  // ── Magnetometer ─────────────────────────────────────────────────────────
+  setCard("mag", !pxOk?"offline":d.yaw!==undefined?"ok":"fault");
+  setVal("mag-hdg", pxOk&&d.yaw!=null?`${Math.round(((d.yaw)+360)%360)}°`:"--");
+  setVal("mag-cal", pxOk?"Calibrated":"--", pxOk?"green":"");
+  setVal("mag-var", "--");
+  setVal("mag-int", "--");
+  setGo("go-mag", !pxOk?"nogo":d.yaw!==undefined?"go":"nogo");
 
-  // Power
-  const volt=d.voltage||0, batt=d.battery!=null?Math.round(d.battery):null;
-  setCard("pwr", volt>13?"ok":volt>10?"warn":volt>0?"fault":"offline");
+  // ── Power ────────────────────────────────────────────────────────────────
+  const volt=pxOk?(d.voltage||0):0, batt=pxOk&&d.battery!=null?Math.round(d.battery):null;
+  setCard("pwr", !pxOk?"offline":volt>13?"ok":volt>10?"warn":volt>0?"fault":"offline");
   setVal("pwr-v",    volt?`${volt.toFixed(1)} V`:"--", volt>14?"green":volt>12?"amber":"red");
-  setVal("pwr-i",    d.current!=null?`${d.current.toFixed(1)} A`:"--", "amber");
-  setVal("pwr-cell", d.cell_voltage?`${d.cell_voltage.toFixed(3)} V`:"--");
+  setVal("pwr-i",    pxOk&&d.current!=null?`${d.current.toFixed(1)} A`:"--", "amber");
+  setVal("pwr-cell", "--");
   setVal("pwr-pct",  batt!=null?`${batt}%`:"--", batt>50?"green":batt>25?"amber":"red");
-  setBar("pwr-bar", batt||0, batt>50?"":"batt>25?'amber':'red'", "pwr-barpct");
-  const pwrFill = el("pwr-bar"); if(pwrFill) pwrFill.className="bar-fill "+(batt>50?"":"batt>25?'amber':'red'");
-  // fix color properly
+  const pwrFill = el("pwr-bar");
+  if(pwrFill) pwrFill.style.width=(batt||0)+"%";
   if(pwrFill) pwrFill.className = "bar-fill " + (batt > 50 ? "" : batt > 25 ? "amber" : "red");
   if(el("pwr-barpct")) el("pwr-barpct").textContent = batt!=null?batt+"%":"--";
-  setGo("go-batt", batt>30?"go":batt>15?"hold":"nogo");
-  setGo("go-volt", volt>13?"go":volt>11?"hold":"nogo");
-  el("hUpd").textContent = now();
+  setGo("go-batt", !pxOk?"nogo":batt>30?"go":batt>15?"hold":"nogo");
+  setGo("go-volt", !pxOk?"nogo":volt>13?"go":volt>11?"hold":"nogo");
 
-  // Lidar + Flow
+  // ── Lidar ────────────────────────────────────────────────────────────────
   const rng=d.rangefinder, rngOk=rng!=null&&rng>0.05&&rng<12;
+  setCard("range", rngOk?"ok":rng>0.05?"warn":"offline");
+  setVal("lidar-range",  rng>0?`${rng.toFixed(2)} m`:"--");
+  setVal("lidar-status", rngOk?"Nominal":rng>0?"Out of range":"No signal", rngOk?"green":"red");
   const fq=d.of_quality, flowOk=fq!=null&&fq>50;
-  setCard("range", rngOk?"ok":rng!=null||fq!=null?"warn":"offline");
-  setVal("lidar-range",  rng!=null?`${rng.toFixed(2)} m`:"--");
-  setVal("lidar-status", rngOk?"Nominal":rng!=null?"Out of range":"No signal", rngOk?"green":"red");
-  setVal("flow-qual",    fq!=null?`${Math.round(fq)}%`:"--", flowOk?"green":"amber");
-  setVal("flow-lock",    flowOk?"Surface lock":"No lock", flowOk?"green":"amber");
+  setVal("flow-qual", fq>0?`${Math.round(fq)}%`:"--", flowOk?"green":"amber");
+  setVal("flow-lock", fq>0?(flowOk?"Surface lock":"No lock"):"--", flowOk?"green":"amber");
   setBar("flow-bar", fq||0, "blue", "flow-barpct");
   setGo("go-lidar", rngOk?"go":"hold");
   setGo("go-flow",  flowOk?"go":"hold");
 
-  // RC
-  const rssi=d.rssi, rcOk=rssi!=null&&rssi>20;
+  // ── RC ───────────────────────────────────────────────────────────────────
+  const rssi=pxOk?d.rssi:null, rcOk=rssi!=null&&rssi>20;
   setCard("rc", rcOk?"ok":rssi!=null?"warn":"offline");
   setVal("rc-link", rcOk?"Link Good":"No Signal", rcOk?"green":"red");
-  setVal("rc-rssi", rssi!=null?`${rssi.toFixed(0)}%`:"--", rssi>60?"green":rssi>30?"amber":"red");
-  setVal("rc-thr",  d.rc_throttle!=null?`${d.rc_throttle} μs`:"--");
+  setVal("rc-rssi", rssi!=null?`${Math.round(rssi)}%`:"--", rssi>60?"green":rssi>30?"amber":"red");
+  setVal("rc-thr",  "--");
   setBar("rc-bar", rssi||0, rssi>60?"blue":"amber", "rc-barpct");
   setGo("go-rc", rcOk?"go":"nogo");
   const rcls = el("ls-rc"); if(rcls){rcls.textContent=rcOk?"GOOD":"NO SIG";rcls.style.color=rcOk?"var(--green)":"var(--red)";}
-  const rslEl = el("ls-rssi"); if(rslEl){rslEl.textContent=rssi!=null?rssi.toFixed(0)+"%":"--";rslEl.style.color=rcOk?"var(--blue)":"var(--amber)";}
+  const rslEl = el("ls-rssi"); if(rslEl){rslEl.textContent=rssi!=null?Math.round(rssi)+"%":"--";rslEl.style.color=rcOk?"var(--blue)":"var(--amber)";}
 
-  // Vibration
-  const vx=d.vib_x, vy=d.vib_y, vz=d.vib_z;
-  const vm=vx!=null?Math.sqrt(vx*vx+vy*vy+vz*vz):null;
-  const vibOk=vm!=null&&vm<30;
-  setCard("vib", vx!=null?(vibOk?"ok":"warn"):"offline");
-  setVal("vib-x", vx!=null?vx.toFixed(3):"--", vx<15?"":"amber");
-  setVal("vib-y", vy!=null?vy.toFixed(3):"--", vy<15?"":"amber");
-  setVal("vib-z", vz!=null?vz.toFixed(3):"--", vz<15?"":"amber");
-  setVal("vib-level", vm!=null?(vibOk?"Low":vm<60?"Medium":"High"):"--", vibOk?"green":vm<60?"amber":"red");
-  setGo("go-vib", vibOk?"go":vm<60?"hold":"nogo");
-  const vbEl=el("ls-vib"); if(vbEl){vbEl.textContent=vx!=null?`${vx.toFixed(2)}/${vy.toFixed(2)}/${vz.toFixed(2)}`:"--";vbEl.style.color="var(--blue)";}
-  const clEl=el("ls-clip"); if(clEl){clEl.textContent=vx!=null?`${d.clip_0||0}/${d.clip_1||0}/${d.clip_2||0}`:"--";}
-  const vlEl=el("ls-vlevel"); if(vlEl){vlEl.textContent=vm!=null?(vibOk?"Low":vm<60?"Medium":"High"):"--";vlEl.style.color=vibOk?"var(--green)":vm<60?"var(--amber)":"var(--red)";}
+  // ── Vibration ────────────────────────────────────────────────────────────
+  const pwmPct = p => Math.min(100, Math.max(0, Math.round((p - 1000) / 10)));
+  if(pxOk&&d.m1&&d.m1>0&&d.m2&&d.m3&&d.m4){
+    const outs = [d.m1,d.m2,d.m3,d.m4].map(pwmPct);
+    const spread = Math.max(...outs) - Math.min(...outs);
+    const vibOk = spread < 8;
+    setCard("vib", vibOk?"ok":"warn");
+    setVal("vib-x", spread.toFixed(1)+" %sprd", spread<8?"green":"amber");
+    setVal("vib-y", "--"); setVal("vib-z", "--");
+    setVal("vib-level", vibOk?"Low":spread<15?"Medium":"High", vibOk?"green":spread<15?"amber":"red");
+    setGo("go-vib", vibOk?"go":spread<15?"hold":"nogo");
+    const vbEl=el("ls-vib"); if(vbEl){vbEl.textContent="sprd "+spread.toFixed(1)+"%";vbEl.style.color="var(--blue)";}
+    const vlEl=el("ls-vlevel"); if(vlEl){vlEl.textContent=vibOk?"Low":spread<15?"Medium":"High";vlEl.style.color=vibOk?"var(--green)":spread<15?"var(--amber)":"var(--red)";}
+  } else {
+    setCard("vib","offline"); setGo("go-vib","hold");
+  }
+  const clEl=el("ls-clip"); if(clEl){clEl.textContent="--";}
 
-  // ESC
-  setCard("esc", d.m1!=null?"ok":"offline");
-  setVal("esc-m1", d.m1!=null?`${Math.floor(d.m1)} μs`:"--");
-  setVal("esc-m2", d.m2!=null?`${Math.floor(d.m2)} μs`:"--");
-  setVal("esc-m3", d.m3!=null?`${Math.floor(d.m3)} μs`:"--");
-  setVal("esc-m4", d.m4!=null?`${Math.floor(d.m4)} μs`:"--");
-  setGo("go-esc", d.m1!=null?"go":"hold");
+  // ── ESC ──────────────────────────────────────────────────────────────────
+  const escOk = pxOk&&d.m1!=null&&d.m1>0;
+  setCard("esc", escOk?"ok":"offline");
+  setVal("esc-m1", escOk?`${Math.floor(d.m1)} μs`:"--");
+  setVal("esc-m2", escOk?`${Math.floor(d.m2)} μs`:"--");
+  setVal("esc-m3", escOk?`${Math.floor(d.m3)} μs`:"--");
+  setVal("esc-m4", escOk?`${Math.floor(d.m4)} μs`:"--");
+  setGo("go-esc", escOk?"go":"hold");
 
-  // Pre-arm
-  setGo("go-prearm", gpsOk&&ekfOk&&imuOk&&magOk&&volt>10?"go":"nogo");
+  // ── Pre-arm ──────────────────────────────────────────────────────────────
+  setGo("go-prearm", gpsOk&&ekfOk&&imuOk&&volt>10?"go":"nogo");
 
-  // Header stats
+  // ── Header stats ─────────────────────────────────────────────────────────
   const cardIds=["gps","imu","baro","mag","pwr","range","rc","vib","esc"];
   const okC = cardIds.filter(id=>el("c-"+id)?.classList.contains("ok")).length;
   const alerts = cardIds.length - okC;
@@ -815,16 +902,18 @@ function applyData(d) {
   el("hHealth").className="topbar-val "+(okC>=7?"green":okC>=5?"amber":"red");
   el("hAlerts").textContent=alerts;
   el("hAlerts").className="topbar-val "+(alerts===0?"green":alerts<=2?"amber":"red");
-  el("hEkf").textContent=ekfOk?"Healthy":"Degraded";
-  el("hEkf").className="topbar-val "+(ekfOk?"green":"red");
-  if(d.flight_mode) el("hMode").textContent=d.flight_mode;
-  if(d.armed!==undefined){el("hArmed").textContent=d.armed?"ARMED":"Disarmed";el("hArmed").className="topbar-val "+(d.armed?"red":"amber");}
+  el("hEkf").textContent=!pxOk?"Offline":ekfOk?"Healthy":"Degraded";
+  el("hEkf").className="topbar-val "+(!pxOk?"red":ekfOk?"green":"red");
+  if(pxOk&&d.flight_mode) el("hMode").textContent=d.flight_mode;
+  if(pxOk&&d.armed!==undefined){el("hArmed").textContent=d.armed?"ARMED":"Disarmed";el("hArmed").className="topbar-val "+(d.armed?"red":"amber");}
 
   updateVerdict();
 }
 
 function setDisconnected() {
   ["gps","imu","baro","mag","pwr","range","rc","vib","esc"].forEach(id=>setCard(id,"offline"));
+  setCameraCard('camfront', false, {});
+  setCameraCard('camdown',  false, {});
   GO_ITEMS.forEach(i=>setGo(i.id,"unknown"));
   el("verdict").className="verdict hold"; el("verdict").textContent="HOLD";
 }
@@ -832,31 +921,103 @@ function setDisconnected() {
 function runDemo() {
   function rnd(a,b){return Math.random()*(b-a)+a;}
   addLog("Demo mode active — simulated sensor data","info");
+  addLog("Front camera online — OAK-D Lite · stereo AI vision active","ok");
+  addLog("Downward camera online — IMX219 · visual odometry active","ok");
+
+  // Cameras start live immediately in demo
+  setCameraCard('camfront', true, {fps:30, apriltag_active:true, tags:1, obj_detect_active:true, dets:3, obst_active:true, confidence:88});
+  setCameraCard('camdown',  true, {fps:30, landing_zone:true, prec_land:false, visual_odom:true, vision_alt:0.52});
+
   setInterval(()=>{
     applyData({
-      fix_type:"RTK FIX", sats:Math.floor(rnd(16,22)), hdop:rnd(0.5,1.2), vdop:rnd(0.6,1.4),
+      fix_type:"RTK FIX", sats:Math.floor(rnd(16,22)), hdop:rnd(0.5,1.2),
       lat:33.4136+rnd(-0.001,0.001), lon:-111.9196+rnd(-0.001,0.001),
-      roll:rnd(-0.06,0.06), pitch:rnd(-0.05,0.05), yaw:rnd(0,6.28),
-      rollspeed:rnd(-0.04,0.04), pitchspeed:rnd(-0.04,0.04),
-      sensors_health:0x201FF, ekf_healthy:true,
-      ekf_vel_variance:rnd(0.01,0.04), ekf_pos_horiz:rnd(0.01,0.06), ekf_compass_variance:rnd(0.01,0.05),
-      alt:rnd(0,1), alt_msl:rnd(300,301), climb:rnd(-0.1,0.1),
-      groundspeed:rnd(0,0.2), throttle:rnd(0,3), cpu:rnd(25,42), airspeed:0,
-      heading:Math.floor(rnd(100,200)),
-      voltage:rnd(15.5,16.0), current:rnd(4,6), battery:rnd(60,75), cell_voltage:rnd(3.9,4.1),
-      rangefinder:rnd(0.3,1.0), of_quality:rnd(70,100), of_flow_x:rnd(-0.3,0.3), of_flow_y:rnd(-0.3,0.3),
-      rssi:rnd(75,92), rc_throttle:1000,
-      vib_x:rnd(0.5,3), vib_y:rnd(0.5,3), vib_z:rnd(1,6), clip_0:0, clip_1:0, clip_2:0,
-      m1:rnd(1000,1050), m2:rnd(1000,1050), m3:rnd(1000,1050), m4:rnd(1000,1050),
+      roll:rnd(-4,4), pitch:rnd(-3,3), yaw:rnd(0,359),
+      ekf_healthy:true,
+      alt:rnd(0,1), vspd:rnd(-0.1,0.1), spd:rnd(0,0.2),
+      voltage:rnd(15.5,16.0), current:rnd(4,6), battery:rnd(60,75),
+      rangefinder:rnd(0.3,1.0),
+      rssi:rnd(75,92),
+      m1:rnd(1440,1480), m2:rnd(1440,1480), m3:rnd(1440,1480), m4:rnd(1440,1480),
       flight_mode:"STABILIZE", armed:false,
+    });
+    // Simulate live camera telemetry
+    setCameraCard('camfront', true, {
+      fps: rnd(28,30),
+      apriltag_active: true,
+      tags: Math.floor(rnd(0,3)),
+      obj_detect_active: true,
+      dets: Math.floor(rnd(1,6)),
+      obst_active: true,
+      confidence: rnd(78,96),
+    });
+    setCameraCard('camdown', true, {
+      fps: rnd(28,30),
+      landing_zone: Math.random() > 0.2,
+      prec_land: false,
+      visual_odom: true,
+      vision_alt: rnd(0.3, 1.0),
     });
   }, 1000);
 }
 
+// Camera WebRTC probe — mirrors health.html logic
+const camProbePeers = {};
+function connectCameraProbe(id, path, preferH264) {
+  if (!isActual) return;
+  if (camProbePeers[id]) { try{camProbePeers[id].close();}catch(_){} camProbePeers[id]=null; }
+  const pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  camProbePeers[id] = pc;
+  const tr = pc.addTransceiver('video',{direction:'recvonly'});
+  if (preferH264 && RTCRtpReceiver.getCapabilities && tr.setCodecPreferences) {
+    const caps = RTCRtpReceiver.getCapabilities('video');
+    const h264 = caps ? caps.codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264') : [];
+    if (h264.length) tr.setCodecPreferences(h264);
+  }
+  pc.ontrack = ev => {
+    if (ev.track.kind !== 'video') return;
+    setCameraCard(id, true, {fps:30});
+    ev.track.onended = () => setCameraCard(id, false, {});
+  };
+  const handleState = () => {
+    const s=pc.iceConnectionState, cs=pc.connectionState;
+    if (s==='disconnected'||s==='failed'||s==='closed'||cs==='disconnected'||cs==='failed'||cs==='closed') {
+      setCameraCard(id, false, {});
+      try{pc.close();}catch(_){}
+      if (camProbePeers[id]===pc) camProbePeers[id]=null;
+      setTimeout(()=>connectCameraProbe(id,path,preferH264), 3000);
+    }
+  };
+  pc.oniceconnectionstatechange = handleState;
+  pc.onconnectionstatechange = handleState;
+  const waitIce = () => {
+    if (pc.iceGatheringState==='complete') return Promise.resolve();
+    return new Promise(resolve=>{
+      const done=()=>{ if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',done);resolve();} };
+      pc.addEventListener('icegatheringstatechange',done);
+      setTimeout(resolve,2000);
+    });
+  };
+  pc.createOffer()
+    .then(o=>pc.setLocalDescription(o))
+    .then(()=>waitIce())
+    .then(()=>fetch(`https://console.airsent.tech/video/${path}/whep`,{method:'POST',headers:{'Content-Type':'application/sdp'},body:pc.localDescription.sdp}))
+    .then(async r=>{if(!r.ok)throw new Error(`WHEP ${r.status}`);return r.text();})
+    .then(sdp=>pc.setRemoteDescription({type:'answer',sdp}))
+    .catch(e=>{
+      console.warn(`[SensorStatus ${path} WebRTC]`,e);
+      setCameraCard(id,false,{});
+      try{pc.close();}catch(_){}
+      if(camProbePeers[id]===pc)camProbePeers[id]=null;
+      setTimeout(()=>connectCameraProbe(id,path,preferH264),3000);
+    });
+}
+
+// Connect through the secure nginx websocket route, matching dashboard/pilot.
 let ws = null;
 function connectWs() {
-  ws = new WebSocket("ws://localhost:8765");
-  ws.onopen = () => addLog("Telemetry link established","ok");
+  ws = new WebSocket("wss://console.airsent.tech/telem");
+  ws.onopen = () => addLog("Telemetry link established via VPS relay","ok");
   ws.onmessage = e => { try{applyData(JSON.parse(e.data));}catch(err){} };
   ws.onclose = () => { setDisconnected(); addLog("Link lost — retrying","fault"); setTimeout(connectWs,3000); };
   ws.onerror = () => { ws=null; };
@@ -865,8 +1026,14 @@ function connectWs() {
 setInterval(() => el("hClock").textContent = now(), 1000);
 
 window.addEventListener("DOMContentLoaded", () => {
-  if (isActual) { setDisconnected(); connectWs(); }
-  else runDemo();
+  if (isActual) {
+    setDisconnected();
+    connectWs();
+    connectCameraProbe('camfront', 'frontcam', false);
+    connectCameraProbe('camdown',  'downcam',  true);
+  } else {
+    runDemo();
+  }
 });
 </script>
 </body>

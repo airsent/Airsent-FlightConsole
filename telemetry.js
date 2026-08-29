@@ -1,6 +1,84 @@
 // telemetry.js — Airsent GCS
 // isRealMode declared in script.js which loads before this file
 
+// ─── FAULT COUNTER ────────────────────────────────────────────────────────────
+const _faultMap = new Map();        // key → {level, message}
+const _dismissedKeys = new Set();   // keys user has dismissed (won't re-fire until condition clears)
+
+function triggerFaultAlert(level, key, message) {
+  if (_dismissedKeys.has(key)) return;
+  const existing = _faultMap.get(key);
+  if (existing && existing.level === level && existing.message === message) return;
+  _faultMap.set(key, { level, message });
+  _updateFaultCounter();
+}
+
+function clearFaultAlert(key) {
+  _dismissedKeys.delete(key); // condition resolved → allow re-trigger next time
+  if (!_faultMap.has(key)) return;
+  _faultMap.delete(key);
+  _updateFaultCounter();
+}
+
+function dismissFault(key) {
+  _dismissedKeys.add(key);
+  _faultMap.delete(key);
+  _updateFaultCounter();
+}
+
+function dismissAllFaults(e) {
+  if (e) e.stopPropagation();
+  _faultMap.forEach((_, key) => _dismissedKeys.add(key));
+  _faultMap.clear();
+  _updateFaultCounter();
+}
+
+function toggleFaultPanel(e) {
+  if (e) e.stopPropagation();
+  const counter = document.getElementById('faultCounter');
+  if (counter) counter.classList.toggle('open');
+}
+
+document.addEventListener('click', function(e) {
+  const counter = document.getElementById('faultCounter');
+  if (counter && !counter.contains(e.target)) counter.classList.remove('open');
+});
+
+function _updateFaultCounter() {
+  const countEl   = document.getElementById('faultCountNum');
+  const counter   = document.getElementById('faultCounter');
+  const list      = document.getElementById('faultPanelList');
+  const emptyEl   = document.getElementById('faultPanelEmpty');
+  const dismissEl = document.getElementById('faultDismissAll');
+
+  const count = _faultMap.size;
+  if (countEl) countEl.textContent = count;
+
+  if (counter) {
+    counter.classList.remove('has-warn', 'has-fault');
+    if (count > 0) {
+      const hasFault = [..._faultMap.values()].some(v => v.level === 'fault');
+      counter.classList.add(hasFault ? 'has-fault' : 'has-warn');
+    }
+  }
+
+  if (list) {
+    list.innerHTML = '';
+    _faultMap.forEach(({ level, message }, key) => {
+      const item = document.createElement('div');
+      item.className = 'fault-panel-item ' + level;
+      item.innerHTML =
+        `<span class="fault-panel-item-badge">${level.toUpperCase()}</span>` +
+        `<span class="fault-panel-item-msg">${message}</span>` +
+        `<button class="fault-panel-item-dismiss" onclick="dismissFault('${key}')">✕</button>`;
+      list.appendChild(item);
+    });
+  }
+
+  if (emptyEl)   emptyEl.style.display   = count === 0 ? 'block' : 'none';
+  if (dismissEl) dismissEl.style.display = count > 0   ? 'block' : 'none';
+}
+
 var socket = null;         // var so script.js can reference it globally
 let reconnectTimer = null;
 let isConnecting = false;
@@ -18,6 +96,9 @@ const chartBuffers = {
   motor_avg: [], throttle:  [],
 };
 
+const vibSmooth = { vib_x: null, vib_y: null, vib_z: null };
+const VIB_SMOOTH_ALPHA = 0.18;
+
 function pushBuffer(key, value) {
   if (chartBuffers[key] === undefined) return;
   chartBuffers[key].push(typeof value === "number" ? value : 0);
@@ -26,7 +107,17 @@ function pushBuffer(key, value) {
 
 function resetAllBuffers() {
   Object.keys(chartBuffers).forEach(k => { chartBuffers[k] = []; });
+  Object.keys(vibSmooth).forEach(k => { vibSmooth[k] = null; });
   mapHasZoomed = false;
+}
+
+function pushSmoothedVibration(key, value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return;
+  vibSmooth[key] = vibSmooth[key] == null
+    ? n
+    : vibSmooth[key] + (n - vibSmooth[key]) * VIB_SMOOTH_ALPHA;
+  pushBuffer(key, vibSmooth[key]);
 }
 
 function normalize(arr, fixedMin, fixedMax) {
@@ -310,29 +401,23 @@ function setDisconnectedState() {
 }
 
 // ─── LOS DETECTION ────────────────────────────────────────────────────────────
-// Detects battery-out / vehicle powered off even if telemetry radio still connected
 let losActive = false;
 let losTimer = null;
 
 function detectLOS(data) {
-  // Battery disconnected = voltage near 0 OR battery% = 0 with no current draw
-  const voltageGone = data.voltage !== undefined && data.voltage < 6.0;
-  const batteryGone = data.battery !== undefined && data.battery <= 0 && (data.current === undefined || data.current < 0.1);
-  return voltageGone || batteryGone;
+  return false;
 }
 
 function setLOSState() {
-  if (losActive) return; // already in LOS
+  if (losActive) return;
   losActive = true;
 
-  // Flash topbar red
   const topbar = document.querySelector(".topbar");
   if (topbar) {
     topbar.style.background = "linear-gradient(180deg, rgba(80,10,10,.97), rgba(50,5,5,.99))";
     topbar.style.borderBottomColor = "rgba(248,113,113,.4)";
   }
 
-  // Set LINK to LOS in red
   const linkEl = getEl("linkTop");
   if (linkEl) {
     linkEl.innerText = "LOS";
@@ -343,7 +428,6 @@ function setLOSState() {
     linkEl.style.animation = "blink-los 0.8s infinite";
   }
 
-  // RC Telemetry panel
   const rc = getEl("rcTelemetryState");
   if (rc) {
     rc.innerText = "LOSS OF SIGNAL";
@@ -352,20 +436,19 @@ function setLOSState() {
     rc.style.color = "#f87171";
   }
 
-  // Turn all sensors red
   ["sensorGps","sensorLidar","sensorOpticalFlow","sensorCompass",
    "sensorBattery","sensorImu","sensorBarometer"].forEach(id => {
     setSensorStatus(id, "LOS", false);
   });
 
-  // Zero critical values
   setText("topVoltage", "0.0V");
   setText("topCurrent", "0.0A");
   setText("topBattery", "0%");
   setOnlineStatus(getEl("gpsFixTop"), "LOS", false);
   setOnlineStatus(getEl("ekfTop"), "LOS", false);
 
-  // Inject LOS CSS if not already present
+  triggerFaultAlert('fault', 'los', 'LOSS OF SIGNAL — RC link lost');
+
   if (!document.getElementById("los-style")) {
     const style = document.createElement("style");
     style.id = "los-style";
@@ -381,14 +464,14 @@ function clearLOSState() {
   if (!losActive) return;
   losActive = false;
 
-  // Restore topbar
+  clearFaultAlert('los');
+
   const topbar = document.querySelector(".topbar");
   if (topbar) {
     topbar.style.background = "";
     topbar.style.borderBottomColor = "";
   }
 
-  // Restore link
   const linkEl = getEl("linkTop");
   if (linkEl) {
     linkEl.style.color = "";
@@ -398,12 +481,10 @@ function clearLOSState() {
 }
 
 function setConnectedState(data) {
-  // Check for LOS first
   if (data && detectLOS(data)) {
     setLOSState();
-    return; // don't set LINK GOOD
+    return;
   }
-
   clearLOSState();
   setOnlineStatus(getEl("linkTop"), "GOOD", true);
   const rc = getEl("rcTelemetryState");
@@ -422,11 +503,9 @@ function updateMapFromTelemetry(lat, lon) {
 
   if (window.droneMarker) window.droneMarker.setLatLng([lat, lon]);
 
-  // Auto-zoom to drone once per connection on first valid GPS fix
   if (window.map && !mapHasZoomed && lat !== 0 && lon !== 0) {
     window.map.setView([lat, lon], 17);
     mapHasZoomed = true;
-    // Clear stale trail that accumulated from default USA position
     if (window.trailLine) window.trailLine.setLatLngs([[lat, lon]]);
   }
 
@@ -438,11 +517,13 @@ function updateMapFromTelemetry(lat, lon) {
   }
 }
 
+// ─── FIX 1: updateAttitude ────────────────────────────────────────────────────
+// Jetson already sends roll/pitch/yaw in DEGREES. The previous version wrongly
+// applied a radians→degrees conversion (r2d), turning 2° of roll into ~115°.
+// Values are now used directly as-is.
 function updateAttitude(data) {
-  const r2d = r => (r * 180) / Math.PI;
-
   if (data.yaw !== undefined) {
-    const yawDeg = ((r2d(data.yaw)) + 360) % 360;
+    const yawDeg = ((data.yaw) + 360) % 360;
     setText("headingVal", Math.round(yawDeg) + "°");
     setText("compassHeadingText", Math.round(yawDeg) + "°");
     const arrow = getEl("miniCompassArrow");
@@ -451,40 +532,43 @@ function updateAttitude(data) {
 
   let rollDeg = null, pitchDeg = null;
   if (data.roll !== undefined) {
-    rollDeg = r2d(data.roll);
+    rollDeg = data.roll;
     setText("rollVal", `${rollDeg >= 0 ? "+" : ""}${rollDeg.toFixed(1)}°`);
     pushBuffer("roll", rollDeg);
   }
   if (data.pitch !== undefined) {
-    pitchDeg = r2d(data.pitch);
+    pitchDeg = data.pitch;
     setText("pitchVal", `${pitchDeg >= 0 ? "+" : ""}${pitchDeg.toFixed(1)}°`);
     pushBuffer("pitch", pitchDeg);
   }
 
   const disc = getEl("horizonDisc");
   if (disc && rollDeg !== null && pitchDeg !== null) {
-    // disc is 200% size offset -50%/-50%, so transform-origin 25%/25% = center of ring
     disc.style.transformOrigin = "25% 25%";
-    // pitch: clamp to ±40px travel, positive pitch = more sky (move down)
     const pitchPx = Math.max(-40, Math.min(40, pitchDeg * 1.2));
     disc.style.transform = `rotate(${rollDeg}deg) translateY(${pitchPx}px)`;
   }
 }
 
+// ─── FIX 2: updateMotors ─────────────────────────────────────────────────────
+// Jetson sends m1/m2/m3/m4 as raw PWM (e.g. 1449). There are no m1_out fields.
+// Percentage is computed from PWM: clamp((pwm - 1000) / 10, 0, 100).
 function updateMotors(data) {
+  const pwmPct = p => Math.min(100, Math.max(0, Math.round((p - 1000) / 10)));
+  const outs = [];
+
   ["m1","m2","m3","m4"].forEach(m => {
-    if (data[m] !== undefined) setText(`${m}pwm`, Math.floor(data[m]));
-    const outKey = `${m}_out`;
-    if (data[outKey] !== undefined) {
-      setText(`${m}out`, `${Math.floor(data[outKey])}%`);
+    if (data[m] !== undefined) {
+      const pwm = Math.floor(data[m]);
+      const pct = pwmPct(pwm);
+      setText(`${m}pwm`, pwm);
+      setText(`${m}out`, `${pct}%`);
       const bar = getEl(`${m}bar`);
-      if (bar) bar.style.width = `${Math.floor(data[outKey])}%`;
+      if (bar) bar.style.width = `${pct}%`;
+      outs.push(pct);
     }
   });
 
-  const outs = ["m1","m2","m3","m4"]
-    .map(m => data[`${m}_out`])
-    .filter(v => v !== undefined);
   if (outs.length > 0) {
     pushBuffer("motor_avg", outs.reduce((a,b) => a+b, 0) / outs.length);
   }
@@ -492,11 +576,35 @@ function updateMotors(data) {
 
 // ─── MAIN APPLY ───────────────────────────────────────────────────────────────
 function applyTelemetry(data) {
+  const pxOk = data.pixhawk_connected !== false;
   setConnectedState(data);
-
-  // If LOS detected, don't update the rest of the UI with fake values
   if (losActive) return;
 
+  // Jetson-sourced — always update regardless of FC connection
+  if (data.cpu !== undefined) setText("cpuLoadTop", `${Math.round(data.cpu)}%`);
+
+  if (!pxOk) {
+    // FC offline — blank all FC-dependent displays
+    setText("topVoltage", "--V"); setText("topCurrent", "--A"); setText("topBattery", "--%");
+    setText("satCountTop", "--"); setText("rssiVal", "--");
+    setText("altVal", "-- m"); setText("spdVal", "-- m/s");
+    setOnlineStatus(getEl("gpsFixTop"), "OFFLINE", false);
+    setOnlineStatus(getEl("ekfTop"), "OFFLINE", false);
+    setSensorStatus("sensorGps",          "OFFLINE", false);
+    setSensorStatus("sensorBattery",      "OFFLINE", false);
+    setSensorStatus("sensorLidar",        "OFFLINE", false);
+    setSensorStatus("sensorCompass",      "OFFLINE", false);
+    setSensorStatus("sensorImu",          "OFFLINE", false);
+    setSensorStatus("sensorBarometer",    "OFFLINE", false);
+    setSensorStatus("sensorOpticalFlow",  "OFFLINE", false);
+    triggerFaultAlert('fault', 'pixhawk', 'PIXHAWK OFFLINE — No flight controller connection');
+    redrawAllCharts();
+    return;
+  }
+
+  clearFaultAlert('pixhawk');
+
+  // FC-sourced data
   if (data.voltage !== undefined) {
     setText("topVoltage", data.voltage.toFixed(1) + "V");
     pushBuffer("voltage", data.voltage);
@@ -505,8 +613,11 @@ function applyTelemetry(data) {
     setText("topCurrent", data.current.toFixed(1) + "A");
     pushBuffer("current", data.current);
   }
-  if (data.battery !== undefined) setText("topBattery", `${Math.round(data.battery)}%`);
-  if (data.cpu !== undefined) setText("cpuLoadTop", `${Math.round(data.cpu)}%`);
+  if (data.battery !== undefined) {
+    setText("topBattery", `${Math.round(data.battery)}%`);
+    if (data.battery < 20) triggerFaultAlert('warn', 'battery-low', `LOW BATTERY — ${Math.round(data.battery)}% remaining`);
+    else clearFaultAlert('battery-low');
+  }
 
   if (data.sats !== undefined) {
     setText("satCountTop", data.sats);
@@ -520,7 +631,10 @@ function applyTelemetry(data) {
   if (data.hdop != null) pushBuffer("hdop", data.hdop);
 
   if (data.ekf_healthy !== undefined) {
-    setOnlineStatus(getEl("ekfTop"), data.ekf_healthy ? "HEALTHY" : "DEGRADED", data.ekf_healthy);
+    const ekfOk = data.ekf_healthy === true;
+    setOnlineStatus(getEl("ekfTop"), ekfOk ? "HEALTHY" : "DEGRADED", ekfOk);
+    if (!ekfOk) triggerFaultAlert('warn', 'ekf', 'EKF DEGRADED');
+    else clearFaultAlert('ekf');
   }
 
   if (data.alt !== undefined) {
@@ -530,36 +644,68 @@ function applyTelemetry(data) {
   if (data.rangefinder !== undefined) {
     setText("lidarAltVal", data.rangefinder.toFixed(2) + " m");
   }
-  if (data.groundspeed !== undefined) setText("spdVal", data.groundspeed.toFixed(1) + " m/s");
-  if (data.climb !== undefined) pushBuffer("climb", data.climb);
-  if (data.throttle !== undefined) pushBuffer("throttle", data.throttle);
-  if (data.rssi !== undefined) setText("rssiVal", data.rssi.toFixed(1));
+
+  if (data.spd !== undefined) setText("spdVal", data.spd.toFixed(1) + " m/s");
+  if (data.vspd !== undefined) pushBuffer("climb", data.vspd);
+
+  if (data.rssi !== undefined) setText("rssiVal", data.rssi.toFixed ? data.rssi.toFixed(1) : data.rssi);
 
   if (data.flight_mode !== undefined) {
     setText("mapModeVal", data.flight_mode);
     const modeSelect = getEl("flightModeSelect");
-    if (modeSelect) modeSelect.value = data.flight_mode;
+    if (modeSelect) {
+      const MODE_OPT = {
+        "STABILIZE":"STABILIZE","ACRO":"ACRO","ALT HOLD":"ALTHOLD","ALTHOLD":"ALTHOLD",
+        "AUTO":"AUTO","GUIDED":"GUIDED","LOITER":"LOITER","RTL":"RTL","LAND":"LAND",
+        "POSHOLD":"POSHOLD","BRAKE":"BRAKE","SPORT":"SPORT","DRIFT":"DRIFT","FLIP":"FLIP",
+        "AUTOTUNE":"AUTOTUNE","THROW":"THROW","SMART_RTL":"SMART_RTL","SMARTRTL":"SMART_RTL"
+      };
+      const opt = MODE_OPT[String(data.flight_mode).toUpperCase()] || data.flight_mode;
+      const exists = Array.from(modeSelect.options).some(o => o.value === opt);
+      if (exists) modeSelect.value = opt;
+    }
   }
   if (data.armed !== undefined) setStatusSelect(data.armed ? "armed" : "disarmed");
 
-  if (data.vib_x !== undefined) pushBuffer("vib_x", data.vib_x);
-  if (data.vib_y !== undefined) pushBuffer("vib_y", data.vib_y);
-  if (data.vib_z !== undefined) pushBuffer("vib_z", data.vib_z);
-
-  if (data.sensors_health !== undefined) {
-    const h = data.sensors_health;
-    setSensorStatus("sensorImu",        !!(h & 0x3F) ? "NOMINAL" : "FAULT",  !!(h & 0x3F));
-    setSensorStatus("sensorCompass",    !!(h & 0x100) ? "NOMINAL" : "FAULT", !!(h & 0x100));
-    setSensorStatus("sensorBarometer",  !!(h & 0x20000000) ? "NOMINAL" : "FAULT", !!(h & 0x20000000));
-    setSensorStatus("sensorBattery",    "NOMINAL", true);
-    setSensorStatus("sensorLidar",      "NOMINAL", true);
-    setSensorStatus("sensorOpticalFlow","NOMINAL", true);
+  // Sensor status
+  setSensorStatus("sensorBattery",
+    data.voltage > 0 ? "NOMINAL" : "FAULT",
+    data.voltage > 0);
+  if (data.voltage !== undefined) {
+    if (data.voltage <= 0) triggerFaultAlert('fault', 'battery-volt', 'BATTERY FAULT — No voltage reading');
+    else clearFaultAlert('battery-volt');
   }
+
+  setSensorStatus("sensorLidar",
+    data.rangefinder > 0 ? "NOMINAL" : "OFFLINE",
+    data.rangefinder > 0);
+
+  setSensorStatus("sensorCompass",
+    data.yaw !== undefined ? "NOMINAL" : "OFFLINE",
+    data.yaw !== undefined);
+
+  setSensorStatus("sensorImu",
+    (data.roll !== undefined && data.pitch !== undefined) ? "NOMINAL" : "OFFLINE",
+    (data.roll !== undefined && data.pitch !== undefined));
+
+  setSensorStatus("sensorBarometer",
+    data.alt !== undefined ? "NOMINAL" : "OFFLINE",
+    data.alt !== undefined);
+
+  setSensorStatus("sensorOpticalFlow",
+    data.of_quality > 0 ? "NOMINAL" : "OFFLINE",
+    data.of_quality > 0);
+
+  // Camera status driven by WebRTC — do not overwrite here.
 
   updateAttitude(data);
   updateMotors(data);
 
-  if (data.lat !== undefined && data.lon !== undefined) {
+  if (data.vib_x !== undefined) pushSmoothedVibration("vib_x", data.vib_x);
+  if (data.vib_y !== undefined) pushSmoothedVibration("vib_y", data.vib_y);
+  if (data.vib_z !== undefined) pushSmoothedVibration("vib_z", data.vib_z);
+
+  if (data.lat !== undefined && data.lon !== undefined && data.lat !== 0 && data.lon !== 0) {
     updateMapFromTelemetry(data.lat, data.lon);
   }
 
@@ -576,12 +722,16 @@ function connectTelemetry() {
   isConnecting = true;
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
-  socket = new WebSocket("ws://localhost:8765");
+  // Connects to the VPS relay over the secure nginx reverse proxy. Browsers
+  // never connect directly to the Jetson for telemetry (the Jetson is behind
+  // NAT). The Jetson pushes into port 9001 and the relay re-serves to browsers
+  // on port 9101, which nginx exposes securely as wss://console.airsent.tech/telem.
+  socket = new WebSocket("wss://console.airsent.tech/telem");
 
   socket.onopen = () => {
-    console.log("✅ WebSocket connected");
+    console.log("✅ WebSocket connected to VPS relay");
     isConnecting = false;
-    mapHasZoomed = false; // re-zoom to drone on every new connection
+    mapHasZoomed = false;
   };
 
   socket.onclose = () => {
@@ -610,7 +760,7 @@ function updateDemoTelemetry() {
   const hdg     = rnd(100, 140);
   const alt     = rnd(80, 90);
   const spd     = rnd(4, 7);
-  const climb   = rnd(-0.5, 0.5);
+  const vspd    = rnd(-0.5, 0.5);
   const voltage = rnd(15.4, 16.1);
   const current = rnd(9.0, 12.0);
   const sats    = Math.floor(rnd(17, 22));
@@ -663,26 +813,27 @@ function updateDemoTelemetry() {
     setSensorStatus(id, "NOMINAL", true);
   });
 
-  const motors = [
-    { pwm: Math.floor(rnd(1400,1500)), out: Math.floor(rnd(39,43)) },
-    { pwm: Math.floor(rnd(1400,1500)), out: Math.floor(rnd(40,44)) },
-    { pwm: Math.floor(rnd(1400,1500)), out: Math.floor(rnd(38,42)) },
-    { pwm: Math.floor(rnd(1400,1500)), out: Math.floor(rnd(41,45)) },
+  const pwmVals = [
+    Math.floor(rnd(1400,1500)), Math.floor(rnd(1400,1500)),
+    Math.floor(rnd(1400,1500)), Math.floor(rnd(1400,1500)),
   ];
-  motors.forEach((m, i) => {
-    setText(`m${i+1}pwm`, m.pwm);
-    setText(`m${i+1}out`, `${m.out}%`);
-    const bar = getEl(`m${i+1}bar`);
-    if (bar) bar.style.width = `${m.out}%`;
+  const pwmPct = p => Math.min(100, Math.max(0, Math.round((p - 1000) / 10)));
+
+  pwmVals.forEach((pwm, i) => {
+    const m = `m${i+1}`;
+    const pct = pwmPct(pwm);
+    setText(`${m}pwm`, pwm);
+    setText(`${m}out`, `${pct}%`);
+    const bar = getEl(`${m}bar`);
+    if (bar) bar.style.width = `${pct}%`;
   });
 
-  pushBuffer("roll", roll);      pushBuffer("pitch", pitch);
-  pushBuffer("alt", alt);        pushBuffer("climb", climb);
+  pushBuffer("roll", roll);       pushBuffer("pitch", pitch);
+  pushBuffer("alt", alt);         pushBuffer("climb", vspd);
   pushBuffer("voltage", voltage); pushBuffer("current", current);
-  pushBuffer("sats", sats);      pushBuffer("hdop", hdop);
-  pushBuffer("vib_x", vib_x);   pushBuffer("vib_y", vib_y);
-  pushBuffer("vib_z", vib_z);
-  pushBuffer("motor_avg", motors.reduce((a,m) => a + m.out, 0) / 4);
+  pushBuffer("sats", sats);       pushBuffer("hdop", hdop);
+  pushBuffer("vib_x", vib_x);    pushBuffer("vib_y", vib_y); pushBuffer("vib_z", vib_z);
+  pushBuffer("motor_avg", pwmVals.reduce((a,p) => a + pwmPct(p), 0) / 4);
   pushBuffer("throttle", rnd(30, 45));
 
   redrawAllCharts();

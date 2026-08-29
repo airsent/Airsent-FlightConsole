@@ -41,7 +41,7 @@
 
     <!-- LOGO ABOVE BOX -->
     <div class="login-logo-wrap">
-      <img src="logo.png" alt="Airsent logo" class="login-top-logo" />
+      <img src="logo-topbar.png" alt="Airsent logo" class="login-top-logo" />
     </div>
 
     <!-- LOGIN PANEL -->
@@ -53,7 +53,7 @@
 
         <div class="login-field">
           <label>USERNAME</label>
-          <input type="text" id="username" placeholder="demo / actual" autocomplete="off" />
+          <input type="text" id="username" placeholder="demo / viewer / operator" autocomplete="off" />
         </div>
 
         <div class="login-field">
@@ -112,27 +112,27 @@
 
       hideError();
 
-      if(password !== "123456"){
-        showError("INVALID PASSWORD");
-        return false;
-      }
-
-      if(username === "demo"){
+      if(username === "demo" && password === "123456"){
         selectedMode = "demo";
         return true;
       }
 
-      if(username === "actual"){
-        selectedMode = "actual"; // ← FIXED: was "real", now matches all other pages
+      if(username === "viewer" && password === "2468"){
+        selectedMode = "viewer";
         return true;
       }
 
-      showError("USERNAME MUST BE DEMO OR ACTUAL");
+      if(username === "operator" && password === "13579"){
+        selectedMode = "operator";
+        return true;
+      }
+
+      showError("INVALID USERNAME OR PASSWORD");
       return false;
     }
 
     function runBootSequence(){
-      localStorage.setItem("airsentMode", selectedMode); // ← FIXED: was "mode", now "airsentMode"
+      localStorage.setItem("airsentMode", selectedMode);
 
       bootOverlay.classList.remove("hidden");
 

@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+<script src="fit-screen.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -384,13 +385,13 @@ canvas.chart-canvas { flex:1; width:100%; }
 .filt.ff.on { background:rgba(255,51,85,.08); border-color:var(--red); color:var(--red); }
 </style>
 </head>
-<body>
+<body class="console-fit">
 
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="tb-seg">
     <div class="logo-dropdown">
-      <button class="logo-dropdown-btn"><img src="logo.png" style="height:24px" alt="Airsent"></button>
+      <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
       <div class="logo-dropdown-menu">
       <a href="dashboard.html">Main Dashboard</a>
       <a href="mission.html">Mission Planner</a>
@@ -398,6 +399,7 @@ canvas.chart-canvas { flex:1; width:100%; }
       <a href="parameters.html">Parameters</a>
       <a href="logs.html">Flight Logs</a>
       <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
       <a href="health.html">System Health</a>
       <a href="sensor-status.html">Sensor Status</a>
       <a href="actuators.html">Actuators</a>
@@ -917,7 +919,7 @@ document.querySelectorAll('.filt').forEach(b=>{ b.addEventListener('click',()=>{
 
 // WebSocket
 function connectWs() {
-  if(airsentMode!=='actual')return;
+  if(airsentMode==='demo')return;
   ws=new WebSocket('ws://localhost:8765');
   ws.onmessage=e=>{ try{ lastTelemetry=JSON.parse(e.data); }catch(e){} };
   ws.onclose=()=>setTimeout(connectWs,3000);
@@ -938,7 +940,7 @@ setInterval(()=>el('hClock').textContent=now(),1000);
 setInterval(()=>{ if(isRecording){renderList();} },2000);
 window.addEventListener('resize',()=>{ setTimeout(redrawCharts,50); });
 load();
-if(airsentMode!=='actual') injectDemo();
+if(airsentMode==='demo') injectDemo();
 el('hFlights').textContent=flights.length;
 renderList();
 connectWs();

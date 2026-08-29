@@ -6,6 +6,7 @@
 <title>Airsent — Mission Planner</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="fit-screen.js"></script>
 <style>
 /* ── Reset / base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -476,13 +477,13 @@ body {
 }
 </style>
 </head>
-<body>
+<body class="console-fit">
 
 <!-- ── TOP BAR ───────────────────────────────────────────── -->
 <div class="mp-topbar">
   <div class="logo-dropdown">
     <button class="logo-dropdown-btn" type="button">
-      <img src="logo.png" alt="Airsent" style="height:28px;">
+      <img src="logo-topbar.png" alt="Airsent" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;">
     </button>
     <div class="logo-dropdown-menu">
       <a href="dashboard.html">Main Dashboard</a>
@@ -491,6 +492,7 @@ body {
       <a href="parameters.html">Parameters</a>
       <a href="logs.html">Flight Logs</a>
       <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
       <a href="health.html">System Health</a>
       <a href="sensor-status.html">Sensor Status</a>
       <a href="actuators.html">Actuators</a>

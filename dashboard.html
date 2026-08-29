@@ -4,11 +4,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Drone GCS V1</title>
+<title>Airsent Flight Console</title>
 <link rel="stylesheet" href="styles.css">
 <style>
 .lbtn-reset { border-color:rgba(127,220,255,.4); color:#7fdcff; background:rgba(127,220,255,.06); }
 .lbtn-reset:hover { background:rgba(127,220,255,.15); }
+
+#frontCamOffline, #downCamOffline {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(3,7,12,0.85) !important;
+  z-index: 4 !important;
+  pointer-events: none !important;
+}
+#frontCamOffline.hidden, #downCamOffline.hidden { display: none !important; }
+#frontCamOffline .cam-offline-box, #downCamOffline .cam-offline-box {
+  border: 1px solid rgba(248,113,113,.5) !important;
+  background: rgba(248,113,113,.07) !important;
+  padding: 14px 28px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+#frontCamOffline .cam-offline-label, #downCamOffline .cam-offline-label {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 12px !important;
+  letter-spacing: 2.5px !important;
+  text-transform: uppercase !important;
+  color: #f87171 !important;
+}
+#frontCamOffline .cam-offline-sub, #downCamOffline .cam-offline-sub {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 9px !important;
+  letter-spacing: 1.5px !important;
+  text-transform: uppercase !important;
+  color: rgba(248,113,113,.5) !important;
+}
 </style>
 <link
   rel="stylesheet"
@@ -71,7 +106,7 @@
 </style>
 </head>
  
-<body>
+<body class="dashboard-fixed">
  
 <div class="app-shell">
  
@@ -81,7 +116,7 @@
 <div class="top-item status top-status-group">
   <div class="logo-dropdown">
     <button class="logo-dropdown-btn" type="button" aria-label="Open navigation menu">
-      <img src="logo.png" alt="Airsent logo" class="top-logo">
+      <img src="logo-topbar.png" alt="Airsent logo" class="top-logo">
     </button>
     <div class="logo-dropdown-menu">
       <a href="dashboard.html">Main Dashboard</a>
@@ -90,6 +125,7 @@
       <a href="parameters.html">Parameters</a>
       <a href="logs.html">Flight Logs</a>
       <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
       <a href="health.html">System Health</a>
       <a href="sensor-status.html">Sensor Status</a>
       <a href="actuators.html">Actuators</a>
@@ -145,8 +181,15 @@ BATTERY:
 <span id="topBattery">71%</span>
 </div>
  
-<div class="top-item link-box">
-LINK: <span id="linkTop">GOOD</span>
+<div class="top-item fault-counter" id="faultCounter" onclick="toggleFaultPanel(event)">
+  FAULTS: <span id="faultCountNum">0</span>
+  <span id="linkTop" style="display:none"></span>
+  <div class="fault-panel" id="faultPanel">
+    <div class="fault-panel-header">Active Alerts</div>
+    <div id="faultPanelEmpty" class="fault-panel-empty">No active faults</div>
+    <div id="faultPanelList"></div>
+    <button class="fault-panel-dismiss-all" id="faultDismissAll" onclick="dismissAllFaults(event)">Dismiss All</button>
+  </div>
 </div>
  
 </div>
@@ -178,8 +221,13 @@ CPU LOAD: <span id="cpuLoadTop">23%</span>
 REC: <span>185MB</span>
 </div>
  
-<div class="subbar-item">
-FPS: <span>60.60</span>
+<div class="subbar-item console-users-item">
+  <span class="console-users-label">CONSOLE:</span>
+  <span class="console-users-count">
+    <span id="consoleUsersTotal">0</span> USERS
+    <small>OP <span id="consoleOperators">0</span></small>
+    <small>VIEW <span id="consoleViewers">0</span></small>
+  </span>
 </div>
  
 </section>
@@ -443,17 +491,30 @@ FAILSAFE
   <button class="flight-btn" data-command="GUIDED" data-confirm="Confirm GUIDED command?">◎</button>
   <button class="flight-btn emergency-btn" data-command="EMERGENCY STOP" data-confirm="Confirm EMERGENCY STOP?">■</button>
 </div>
+<div class="flight-slide-confirm hidden" id="flightSlideConfirm">
+  <button class="flight-slide-close" id="flightSlideClose" type="button" aria-label="Cancel command">×</button>
+  <div class="flight-slide-title" id="flightSlideTitle">CONFIRM COMMAND</div>
+  <div class="flight-slide-track" id="flightSlideTrack">
+    <div class="flight-slide-fill" id="flightSlideFill"></div>
+    <div class="flight-slide-label">SLIDE TO CONFIRM</div>
+    <div class="flight-slide-knob" id="flightSlideKnob">▶</div>
+  </div>
+</div>
 </div>
  
 </section>
  
  
  
-<section class="panel map-panel">
+<section class="panel map-panel" id="mapPanel">
  
-<!-- Map topline: alt, lidar, lat, lon, spd, lt -->
+<!-- Map topline: view toggle (in old BARO slot), lidar, lat, lon, spd, lt -->
 <div class="map-topline">
-  <div>BARO: <span id="altVal">0.0 m</span></div>
+  <div class="map-view-toggle" id="mapViewToggle">
+    <button class="mv-btn active" data-view="map"   id="mvMap">MAP</button>
+    <button class="mv-btn"        data-view="front" id="mvFront">FRONT</button>
+    <button class="mv-btn"        data-view="down"  id="mvDown">DOWN</button>
+  </div>
   <div>LIDAR: <span id="lidarAltVal">-- m</span></div>
   <div>LAT: <span id="latVal">0.0000°</span></div>
   <div>LON: <span id="lonVal">0.0000°</span></div>
@@ -461,10 +522,40 @@ FAILSAFE
   <div>LT: <span id="ltVal">0</span></div>
 </div>
  
-<!-- Map fills all remaining space -->
-<div id="leafletMap" class="map-body real-map"></div>
+<!-- Body wrapper holds the map + camera views stacked; only one shown at a time -->
+<div class="map-view-body" id="mapViewBody">
+  <!-- Map fills all remaining space -->
+  <div id="leafletMap" class="map-body real-map"></div>
+ 
+  <!-- Front camera (OAK-D Lite) view, hidden until selected. WebRTC <video>. -->
+  <div class="cam-view" id="frontCamView">
+    <video id="frontCamVideo" class="cam-view-img" autoplay muted playsinline
+           style="width:100%;height:100%;object-fit:cover;display:block;background:#03070c"></video>
+    <div class="cam-offline-overlay" id="frontCamOffline">
+      <div class="cam-offline-box">
+        <span class="cam-offline-label">● OFFLINE</span>
+        <span class="cam-offline-sub">FRONT · OAK-D LITE</span>
+      </div>
+    </div>
+    <div class="cam-view-badge"><span class="cam-view-dot" id="frontCamDot"></span><span id="frontCamLabel">FRONT · OAK-D LITE · OFFLINE</span></div>
+  </div>
+
+  <!-- Down camera (IMX219) view, hidden until selected. WebRTC <video>. -->
+  <div class="cam-view" id="downCamView">
+    <video id="downCamVideo" class="cam-view-img" autoplay muted playsinline
+           style="width:100%;height:100%;object-fit:cover;display:block;background:#03070c"></video>
+    <div class="cam-offline-overlay" id="downCamOffline">
+      <div class="cam-offline-box">
+        <span class="cam-offline-label">● OFFLINE</span>
+        <span class="cam-offline-sub">DOWN · IMX219</span>
+      </div>
+    </div>
+    <div class="cam-view-badge"><span class="cam-view-dot" id="downCamDot"></span><span id="downCamLabel">DOWN · IMX219 · OFFLINE</span></div>
+  </div>
+</div>
  
 <!-- Hidden elements to keep JS references alive -->
+<span id="altVal"      style="display:none">0.0 m</span>
 <span id="mapModeVal"  style="display:none">POSHOLD</span>
 <span id="positionVal" style="display:none">NO DATA</span>
 <span id="mslVal"      style="display:none">0.0m</span>
@@ -506,6 +597,8 @@ SENSOR STATUS
 <div class="sensor-row"><span>BATTERY</span><b id="sensorBattery" class="sensor-ok">NOMINAL</b></div>
 <div class="sensor-row"><span>IMU</span><b id="sensorImu" class="sensor-ok">NOMINAL</b></div>
 <div class="sensor-row"><span>BAROMETER</span><b id="sensorBarometer" class="sensor-ok">NOMINAL</b></div>
+<div class="sensor-row"><span>FRONT CAM</span><b id="sensorFrontCam" class="sensor-offline">OFFLINE</b></div>
+<div class="sensor-row"><span>DOWN CAM</span><b id="sensorDownCam" class="sensor-offline">OFFLINE</b></div>
  
 </section>
  
@@ -560,16 +653,6 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
  
 </div>
  
-<div class="timeline-block">
- 
-<div class="timeline-label">
-GPS QUALITY / ALTITUDE / VIBRATION
-</div>
- 
-<canvas id="chart7"></canvas>
- 
-</div>
- 
 </section>
  
 </main>
@@ -589,6 +672,28 @@ GPS QUALITY / ALTITUDE / VIBRATION
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
 <script src="telemetry.js"></script>
+<script>
+(function(){
+  const REF_W = 2048;
+  const REF_H = 960;
+  function fitDashboard(){
+    const viewport = window.visualViewport;
+    const width = viewport ? viewport.width : window.innerWidth;
+    const height = viewport ? viewport.height : window.innerHeight;
+    const scale = Math.min(width / REF_W, height / REF_H);
+    const virtualHeight = height / scale;
+    const dashboardHeight = virtualHeight - 126;
+    const rowScale = Math.max(1, (dashboardHeight - 16) / 818);
+    const fontBoost = Math.min(1.12, Math.max(1, 1 + (1 - scale) * 0.32));
+    document.documentElement.style.setProperty('--dashboard-scale', scale.toFixed(5));
+    document.documentElement.style.setProperty('--dashboard-virtual-height', `${virtualHeight.toFixed(2)}px`);
+    document.documentElement.style.setProperty('--dashboard-row-scale', rowScale.toFixed(5));
+    document.documentElement.style.setProperty('--dashboard-font-boost', fontBoost.toFixed(5));
+  }
+  window.addEventListener('resize', fitDashboard);
+  fitDashboard();
+})();
+</script>
  
 <script>
 // ── LAUNCH MINI ───────────────────────────────────────────
@@ -605,9 +710,13 @@ GPS QUALITY / ALTITUDE / VIBRATION
   let remainingSecs    = 180;
   let launchElapsed    = 0;
   let abortReason      = '';
-  let ticker           = null;
-  let handoverSecs     = 120;   // mirrors LS_HANDOFF
-  let handoverFired    = false; // prevent double-fire per session
+	  let ticker           = null;
+	  let handoverSecs     = 120;   // mirrors LS_HANDOFF
+	  let handoverFired    = false; // prevent double-fire per session
+
+	  function isViewerMode() {
+	    return (localStorage.getItem('airsentMode') || 'demo').toLowerCase() === 'viewer';
+	  }
  
   function getConfiguredTotal() {
     try { const h = parseInt(localStorage.getItem(LS_HANDOFF)); if (h > 0) return h; } catch(e) {}
@@ -694,8 +803,9 @@ GPS QUALITY / ALTITUDE / VIBRATION
     }, 1000);
   }
  
-  function doStart() {
-    if (state !== 'standby') return;
+	  function doStart() {
+	    if (isViewerMode()) return;
+	    if (state !== 'standby') return;
     totalSecs     = getConfiguredTotal();
     remainingSecs = totalSecs;
     launchElapsed = 0;
@@ -708,24 +818,27 @@ GPS QUALITY / ALTITUDE / VIBRATION
     try { localStorage.setItem(CMD_KEY, JSON.stringify({ cmd:'start', ts: Date.now() })); } catch(e) {}
   }
  
-  function doHold() {
-    if (state !== 'counting') return;
+	  function doHold() {
+	    if (isViewerMode()) return;
+	    if (state !== 'counting') return;
     stopTicker();
     state = 'hold';
     save(); render();
     try { localStorage.setItem(CMD_KEY, JSON.stringify({ cmd:'hold', ts: Date.now() })); } catch(e) {}
   }
  
-  function doResume() {
-    if (state !== 'hold') return;
+	  function doResume() {
+	    if (isViewerMode()) return;
+	    if (state !== 'hold') return;
     state = 'counting';
     save(); render();
     runCountTicker();
     try { localStorage.setItem(CMD_KEY, JSON.stringify({ cmd:'resume', ts: Date.now() })); } catch(e) {}
   }
  
-  function doAbort() {
-    if (state === 'standby') return;
+	  function doAbort() {
+	    if (isViewerMode()) return;
+	    if (state === 'standby') return;
     stopTicker();
     abortReason = 'Aborted from dashboard';
     state = 'abort';
@@ -740,8 +853,9 @@ GPS QUALITY / ALTITUDE / VIBRATION
   // ── Reset (password protected) ────────────────────────────
   var RESET_PWD = 'airsent';
  
-  function showResetModal() {
-    var m = el('lmResetModal');
+	  function showResetModal() {
+	    if (isViewerMode()) return;
+	    var m = el('lmResetModal');
     if (!m) return;
     m.style.display = 'flex';
     var inp = el('lmResetPwd');
@@ -755,8 +869,9 @@ GPS QUALITY / ALTITUDE / VIBRATION
     if (m) m.style.display = 'none';
   }
  
-  function doReset() {
-    stopTicker();
+	  function doReset() {
+	    if (isViewerMode()) return;
+	    stopTicker();
     state = 'standby';
     totalSecs = getConfiguredTotal();
     remainingSecs = totalSecs;
@@ -833,6 +948,187 @@ GPS QUALITY / ALTITUDE / VIBRATION
     save();
   }
   render();
+})();
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════
+   MAP / CAMERA VIEW TOGGLE + LIVE WebRTC STREAMS
+   Cameras now stream via WebRTC (WHEP) from MediaMTX on the VPS,
+   identical to pilot.html. This works on ANY network (local WiFi
+   or 5G) because the Jetson only makes OUTBOUND RTMP connections
+   to the VPS — the browser never has to reach the Jetson's
+   private IP, which is what the old WebSocket approach required.
+════════════════════════════════════════════════════════════ */
+(function(){
+  // VPS that runs MediaMTX. WebRTC video is served here via WHEP.
+  const VPS_IP = '165.22.210.225';
+
+  const D = id => document.getElementById(id);
+
+  /* ── VIEW TOGGLE ──────────────────────────────────────────── */
+  let currentView = 'map';
+  const leafletMap = D('leafletMap');
+  const frontView  = D('frontCamView');
+  const downView   = D('downCamView');
+  const btns = { map:D('mvMap'), front:D('mvFront'), down:D('mvDown') };
+
+  function setView(v){
+    currentView = v;
+    leafletMap.style.display = (v==='map')   ? 'block' : 'none';
+    frontView.style.display  = (v==='front') ? 'flex'  : 'none';
+    downView.style.display   = (v==='down')  ? 'flex'  : 'none';
+    Object.keys(btns).forEach(k=>{
+      if(btns[k]) btns[k].classList.toggle('active', k===v);
+    });
+    // Leaflet needs a nudge when it becomes visible again after being hidden
+    if(v==='map' && window.__leafletMapInstance && window.__leafletMapInstance.invalidateSize){
+      setTimeout(()=>window.__leafletMapInstance.invalidateSize(), 50);
+    }
+  }
+  Object.keys(btns).forEach(k=>{ if(btns[k]) btns[k].addEventListener('click', ()=>setView(k)); });
+
+  /* ── SENSOR STATUS rows (FRONT CAM / DOWN CAM) ────────────── */
+  function setSensor(id, ok){
+    const el = D(id);
+    if(!el) return;
+    el.textContent = ok ? 'NOMINAL' : 'OFFLINE';
+    el.className   = ok ? 'sensor-ok' : 'sensor-offline';
+  }
+
+  /* ── FRONT CAMERA — WebRTC via MediaMTX (path: frontcam) ──── */
+  let frontPc = null;
+  function connectFrontCam(){
+    if(frontPc){ try{frontPc.close();}catch(_){} frontPc=null; }
+
+    const pc = new RTCPeerConnection({
+      iceServers:[{urls:'stun:stun.l.google.com:19302'}]
+    });
+    frontPc = pc;
+
+    pc.addTransceiver('video', { direction:'recvonly' });
+
+    pc.ontrack = ev => {
+      if(ev.track.kind !== 'video') return;
+      const video = D('frontCamVideo');
+      video.srcObject = ev.streams[0];
+      video.play().catch(()=>{});
+      D('frontCamDot').classList.add('live');
+      D('frontCamLabel').textContent = 'FRONT · OAK-D LITE · LIVE';
+      D('frontCamOffline').classList.add('hidden');
+      setSensor('sensorFrontCam', true);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if(s==='disconnected' || s==='failed' || s==='closed'){
+        D('frontCamDot').classList.remove('live');
+        D('frontCamLabel').textContent = 'FRONT · OAK-D LITE · OFFLINE';
+        D('frontCamOffline').classList.remove('hidden');
+        setSensor('sensorFrontCam', false);
+        try{pc.close();}catch(_){}
+        if(frontPc===pc) frontPc=null;
+        setTimeout(connectFrontCam, 3000);
+      }
+    };
+
+    pc.createOffer()
+      .then(offer => {
+        pc.setLocalDescription(offer);
+        return fetch(`https://console.airsent.tech/video/frontcam/whep`, {
+          method:'POST',
+          headers:{'Content-Type':'application/sdp'},
+          body:offer.sdp
+        });
+      })
+      .then(r => { if(!r.ok) throw new Error(`WHEP ${r.status}`); return r.text(); })
+      .then(sdp => pc.setRemoteDescription({type:'answer', sdp}))
+      .catch(e => {
+        console.warn('[Front WebRTC]', e);
+        try{pc.close();}catch(_){}
+        if(frontPc===pc) frontPc=null;
+        setTimeout(connectFrontCam, 3000);
+      });
+  }
+
+  /* ── DOWN CAMERA — WebRTC via MediaMTX (path: downcam) ─────── */
+  let downPc = null;
+  function connectDownCam(){
+    if(downPc){ try{downPc.close();}catch(_){} downPc=null; }
+
+    const pc = new RTCPeerConnection({
+      iceServers:[{urls:'stun:stun.l.google.com:19302'}]
+    });
+    downPc = pc;
+
+    const tr = pc.addTransceiver('video', { direction:'recvonly' });
+    // Prefer H264 — the Jetson pushes H264 RTMP, so this avoids codec mismatch.
+    const caps = RTCRtpReceiver.getCapabilities ? RTCRtpReceiver.getCapabilities('video') : null;
+    const h264 = caps ? caps.codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264') : [];
+    if(h264.length && tr.setCodecPreferences) tr.setCodecPreferences(h264);
+
+    pc.ontrack = ev => {
+      if(ev.track.kind !== 'video') return;
+      const video = D('downCamVideo');
+      video.srcObject = ev.streams[0];
+      video.play().catch(()=>{});
+      D('downCamDot').classList.add('live');
+      D('downCamLabel').textContent = 'DOWN · IMX219 · LIVE';
+      D('downCamOffline').classList.add('hidden');
+      setSensor('sensorDownCam', true);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if(s==='disconnected' || s==='failed' || s==='closed'){
+        D('downCamDot').classList.remove('live');
+        D('downCamLabel').textContent = 'DOWN · IMX219 · OFFLINE';
+        D('downCamOffline').classList.remove('hidden');
+        setSensor('sensorDownCam', false);
+        try{pc.close();}catch(_){}
+        if(downPc===pc) downPc=null;
+        setTimeout(connectDownCam, 3000);
+      }
+    };
+
+    const waitIce = () => {
+      if(pc.iceGatheringState==='complete') return Promise.resolve();
+      return new Promise(resolve=>{
+        const done=()=>{
+          if(pc.iceGatheringState==='complete'){
+            pc.removeEventListener('icegatheringstatechange',done);
+            resolve();
+          }
+        };
+        pc.addEventListener('icegatheringstatechange',done);
+        setTimeout(resolve,2000);
+      });
+    };
+
+    pc.createOffer()
+      .then(offer => pc.setLocalDescription(offer))
+      .then(() => waitIce())
+      .then(() => fetch(`https://console.airsent.tech/video/downcam/whep`, {
+        method:'POST',
+        headers:{'Content-Type':'application/sdp'},
+        body:pc.localDescription.sdp
+      }))
+      .then(async r => { if(!r.ok) throw new Error(`WHEP ${r.status}: ${await r.text()}`); return r.text(); })
+      .then(sdp => pc.setRemoteDescription({type:'answer', sdp}))
+      .catch(e => {
+        console.warn('[Down WebRTC]', e);
+        D('downCamDot').classList.remove('live');
+        D('downCamLabel').textContent = 'DOWN · IMX219 · OFFLINE';
+        D('downCamOffline').classList.remove('hidden');
+        setSensor('sensorDownCam', false);
+        try{pc.close();}catch(_){}
+        if(downPc===pc) downPc=null;
+        setTimeout(connectDownCam, 3000);
+      });
+  }
+
+  // Kick off both WebRTC connections
+  connectFrontCam();
+  connectDownCam();
 })();
 </script>
 </body>

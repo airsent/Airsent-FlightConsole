@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Airsent — Pilot</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070a0f;--bg1:#0a0e15;--bg2:#0d121a;--bg3:#111720;
+  --rule:rgba(255,255,255,0.055);--rule2:rgba(255,255,255,0.032);
+  --ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--info:#3b82f6;
+  --t1:#e8edf2;--t2:#8a9bb0;--t3:#3d4f62;
+  --hud:rgba(255,255,255,0.82);--huddim:rgba(255,255,255,0.38);
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+html,body{height:100%;overflow:hidden;}
+html:has(body.pilot-fixed){width:100dvw;height:100dvh;overflow:hidden!important;}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);display:flex;flex-direction:column;}
+body.pilot-fixed{
+  position:absolute;left:0;top:0;width:var(--pilot-virtual-width,2048px);height:960px;min-width:var(--pilot-virtual-width,2048px);min-height:960px;
+  transform:scale(var(--pilot-scale,1));transform-origin:top left;overflow:hidden;
+}
+.bar{flex-shrink:0;height:40px;background:var(--bg1);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;padding:0 16px;gap:0;position:relative;z-index:200;}
+.logo-wrap{position:relative;}
+.logo-btn{background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;}
+.logo-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:200px;
+  background:var(--bg2);border:1px solid var(--rule);z-index:9999;box-shadow:0 16px 48px rgba(0,0,0,.8);}
+.logo-menu a{display:block;padding:8px 14px;color:var(--t2);text-decoration:none;
+  font-family:var(--mono);font-size:11px;border-bottom:1px solid var(--rule2);}
+.logo-menu a:hover{background:var(--bg3);color:var(--t1);}
+.logo-wrap:hover .logo-menu,.logo-wrap:focus-within .logo-menu{display:block;}
+.page-id{font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--t3);padding:0 18px;margin-left:14px;border-left:1px solid var(--rule);border-right:1px solid var(--rule);}
+.bdiv{width:1px;height:20px;background:var(--rule);margin:0 14px;flex-shrink:0;}
+.blbl{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);}
+.bval{font-family:var(--mono);font-size:11px;color:var(--t1);margin-left:6px;}
+.bval.ok{color:var(--ok);}.bval.warn{color:var(--warn);}.bval.err{color:var(--err);}.bval.info{color:var(--info);}
+.brt{margin-left:auto;display:flex;align-items:center;gap:0;}
+.pilot-stats{display:flex;align-items:center;gap:32px;margin-left:10px;flex-shrink:0;}
+.pilot-stat{display:flex;align-items:center;gap:10px;min-width:104px;justify-content:center;}
+.pilot-stat .bval{margin-left:0;}
+.pilot-stat.gps{min-width:130px;}
+.pilot-actions{display:flex;align-items:center;gap:14px;margin-right:22px;flex-shrink:0;}
+.mtog{display:flex;align-items:center;border:1px solid var(--rule);margin:0 18px 0 14px;flex-shrink:0;}
+.mbtn{padding:0 13px;height:26px;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  text-transform:uppercase;cursor:pointer;border:none;background:transparent;color:var(--t3);transition:all .12s;}
+.mbtn.m-auto{background:rgba(34,197,94,0.1);color:var(--ok);}
+.mbtn.m-man{background:rgba(239,68,68,0.1);color:var(--err);}
+.msep{width:1px;height:100%;background:var(--rule);}
+.units-tog{display:flex;align-items:center;border:1px solid var(--rule);flex-shrink:0;}
+.units-tog.settings-units{width:100%;margin-bottom:12px;}
+.units-tog.settings-units .ubtn{flex:1;}
+.ubtn{padding:0 10px;height:26px;font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;border:none;background:transparent;color:var(--t3);transition:all .12s;}
+.ubtn.active{background:rgba(59,130,246,0.12);color:var(--info);}
+.qact{display:flex;gap:8px;margin:0 14px;flex-shrink:0;}
+.qa{padding:0 13px;height:26px;font-family:var(--mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;
+  cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--t3);transition:all .12s;white-space:nowrap;}
+.qa:hover{border-color:rgba(255,255,255,.15);color:var(--t2);}
+.qa.qa-warn{border-color:rgba(245,158,11,.3);color:var(--warn);background:rgba(245,158,11,.05);}
+.qa.qa-err{border-color:rgba(239,68,68,.3);color:var(--err);background:rgba(239,68,68,.05);}
+.qa.active{filter:brightness(1.3);transform:scale(0.97);}
+.qa.qa-ok{border-color:rgba(34,197,94,.3);color:var(--ok);background:rgba(34,197,94,.05);}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:var(--err);
+  animation:rec-blink 1s step-end infinite;flex-shrink:0;}
+@keyframes rec-blink{0%,100%{opacity:1}50%{opacity:.2}}
+.telem-strip{flex-shrink:0;height:24px;background:var(--bg2);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;padding:0 14px;gap:0;font-family:var(--mono);font-size:9px;overflow:hidden;}
+.ts-item{display:flex;align-items:center;gap:4px;color:var(--t3);padding:0 10px;border-right:1px solid var(--rule2);}
+.ts-val{color:var(--t2);}
+.ts-val.ok{color:var(--ok);}.ts-val.warn{color:var(--warn);}.ts-val.err{color:var(--err);}
+.ts-mbar{width:22px;height:4px;background:var(--bg3);border-radius:1px;overflow:hidden;}
+.ts-mfill{height:100%;background:var(--info);transition:width .3s;}
+.ts-mfill.hot{background:var(--err);}
+.prearm-overlay{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.prearm-overlay.hidden{display:none;}
+.prearm-panel{background:var(--bg1);border:1px solid var(--rule);padding:28px 36px;min-width:360px;
+  box-shadow:0 0 60px rgba(0,0,0,.9);}
+.prearm-title{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--t3);
+  text-transform:uppercase;margin-bottom:18px;}
+.prearm-row{display:flex;align-items:center;justify-content:space-between;
+  padding:7px 0;border-bottom:1px solid var(--rule2);font-family:var(--mono);font-size:10px;}
+.prearm-row:last-of-type{border-bottom:none;}
+.prearm-status{font-size:9px;letter-spacing:1px;}
+.prearm-status.ok{color:var(--ok);}.prearm-status.fail{color:var(--err);}.prearm-status.warn{color:var(--warn);}
+.prearm-close{margin-top:18px;width:100%;padding:8px;font-family:var(--mono);font-size:9px;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;border:1px solid var(--rule);
+  background:transparent;color:var(--t2);transition:all .12s;}
+.prearm-close:hover{background:var(--bg3);color:var(--t1);}
+.shell{flex:1;min-height:0;display:flex;flex-direction:row;overflow:hidden;}
+.cam-col{flex:none;position:relative;background:#000;overflow:hidden;min-width:200px;}
+.h-resize{flex-shrink:0;width:6px;background:var(--bg2);
+  border-left:1px solid var(--rule);border-right:1px solid var(--rule);
+  cursor:ew-resize;display:flex;align-items:center;justify-content:center;z-index:20;transition:background .1s;}
+.h-resize:hover,.h-resize.dragging{background:var(--bg3);}
+.h-resize::after{content:'';display:block;width:2px;height:28px;background:rgba(255,255,255,.12);border-radius:1px;}
+.right-col{flex:none;display:flex;flex-direction:column;background:var(--bg1);overflow:hidden;min-width:180px;}
+.cam-bg{position:absolute;inset:0;background:#030507;}
+.live-feed{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:none;}
+.cam-source-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.22);
+  z-index:13;pointer-events:none;display:flex;align-items:center;gap:5px;}
+.cam-source-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2);}
+.cam-source-dot.live{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:cam-pulse 2s ease-in-out infinite;}
+@keyframes cam-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hud-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;}
+.tape-alt{position:absolute;right:52px;top:0;bottom:28px;width:56px;display:flex;flex-direction:column;
+  justify-content:center;align-items:flex-end;pointer-events:none;z-index:12;}
+.tape-spd{position:absolute;left:52px;top:0;bottom:28px;width:56px;display:flex;flex-direction:column;
+  justify-content:center;align-items:flex-start;pointer-events:none;z-index:12;}
+.tape-box{background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.18);
+  padding:4px 7px;font-family:var(--mono);font-size:15px;font-weight:300;
+  color:var(--hud);letter-spacing:1px;white-space:nowrap;min-width:52px;text-align:center;}
+.tape-unit{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--huddim);
+  text-align:center;margin-top:2px;text-transform:uppercase;}
+.tape-sub{font-family:var(--mono);font-size:9px;color:var(--huddim);text-align:center;margin-top:4px;}
+.alt-src{font-family:var(--mono);font-size:7px;letter-spacing:1px;text-align:center;margin-top:3px;text-transform:uppercase;}
+.alt-src.lidar{color:rgba(34,197,94,.7);}.alt-src.baro{color:rgba(255,255,255,.2);}
+.hdg-wrap{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  pointer-events:none;z-index:12;display:flex;flex-direction:column;align-items:center;}
+.hdg-strip{display:flex;align-items:center;gap:10px;
+  background:rgba(0,0,0,0.72);border:1px solid rgba(255,255,255,0.14);padding:4px 16px;}
+.hdg-val{font-family:var(--mono);font-size:16px;font-weight:300;color:var(--hud);letter-spacing:2px;}
+.hdg-dir{font-family:var(--mono);font-size:10px;color:var(--huddim);letter-spacing:1px;}
+.hdg-tick{width:1px;height:6px;background:rgba(255,255,255,0.2);}
+.man-warn{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:9px;letter-spacing:2px;
+  padding:4px 10px;border:1px solid rgba(239,68,68,.5);color:var(--err);background:rgba(239,68,68,.09);
+  pointer-events:none;z-index:20;display:none;}
+.man-warn.on{display:block;animation:blink-w 1s step-end infinite;}
+@keyframes blink-w{0%,100%{opacity:1}50%{opacity:.35}}
+.warn-overlay{position:absolute;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:11px;letter-spacing:2px;
+  padding:5px 16px;pointer-events:none;z-index:20;display:none;white-space:nowrap;}
+.warn-overlay.on{display:block;animation:blink-w .8s step-end infinite;}
+.batt-warn{bottom:50px;border:1px solid rgba(239,68,68,.6);color:var(--err);background:rgba(239,68,68,.12);}
+.obst-warn{bottom:80px;border:2px solid var(--warn);color:#fff;
+  background:rgba(180,83,9,.92);font-size:14px;font-weight:600;letter-spacing:3px;
+  padding:9px 22px;box-shadow:0 0 24px rgba(245,158,11,.55),0 4px 16px rgba(0,0,0,.6);
+  text-shadow:0 1px 3px rgba(0,0,0,.8);}
+.link-warn{top:60px;border:1px solid rgba(239,68,68,.6);color:var(--err);background:rgba(239,68,68,.12);font-size:13px;}
+.signal-countdown{position:absolute;top:90px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:28px;letter-spacing:4px;color:var(--err);
+  pointer-events:none;z-index:21;display:none;text-shadow:0 0 20px rgba(239,68,68,.5);}
+.signal-countdown.on{display:block;}
+.alt-profile{position:absolute;bottom:36px;left:14px;right:120px;height:28px;pointer-events:none;z-index:12;}
+.alt-profile canvas{width:100%;height:100%;}
+.wind-badge{position:absolute;bottom:74px;left:14px;font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  color:rgba(255,255,255,.3);pointer-events:none;z-index:12;display:flex;align-items:center;gap:5px;}
+.wind-canvas{width:28px;height:28px;}
+.mission-badge{position:absolute;top:50px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:8px;letter-spacing:1.5px;
+  background:rgba(0,0,0,.65);border:1px solid rgba(59,130,246,.3);
+  color:rgba(59,130,246,.8);padding:3px 12px;pointer-events:none;z-index:12;display:none;white-space:nowrap;}
+.mission-badge.on{display:block;}
+.vib-badge{position:absolute;bottom:74px;right:70px;font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  color:rgba(255,255,255,.3);pointer-events:none;z-index:12;text-align:right;}
+.cam-status{position:absolute;bottom:0;left:0;right:0;height:28px;
+  background:rgba(0,0,0,0.7);border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:20px;padding:0 14px;
+  font-family:var(--mono);font-size:9px;z-index:15;pointer-events:none;}
+.cs-item{display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.3);}
+.cs-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);}
+.cs-dot.ok{background:var(--ok);box-shadow:0 0 4px var(--ok);}
+.cs-dot.warn{background:var(--warn);}
+.cs-dot.err{background:var(--err);animation:blink-w 1s step-end infinite;}
+.cs-right{margin-left:auto;display:flex;gap:20px;}
+.telem-badge-hud{position:absolute;bottom:36px;right:14px;font-family:var(--mono);font-size:8px;
+  letter-spacing:1.5px;color:rgba(255,255,255,.2);pointer-events:none;z-index:12;}
+.telem-badge-hud.live{color:var(--ok);}
+.ftimer{position:absolute;top:14px;left:14px;font-family:var(--mono);font-size:9px;
+  letter-spacing:1.5px;color:rgba(255,255,255,.25);pointer-events:none;z-index:12;
+  display:flex;flex-direction:column;gap:2px;}
+.ft-row{display:flex;align-items:center;gap:5px;}
+.ft-dot{width:4px;height:4px;border-radius:50%;}
+.home-badge{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:8px;
+  letter-spacing:1.5px;color:rgba(59,130,246,.5);display:flex;flex-direction:column;gap:2px;
+  pointer-events:none;z-index:12;text-align:right;}
+.map-panel{position:relative;overflow:hidden;background:#060a08;min-height:80px;transition:box-shadow .4s;}
+.map-panel.fix-3d{box-shadow:inset 0 0 0 2px rgba(59,130,246,0.6),inset 0 0 14px rgba(59,130,246,0.2);}
+.map-panel.fix-rtk{box-shadow:inset 0 0 0 2px rgba(34,197,94,0.7),inset 0 0 16px rgba(34,197,94,0.28);}
+#pilotMap{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
+.map-lbl{position:absolute;top:8px;left:8px;font-family:var(--mono);font-size:8px;
+  letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.55);
+  z-index:10;pointer-events:none;background:rgba(0,0,0,.5);padding:2px 6px;}
+.map-center-btn{position:absolute;bottom:12px;right:12px;z-index:10;
+  background:rgba(10,14,21,.88);border:1px solid rgba(255,255,255,.18);
+  color:rgba(255,255,255,.65);font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  padding:5px 10px;cursor:pointer;transition:all .15s;}
+.map-center-btn:hover{background:var(--bg3);color:var(--t1);}
+.map-wp-btn{position:absolute;bottom:12px;left:12px;z-index:10;
+  background:rgba(10,14,21,.88);border:1px solid rgba(59,130,246,.3);
+  color:rgba(59,130,246,.7);font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  padding:5px 10px;cursor:pointer;transition:all .15s;}
+.map-wp-btn:hover{background:rgba(59,130,246,.12);color:var(--info);}
+.map-wp-btn.active{background:rgba(59,130,246,.18);color:var(--info);border-color:var(--info);}
+.map-rth-info{position:absolute;top:8px;right:8px;z-index:10;
+  font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  background:rgba(0,0,0,.5);color:rgba(255,255,255,.35);padding:3px 8px;
+  pointer-events:none;display:none;}
+.map-rth-info.on{display:block;}
+.leaflet-control-attribution{background:rgba(0,0,0,0.55)!important;color:rgba(255,255,255,.18)!important;font-size:7px!important;}
+.leaflet-control-attribution a{color:rgba(255,255,255,.25)!important;}
+.leaflet-control-zoom{border:1px solid rgba(255,255,255,.1)!important;}
+.leaflet-control-zoom a{background:rgba(10,14,21,.9)!important;color:var(--t2)!important;border-color:rgba(255,255,255,.1)!important;}
+.leaflet-control-zoom a:hover{background:var(--bg3)!important;color:var(--t1)!important;}
+.v-resize{flex-shrink:0;height:6px;background:var(--bg2);
+  border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  cursor:ns-resize;display:flex;align-items:center;justify-content:center;z-index:20;transition:background .1s;}
+.v-resize:hover,.v-resize.dragging{background:var(--bg3);}
+.v-resize::after{content:'';display:block;width:28px;height:2px;background:rgba(255,255,255,.12);border-radius:1px;}
+.downcam-panel{flex-shrink:0;position:relative;overflow:hidden;background:#000;min-height:60px;border-top:1px solid var(--rule);}
+.downcam-canvas{width:100%;height:100%;display:block;}
+.downcam-label{position:absolute;top:6px;left:8px;font-family:var(--mono);font-size:7px;
+  letter-spacing:1.5px;color:rgba(255,255,255,.3);display:flex;align-items:center;gap:4px;pointer-events:none;z-index:5;}
+.downcam-dot{width:4px;height:4px;border-radius:50%;background:var(--ok);}
+.downcam-range{position:absolute;bottom:5px;right:8px;font-family:var(--mono);font-size:8px;
+  color:rgba(34,197,94,.55);pointer-events:none;z-index:5;}
+.downcam-telem{position:absolute;bottom:5px;left:8px;font-family:var(--mono);font-size:7px;
+  color:rgba(255,255,255,.22);pointer-events:none;z-index:5;}
+/* ── DOWN CAM DIGITAL ZOOM CONTROLS ── */
+.downcam-zoom{position:absolute;top:5px;right:6px;z-index:6;display:flex;align-items:center;gap:3px;}
+.dz-btn{height:20px;min-width:22px;padding:0 5px;background:rgba(10,14,21,.85);
+  border:1px solid var(--rule);color:var(--t2);font-family:var(--mono);font-size:12px;
+  line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .12s;user-select:none;}
+.dz-btn:hover{background:var(--bg3);color:var(--t1);border-color:rgba(255,255,255,.2);}
+.dz-btn.dz-lvl{font-size:8px;letter-spacing:.5px;min-width:34px;color:var(--t3);}
+.dz-btn.dz-lvl.zoomed{color:var(--info);border-color:rgba(59,130,246,.35);}
+.qs-btn{background:rgba(10,14,21,.88);border:1px solid var(--rule);color:var(--t3);
+  font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:0 16px;height:28px;
+  min-width:132px;cursor:pointer;transition:all .12s;flex-shrink:0;}
+.qs-btn:hover{color:var(--t1);border-color:rgba(255,255,255,.2);}
+#obstBadge{height:28px!important;min-width:118px;padding:0 14px!important;margin-right:0!important;gap:7px!important;justify-content:center;}
+#obstBadgeTxt{font-size:9px!important;letter-spacing:1.2px!important;}
+.qs-panel{position:fixed;top:68px;right:14px;z-index:500;
+  background:var(--bg1);border:1px solid var(--rule);padding:14px 16px;min-width:260px;
+  box-shadow:0 16px 48px rgba(0,0,0,.9);display:none;}
+.qs-panel.open{display:block;}
+.qs-title{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t3);
+  text-transform:uppercase;margin-bottom:12px;border-bottom:1px solid var(--rule2);padding-bottom:8px;}
+.qs-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;
+  font-family:var(--mono);font-size:9px;color:var(--t2);}
+.qs-row input[type=range]{width:80px;accent-color:var(--info);}
+.qs-val{color:var(--t1);min-width:50px;text-align:right;font-size:9px;}
+.det-badge{position:absolute;top:52px;right:14px;
+  font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  background:rgba(0,0,0,.65);border:1px solid rgba(239,68,68,.3);
+  color:rgba(239,68,68,.7);padding:2px 8px;pointer-events:none;z-index:12;
+  display:none;white-space:nowrap;}
+.det-badge.on{display:block;}
+</style>
+</head>
+<body class="pilot-fixed">
+
+<!-- PREARM OVERLAY -->
+<div class="prearm-overlay hidden" id="prearmOverlay">
+  <div class="prearm-panel">
+    <div class="prearm-title">Pre-Arm Check</div>
+    <div class="prearm-row"><span>GPS Fix</span><span class="prearm-status" id="pa-gps">CHECKING</span></div>
+    <div class="prearm-row"><span>Satellites</span><span class="prearm-status" id="pa-sats">CHECKING</span></div>
+    <div class="prearm-row"><span>EKF Health</span><span class="prearm-status" id="pa-ekf">CHECKING</span></div>
+    <div class="prearm-row"><span>Battery</span><span class="prearm-status" id="pa-batt">CHECKING</span></div>
+    <div class="prearm-row"><span>Telemetry Link</span><span class="prearm-status" id="pa-link">CHECKING</span></div>
+    <div class="prearm-row"><span>LiDAR</span><span class="prearm-status" id="pa-lidar">CHECKING</span></div>
+    <div class="prearm-row"><span>Camera Feed</span><span class="prearm-status" id="pa-cam">CHECKING</span></div>
+    <div class="prearm-row"><span>Down Camera</span><span class="prearm-status" id="pa-downcam">CHECKING</span></div>
+    <button class="prearm-close" onclick="closePrearm()">DISMISS</button>
+  </div>
+</div>
+
+<!-- QUICK SETTINGS PANEL -->
+<div class="qs-panel" id="qsPanel">
+  <div class="qs-title">Quick Settings</div>
+  <div class="units-tog settings-units">
+    <button class="ubtn active" id="uMetric" onclick="setUnits('metric')">Metric</button>
+    <div class="msep"></div>
+    <button class="ubtn" id="uImperial" onclick="setUnits('imperial')">Imperial</button>
+  </div>
+  <div class="qs-row">
+    <span>RTH Altitude</span>
+    <input type="range" min="10" max="120" value="30" oninput="E('qsRthVal').textContent=this.value+'m';qsRTH=+this.value">
+    <span class="qs-val" id="qsRthVal">30m</span>
+  </div>
+  <div class="qs-row">
+    <span>Geofence</span>
+    <input type="range" min="20" max="500" value="50" step="10" oninput="E('qsGeoVal').textContent=this.value+'m';updateGeofence(+this.value)">
+    <span class="qs-val" id="qsGeoVal">50m</span>
+  </div>
+  <div class="qs-row">
+    <span>Max Speed</span>
+    <input type="range" min="2" max="20" value="10" oninput="E('qsSpdVal').textContent=this.value+' m/s';qsMaxSpd=+this.value">
+    <span class="qs-val" id="qsSpdVal">10 m/s</span>
+  </div>
+  <div class="qs-row">
+    <span>Max Altitude</span>
+    <input type="range" min="10" max="120" value="50" oninput="E('qsAltVal').textContent=this.value+'m';qsMaxAlt=+this.value">
+    <span class="qs-val" id="qsAltVal">50m</span>
+  </div>
+  <div class="qs-row">
+    <span>Takeoff Altitude</span>
+    <input type="range" min="1" max="50" value="5" oninput="E('qsTakeoffVal').textContent=this.value+'m';qsTakeoffAlt=+this.value">
+    <span class="qs-val" id="qsTakeoffVal">5m</span>
+  </div>
+  <div style="border-top:1px solid var(--rule2);margin:8px 0 8px;padding-top:8px;">
+    <div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:10px;">OBSTACLE AVOIDANCE</div>
+    <div class="qs-row">
+      <span>Stop Distance</span>
+      <input type="range" min="0.5" max="5" value="2" step="0.5" oninput="E('qsObstVal').textContent=this.value+'m';qsObstStop=+this.value;sendCmd({action:'set_stop_dist',dist:qsObstStop})">
+      <span class="qs-val" id="qsObstVal">2m</span>
+    </div>
+    <div style="border-top:1px solid var(--rule2);margin:8px 0 8px;padding-top:8px;">
+    <div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:10px;">MANUAL CONTROL SENSITIVITY</div>
+    <div class="qs-row">
+      <span>Move Speed</span>
+      <input type="range" min="0.5" max="8" value="2" step="0.5" oninput="E('qsMovVal').textContent=this.value+' m/s';sensMov=+this.value">
+      <span class="qs-val" id="qsMovVal">2 m/s</span>
+    </div>
+    <div class="qs-row">
+      <span>Climb Rate</span>
+      <input type="range" min="0.2" max="3" value="1" step="0.2" oninput="E('qsClimbVal').textContent=this.value+' m/s';sensClimb=+this.value">
+      <span class="qs-val" id="qsClimbVal">1 m/s</span>
+    </div>
+    <div class="qs-row">
+      <span>Yaw Rate</span>
+      <input type="range" min="0.1" max="1.5" value="0.5" step="0.1" oninput="E('qsYawVal').textContent=this.value+' r/s';sensYaw=+this.value">
+      <span class="qs-val" id="qsYawVal">0.5 r/s</span>
+    </div>
+  </div>
+    <div class="qs-row" style="margin-bottom:0">
+      <span>Detection Active</span>
+      <div onclick="toggleObstDetection()" style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+        <span id="obstDetLbl" style="font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--ok)">ON</span>
+        <div id="obstDetTrack" style="width:28px;height:14px;border-radius:7px;background:var(--ok);
+          position:relative;transition:background .2s;flex-shrink:0;">
+          <div id="obstDetKnob" style="position:absolute;top:2px;left:16px;width:10px;height:10px;
+            border-radius:50%;background:#fff;transition:left .2s;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE TO CONFIRM POPOVER -->
+<div id="slideOverlay" style="display:none;position:fixed;z-index:8000;
+  background:var(--bg1);border:1px solid var(--rule);
+  box-shadow:0 8px 32px rgba(0,0,0,.9);padding:12px 14px;min-width:260px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <div id="slideTitle" style="font-family:var(--mono);font-size:9px;letter-spacing:2px;
+      color:var(--t1);text-transform:uppercase;"></div>
+    <span onclick="closeSlide()" style="font-family:var(--mono);font-size:10px;
+      color:var(--t3);cursor:pointer;padding-left:12px;">✕</span>
+  </div>
+  <div id="slideSubtitle" style="font-family:var(--mono);font-size:8px;color:var(--t3);
+    letter-spacing:1px;margin-bottom:10px;"></div>
+  <div style="position:relative;width:100%;height:36px;background:var(--bg2);
+    border:1px solid var(--rule);overflow:hidden;">
+    <div id="slideFill" style="position:absolute;left:0;top:0;bottom:0;width:0%;transition:none;"></div>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;
+      justify-content:center;font-family:var(--mono);font-size:9px;letter-spacing:2px;
+      color:var(--t3);user-select:none;pointer-events:none;">SLIDE TO CONFIRM →</div>
+    <div id="slideKnob" style="position:absolute;left:4px;top:3px;bottom:3px;width:36px;
+      cursor:grab;display:flex;align-items:center;justify-content:center;">
+      <span style="font-size:12px;pointer-events:none;">▶</span>
+    </div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="bar">
+  <div class="logo-wrap">
+    <button class="logo-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
+    <div class="logo-menu">
+      <a href="dashboard.html">Main Dashboard</a>
+      <a href="mission.html">Mission Planner</a>
+      <a href="preflight.html">Pre-Flight Checklist</a>
+      <a href="parameters.html">Parameters</a>
+      <a href="logs.html">Flight Logs</a>
+      <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
+      <a href="health.html">System Health</a>
+      <a href="sensor-status.html">Sensor Status</a>
+      <a href="actuators.html">Actuators</a>
+    </div>
+  </div>
+  <span class="page-id">Pilot</span>
+  <div class="mtog" style="margin-left:12px">
+    <button class="mbtn m-auto" id="btnAuto" onclick="setMode('auto')">Autopilot</button>
+    <div class="msep"></div>
+    <button class="mbtn" id="btnMan" onclick="setMode('manual')">Manual</button>
+  </div>
+  <div class="qact">
+    <button class="qa qa-ok" id="qa-takeoff" onclick="qAction('takeoff')">▲ Takeoff</button>
+    <button class="qa qa-warn" id="qa-rth" onclick="qAction('rth')">⌂ RTH</button>
+    <button class="qa qa-warn" id="qa-land" onclick="qAction('land')">▼ Land</button>
+    <button class="qa" onclick="showPrearm()">✓ PreArm</button>
+  </div>
+  <div class="bdiv"></div>
+  <div class="pilot-stats">
+    <div class="pilot-stat"><span class="blbl">Alt</span><span class="bval ok" id="bAlt">-- m</span></div>
+    <div class="pilot-stat"><span class="blbl">Spd</span><span class="bval" id="bSpd">-- m/s</span></div>
+    <div class="pilot-stat"><span class="blbl">Batt</span><span class="bval ok" id="bBatt">--%</span></div>
+    <div class="pilot-stat gps"><span class="blbl">GPS</span><span class="bval info" id="bGps">--</span></div>
+  </div>
+  <div class="brt">
+    <div class="rec-dot" id="recDot" style="display:none;margin-right:8px"></div>
+    <div class="pilot-actions">
+      <div id="obstBadge" style="display:flex;align-items:center;gap:5px;padding:0 10px;
+        border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.07);
+        height:22px;margin-right:8px;flex-shrink:0;cursor:pointer;" onclick="toggleObstDetection()">
+        <div id="obstBadgeDot" style="width:5px;height:5px;border-radius:50%;background:var(--ok);
+          box-shadow:0 0 5px var(--ok);animation:cam-pulse 2s ease-in-out infinite;"></div>
+        <span id="obstBadgeTxt" style="font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--ok)">OBST ON</span>
+      </div>
+      <button class="qs-btn" onclick="toggleMavLog()">📡 MAVLink</button>
+      <button class="qs-btn" onclick="toggleQS()">⚙ Settings</button>
+    </div>
+    <div class="bdiv"></div>
+    <span class="blbl">Mode</span><span class="bval info" id="bMode" style="margin-left:6px">--</span>
+    <div class="bdiv"></div>
+    <span class="bval" style="color:var(--t3)" id="bClock">--:--:--</span>
+  </div>
+</div>
+
+<!-- TELEM STRIP -->
+<div class="telem-strip">
+  <div class="ts-item"><span>VOLT</span><span class="ts-val" id="tsVolt">--V</span></div>
+  <div class="ts-item"><span>CURR</span><span class="ts-val" id="tsCurr">--A</span></div>
+  <div class="ts-item"><span>HDOP</span><span class="ts-val" id="tsHdop">--</span></div>
+  <div class="ts-item"><span>EKF</span><span class="ts-val ok" id="tsEkf">OK</span></div>
+  <div class="ts-item"><span>ROLL</span><span class="ts-val" id="tsRoll">--</span></div>
+  <div class="ts-item"><span>PITCH</span><span class="ts-val" id="tsPitch">--</span></div>
+  <div class="ts-item"><span>VIB</span><span class="ts-val" id="tsVib">--</span></div>
+  <div class="ts-item" style="gap:5px">
+    <span>M1</span><div class="ts-mbar"><div class="ts-mfill" id="tsM1" style="width:0%"></div></div>
+    <span>M2</span><div class="ts-mbar"><div class="ts-mfill" id="tsM2" style="width:0%"></div></div>
+    <span>M3</span><div class="ts-mbar"><div class="ts-mfill" id="tsM3" style="width:0%"></div></div>
+    <span>M4</span><div class="ts-mbar"><div class="ts-mfill" id="tsM4" style="width:0%"></div></div>
+  </div>
+  <div class="ts-item"><span>WIND</span><span class="ts-val" id="tsWind">-- --°</span></div>
+  <div class="ts-item"><span>OBST</span><span class="ts-val" id="tsObst">--</span></div>
+  <div class="ts-item"><span>TEMP</span><span class="ts-val" id="tsTemp">--°C</span></div>
+  <div class="ts-item" style="margin-left:auto;border-right:none">
+    <span>LiDAR</span><span class="ts-val ok" id="tsLidar">-- m</span>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="shell" id="shell">
+  <div class="cam-col" id="camCol">
+    <div class="cam-bg" id="camBg"></div>
+    <video id="liveFeed" class="live-feed" autoplay muted playsinline></video>
+    <div class="cam-source-badge">
+      <div class="cam-source-dot" id="camSourceDot"></div>
+      <span id="camSourceTxt">SIM · NO CAMERA</span>
+    </div>
+    <canvas class="hud-canvas" id="hudCanvas"></canvas>
+    <div class="hdg-wrap">
+      <div class="hdg-strip">
+        <div class="hdg-tick"></div>
+        <div class="hdg-val" id="hudHdg">---°</div>
+        <div class="hdg-dir" id="hudDir">--</div>
+        <div class="hdg-tick"></div>
+      </div>
+    </div>
+    <div style="display:none">
+      <span id="hudAlt"></span><span id="altUnit"></span><span id="altSrc" class="alt-src"></span>
+      <span id="hudVspd"></span><span id="hudSpd"></span><span id="spdUnit"></span>
+      <span id="hudGndSpd"></span><span id="gspdUnit"></span>
+    </div>
+    <div class="ftimer">
+      <div class="ft-row"><div class="ft-dot" id="armDot" style="background:var(--t3)"></div><span id="ftArm">DISARMED</span></div>
+      <div class="ft-row" style="margin-top:2px"><span style="color:var(--t3)">FLT</span>&nbsp;<span id="ftTime">00:00:00</span></div>
+      <div class="ft-row"><span style="color:var(--t3)">SAT</span>&nbsp;<span id="ftSat">--</span></div>
+      <div class="ft-row"><span style="color:var(--t3)">RSSI</span>&nbsp;<span id="ftRssi">--%</span></div>
+    </div>
+    <div class="home-badge">
+      <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
+        <span style="color:rgba(255,255,255,.18);font-size:8px">HOME</span><span id="homeDist">--</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
+        <span style="color:rgba(255,255,255,.18);font-size:8px">BRG</span><span id="homeBrg">--°</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;margin-top:2px">
+        <span style="color:rgba(255,255,255,.18);font-size:8px">ETA</span>
+        <span id="homeEta" style="font-family:var(--mono);font-size:8px;color:rgba(59,130,246,.4)">--s</span>
+      </div>
+    </div>
+    <div class="man-warn" id="manWarn">● MANUAL CTRL</div>
+    <div class="warn-overlay batt-warn" id="battWarn">⚠ LOW BATTERY</div>
+    <div class="warn-overlay obst-warn" id="obstWarn">⚠ OBSTACLE DETECTED</div>
+    <div class="warn-overlay link-warn" id="linkWarn">⚠ SIGNAL LOST</div>
+    <div class="warn-overlay" id="tempWarn" style="top:110px;border:1px solid rgba(245,158,11,.7);
+      color:var(--warn);background:rgba(245,158,11,.1);">🌡 CAMERA OVERHEATING</div>
+    <div class="signal-countdown" id="sigCountdown"></div>
+    <div class="mission-badge" id="missionBadge">AUTO · WP -- · -- m</div>
+    <div class="vib-badge" id="vibBadge">VIB --</div>
+    <div class="det-badge" id="detBadge">● 0 OBJECTS</div>
+    <div class="alt-profile"><canvas id="altProfile"></canvas></div>
+    <div class="wind-badge">
+      <canvas class="wind-canvas" id="windCanvas"></canvas>
+      <span id="windTxt">WIND -- m/s</span>
+    </div>
+    <div id="mavlogPanel" style="display:none;position:absolute;bottom:36px;left:14px;right:14px;
+      max-height:160px;background:rgba(0,0,0,0.82);border:1px solid rgba(255,255,255,.1);
+      overflow-y:auto;z-index:25;padding:8px;font-family:var(--mono);font-size:9px;
+      letter-spacing:.5px;line-height:1.6;">
+      <div style="color:var(--t3);margin-bottom:4px;letter-spacing:2px;font-size:8px;">
+        MAVLINK LOG
+        <span onclick="E('mavlogPanel').style.display='none'"
+          style="float:right;cursor:pointer;color:var(--t3)">✕</span>
+      </div>
+      <div id="mavlogContent" style="color:rgba(34,197,94,.7);"></div>
+    </div>
+    <div class="telem-badge-hud" id="telemBadge">● TELEM: CONNECTING</div>
+    <div style="display:none">
+      <span id="cs-gps"></span><span id="cs-fix"></span><span id="cs-telem"></span>
+      <span id="cs-telemtxt"></span><span id="cs-arm"></span><span id="cs-armtxt"></span>
+      <span id="cs-mode"></span><span id="cs-pos"></span><span id="cs-time"></span>
+    </div>
+  </div>
+
+  <div class="h-resize" id="hResize"></div>
+
+  <div class="right-col" id="rightCol">
+    <div class="map-panel" id="mapPanel">
+      <div id="pilotMap"></div>
+      <div class="map-lbl" id="mapLbl">MAP · WAITING GPS</div>
+      <div class="map-rth-info" id="rthInfo">RTH · -- m · --s</div>
+      <button class="map-center-btn" onclick="centerOnDrone()">⊕ CENTER</button>
+      <button class="map-wp-btn" id="wpBtn" onclick="toggleWaypoint()">✦ WAYPOINT</button>
+    </div>
+    <div class="v-resize" id="vResize"></div>
+    <div class="downcam-panel" id="downcamPanel">
+      <canvas class="downcam-canvas" id="downcamCanvas"></canvas>
+      <div class="downcam-label">
+        <div class="downcam-dot" id="downcamDot"></div>
+        <span id="downcamLabelTxt">DOWN CAM · IMX219</span>
+      </div>
+      <!-- DIGITAL ZOOM — zoom IN on the landing pad during descent.
+           1.0x = full (wide) frame; cannot widen past what's captured. -->
+      <div class="downcam-zoom">
+        <button class="dz-btn" onclick="downcamZoomStep(-1)" title="Zoom out">−</button>
+        <button class="dz-btn dz-lvl" id="downcamZoomLvl" onclick="downcamZoomReset()" title="Reset to full view">1.0×</button>
+        <button class="dz-btn" onclick="downcamZoomStep(1)" title="Zoom in">+</button>
+      </div>
+      <div class="downcam-range" id="downcamRange">-- m</div>
+      <div class="downcam-telem" id="downcamTelem">ALT -- · ROLL -- · PITCH --</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const E=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+
+(function(){
+  const REF_W=2048, REF_H=960;
+  function fitPilot(){
+    const scale=window.innerHeight/REF_H;
+    const virtualWidth=window.innerWidth/scale;
+    document.documentElement.style.setProperty('--pilot-scale', scale.toFixed(5));
+    document.documentElement.style.setProperty('--pilot-virtual-width', `${virtualWidth.toFixed(2)}px`);
+  }
+  window.addEventListener('resize',fitPilot);
+  fitPilot();
+})();
+
+const JETSON_IP='192.168.1.166';
+const VPS_IP='165.22.210.225';
+const CAM_PORT=8766, TELEM_PORT=8765, CMD_PORT=8767, DOWNCAM_PORT=8768;
+const appMode=(localStorage.getItem('airsentMode')||'demo').toLowerCase();
+const isViewerMode=appMode==='viewer';
+const canSendCommands=appMode==='operator'||appMode==='actual'||appMode==='real';
+
+let mode='auto', flightTicks=0, tick=0, keys={};
+let iAmManualPilot=false;
+let lastSyncedMode=null;
+let homeLat=null, homeLon=null, units='metric';
+let mapInitialized=false, autoFollow=true, waypointMode=false;
+let qsRTH=30, qsMaxSpd=10, qsMaxAlt=50, qsObstStop=2.0, qsTakeoffAlt=5;
+let sensMov=2.0, sensClimb=1.0, sensYaw=0.5;
+let cmdWs=null;
+let keysHeld={w:false,a:false,s:false,d:false,q:false,e:false,space:false,shift:false};
+let velSendInterval=null;
+let landBuzzInterval=null;   // repeats the 3-beep while the drone is landing
+let landBuzzStartedAt=0;
+let telemConnected=false, camConnected=false;
+let linkLostTimer=null, linkLostCountdown=0;
+let altHistory=[], vibHistory=[];
+let windEstDeg=0, windEstSpd=0;
+let prevYaw=0, prevSpd=0;
+
+let currentDets=[];
+let proximityObstacle=false;
+let proximityDist=-1;
+
+let downcamImg = new Image();
+let downcamVideo = document.createElement('video');
+downcamVideo.autoplay = true;
+downcamVideo.muted = true;
+downcamVideo.playsInline = true;
+let downcamPc = null;
+let downcamFrameReq = null;
+let downcamConnected = false;
+let downcamTags = [];
+let downcamZoom = 1.0;  // digital zoom factor for the down cam (1.0 = full frame)
+
+const toAlt=v=>units==='imperial'?(v*3.28084).toFixed(1):v.toFixed(1);
+const toSpd=v=>units==='imperial'?(v*2.23694).toFixed(1):v.toFixed(1);
+const toDst=v=>units==='imperial'?(v*3.28084).toFixed(0)+' ft':v.toFixed(0)+' m';
+const altU=()=>units==='imperial'?'ft':'m';
+const spdU=()=>units==='imperial'?'mph':'m/s';
+const pwmPct=p=>clamp(Math.round((p-1000)/10),0,100);
+
+let S={roll:0,pitch:0,yaw:0,alt:0,spd:0,vspd:0,lat:0,lon:0,sats:0,
+  fix_type:'NO FIX',hdop:0,voltage:0,current:0,battery:0,rssi:0,
+  armed:false,flight_mode:'--',ekf_healthy:true,
+  m1:1000,m2:1000,m3:1000,m4:1000,rangefinder:0};
+
+/* ── HORIZONTAL RESIZE ── */
+(function(){
+  const handle=E('hResize'), camCol=E('camCol'), rightCol=E('rightCol'), shell=E('shell');
+  let drag=false, sx=0, sw=0;
+  function init(){
+    const total=shell.offsetWidth-handle.offsetWidth;
+    camCol.style.width=Math.round(total*0.72)+'px';
+    rightCol.style.width=Math.round(total*0.28)+'px';
+  }
+  init();
+  handle.addEventListener('mousedown',e=>{drag=true;sx=e.clientX;sw=camCol.offsetWidth;
+    handle.classList.add('dragging');document.body.style.cssText='cursor:ew-resize;user-select:none';});
+  document.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const total=shell.offsetWidth-handle.offsetWidth;
+    const nw=clamp(sw+(e.clientX-sx),200,total-180);
+    camCol.style.width=nw+'px'; rightCol.style.width=(total-nw)+'px';
+    if(pilotMap)pilotMap.invalidateSize(); drawHUD(); drawDowncam();
+  });
+  document.addEventListener('mouseup',()=>{
+    if(!drag)return; drag=false; handle.classList.remove('dragging');
+    document.body.style.cssText='';
+  });
+  window.addEventListener('resize',()=>{init();if(pilotMap)pilotMap.invalidateSize();});
+})();
+
+/* ── VERTICAL RESIZE ── */
+(function(){
+  const handle=E('vResize'), mapPanel=E('mapPanel'), downcam=E('downcamPanel'), rightCol=E('rightCol');
+  let drag=false, sy=0, sh=0;
+  function init(){
+    const total=rightCol.clientHeight-handle.offsetHeight;
+    mapPanel.style.cssText=`height:${Math.round(total*0.6)}px;flex:none`;
+    downcam.style.cssText=`height:${Math.round(total*0.4)}px;flex:none`;
+  }
+  init();
+  handle.addEventListener('mousedown',e=>{drag=true;sy=e.clientY;sh=mapPanel.offsetHeight;
+    handle.classList.add('dragging');document.body.style.cssText='cursor:ns-resize;user-select:none';});
+  document.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const total=rightCol.clientHeight-handle.offsetHeight;
+    const nh=clamp(sh+(e.clientY-sy),80,total-60);
+    mapPanel.style.height=nh+'px'; downcam.style.height=(total-nh)+'px';
+    if(pilotMap)pilotMap.invalidateSize(); drawDowncam();
+  });
+  document.addEventListener('mouseup',()=>{
+    if(!drag)return; drag=false; handle.classList.remove('dragging');
+    document.body.style.cssText='';
+  });
+})();
+
+/* ── LEAFLET MAP ── */
+let pilotMap=null, droneMarker=null, homeMarker=null, trailLine=null;
+let headingLine=null, geofenceCircle=null, waypointMarker=null;
+const trailCoords=[];
+
+function makeDroneIcon(h){
+  return L.divIcon({className:'',
+    html:`<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
+      style="transform:rotate(${h}deg);transform-origin:center;">
+      <polygon points="12,2 20,20 12,15 4,20" fill="#3b82f6" stroke="rgba(59,130,246,0.4)" stroke-width="1"/>
+    </svg>`,iconSize:[24,24],iconAnchor:[12,12]});
+}
+function makeWpIcon(){
+  return L.divIcon({className:'',
+    html:`<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="10,2 18,18 10,13 2,18" fill="#f59e0b" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+    </svg>`,iconSize:[20,20],iconAnchor:[10,10]});
+}
+function initMap(lat,lon){
+  if(mapInitialized)return; mapInitialized=true;
+  pilotMap=L.map('pilotMap',{zoomControl:true}).setView([lat,lon],18);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    maxZoom:20,subdomains:'abcd',
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(pilotMap);
+  droneMarker=L.marker([lat,lon],{icon:makeDroneIcon(0),zIndexOffset:1000}).addTo(pilotMap);
+  homeMarker=L.circleMarker([lat,lon],{radius:7,color:'#22c55e',weight:2,fillColor:'#22c55e',fillOpacity:0.85})
+    .addTo(pilotMap).bindTooltip('HOME',{permanent:false,direction:'top'});
+  trailLine=L.polyline([],{color:'#f59e0b',weight:2,opacity:0.55}).addTo(pilotMap);
+  headingLine=L.polyline([[lat,lon],[lat,lon]],{color:'rgba(59,130,246,0.5)',weight:1.5,dashArray:'4 4'}).addTo(pilotMap);
+  geofenceCircle=L.circle([lat,lon],{radius:50,color:'rgba(245,158,11,0.4)',weight:1,
+    fillColor:'rgba(245,158,11,0.04)',fillOpacity:1,dashArray:'6 6'}).addTo(pilotMap);
+  pilotMap.on('dragstart',()=>{autoFollow=false;});
+  pilotMap.on('click',e=>{if(waypointMode)placeWaypoint(e.latlng.lat,e.latlng.lng);});
+}
+function updateMap(lat,lon,heading){
+  if(!mapInitialized){initMap(lat,lon);homeLat=lat;homeLon=lon;
+    if(homeMarker)homeMarker.setLatLng([lat,lon]);
+    if(geofenceCircle)geofenceCircle.setLatLng([lat,lon]);return;}
+  if(droneMarker){droneMarker.setLatLng([lat,lon]);droneMarker.setIcon(makeDroneIcon(heading));}
+  if(autoFollow)pilotMap.setView([lat,lon],pilotMap.getZoom(),{animate:true,duration:0.5});
+  const hdgRad=heading*Math.PI/180,dist=0.0003;
+  if(headingLine)headingLine.setLatLngs([[lat,lon],[lat+Math.cos(hdgRad)*dist,lon+Math.sin(hdgRad)*dist]]);
+  trailCoords.push([lat,lon]);
+  if(trailCoords.length>120)trailCoords.shift();
+  if(trailLine)trailLine.setLatLngs(trailCoords);
+}
+function updateGeofence(r){if(geofenceCircle)geofenceCircle.setRadius(r);}
+function centerOnDrone(){autoFollow=true;if(pilotMap&&S.lat!==0)pilotMap.setView([S.lat,S.lon],18);}
+function toggleWaypoint(){
+  waypointMode=!waypointMode;
+  E('wpBtn').className='map-wp-btn'+(waypointMode?' active':'');
+  E('wpBtn').textContent=waypointMode?'✕ CANCEL WP':'✦ WAYPOINT';
+  if(pilotMap)pilotMap.getContainer().style.cursor=waypointMode?'crosshair':'';
+}
+function placeWaypoint(lat,lon){
+  if(waypointMarker)pilotMap.removeLayer(waypointMarker);
+  waypointMarker=L.marker([lat,lon],{icon:makeWpIcon()}).addTo(pilotMap)
+    .bindTooltip('WP',{permanent:true,direction:'top'});
+  toggleWaypoint();
+}
+function updateMapBorder(ft){
+  const p=E('mapPanel');p.classList.remove('fix-3d','fix-rtk');
+  if(ft==='RTK FIX'||ft==='RTK FLOAT')p.classList.add('fix-rtk');
+  else if(ft==='3D FIX'||ft==='DGPS')p.classList.add('fix-3d');
+}
+
+/* ── PREARM ── */
+function showPrearm(){
+  E('prearmOverlay').classList.remove('hidden');
+  function st(id,ok,warn,txt){
+    const el=E(id);el.textContent=txt;
+    el.className='prearm-status '+(ok?'ok':warn?'warn':'fail');
+  }
+  st('pa-gps',S.fix_type==='RTK FIX'||S.fix_type==='3D FIX',S.fix_type==='RTK FLOAT',S.fix_type);
+  st('pa-sats',S.sats>=8,S.sats>=6,S.sats+' SATS');
+  st('pa-ekf',S.ekf_healthy,false,S.ekf_healthy?'HEALTHY':'DEGRADED');
+  st('pa-batt',S.battery>50,S.battery>25,S.battery>0?S.battery+'%':'NO DATA');
+  st('pa-link',telemConnected,false,telemConnected?'LINKED':'OFFLINE');
+  st('pa-lidar',S.rangefinder>0,false,S.rangefinder>0?S.rangefinder.toFixed(2)+'m':'NO DATA');
+  st('pa-cam',camConnected,false,camConnected?'LIVE':'OFFLINE');
+  st('pa-downcam',downcamConnected,false,downcamConnected?'LIVE':'OFFLINE');
+}
+function closePrearm(){E('prearmOverlay').classList.add('hidden');}
+
+/* ── QUICK SETTINGS ── */
+function toggleQS(){E('qsPanel').classList.toggle('open');}
+document.addEventListener('click',e=>{
+  if(!E('qsPanel').contains(e.target)&&!e.target.closest('.qs-btn'))
+    E('qsPanel').classList.remove('open');
+});
+
+/* ── CLOCK ── */
+setInterval(()=>{
+  const d=new Date();
+  const t=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  E('bClock').textContent=t; E('cs-time').textContent=t;
+},1000);
+
+/* ── UNITS ── */
+function setUnits(u){
+  units=u;
+  E('uMetric').className='ubtn'+(u==='metric'?' active':'');
+  E('uImperial').className='ubtn'+(u==='imperial'?' active':'');
+  E('altUnit').textContent='ALT '+altU();
+  E('spdUnit').textContent='SPD '+spdU();
+  E('gspdUnit').textContent='GND '+spdU();
+}
+
+/* ── SIGNAL LOST ── */
+function startLinkLost(){
+  if(linkLostTimer)return;
+  linkLostCountdown=15;
+  E('linkWarn').classList.add('on');
+  E('sigCountdown').classList.add('on');
+  linkLostTimer=setInterval(()=>{
+    linkLostCountdown--;
+    E('sigCountdown').textContent='FAILSAFE IN '+linkLostCountdown+'s';
+    if(linkLostCountdown<=0){clearInterval(linkLostTimer);linkLostTimer=null;}
+  },1000);
+}
+function clearLinkLost(){
+  if(linkLostTimer){clearInterval(linkLostTimer);linkLostTimer=null;}
+  E('linkWarn').classList.remove('on');
+  E('sigCountdown').classList.remove('on');
+  E('sigCountdown').textContent='';
+}
+
+/* ── MAIN CAMERA — WebRTC via MediaMTX on VPS ── */
+let camPc = null;
+
+function connectCam() {
+  if (camPc) { try { camPc.close(); } catch(_){} camPc = null; }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+  camPc = pc;
+
+  pc.addTransceiver('video', { direction: 'recvonly' });
+
+  pc.ontrack = (ev) => {
+    if (ev.track.kind !== 'video') return;
+    const video = E('liveFeed');
+    video.srcObject = ev.streams[0];
+    video.play().catch(() => {});
+    camConnected = true;
+    E('camBg').style.display    = 'none';
+    E('liveFeed').style.display = 'block';
+    E('camSourceDot').classList.add('live');
+    E('camSourceTxt').textContent = 'LIVE · OAK-D LITE · WebRTC';
+    E('recDot').style.display   = 'block';
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    const s = pc.iceConnectionState;
+    if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+      camConnected = false;
+      E('camBg').style.display    = 'block';
+      E('liveFeed').style.display = 'none';
+      E('camSourceDot').classList.remove('live');
+      E('camSourceTxt').textContent = 'SIM · NO CAMERA';
+      E('recDot').style.display   = 'none';
+      pc.close(); camPc = null;
+      setTimeout(connectCam, 3000);
+    }
+  };
+
+  pc.createOffer()
+    .then(offer => {
+      pc.setLocalDescription(offer);
+      return fetch(`https://console.airsent.tech/video/frontcam/whep`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: offer.sdp
+      });
+    })
+    .then(r => { if (!r.ok) throw new Error(`WHEP ${r.status}`); return r.text(); })
+    .then(sdp => pc.setRemoteDescription({ type: 'answer', sdp }))
+    .catch(e => {
+      console.warn('[WebRTC]', e);
+      try { pc.close(); } catch(_){}
+      camPc = null;
+      setTimeout(connectCam, 3000);
+    });
+}
+
+/* ── DOWNWARD CAMERA — WebRTC via MediaMTX on VPS ── */
+function connectDowncam(){
+  if(downcamPc){try{downcamPc.close();}catch(_){} downcamPc=null;}
+  if(downcamFrameReq){cancelAnimationFrame(downcamFrameReq); downcamFrameReq=null;}
+
+  const pc=new RTCPeerConnection({
+    iceServers:[{urls:'stun:stun.l.google.com:19302'}]
+  });
+  downcamPc=pc;
+
+  const downcamTransceiver=pc.addTransceiver('video',{direction:'recvonly'});
+  const videoCaps=RTCRtpReceiver.getCapabilities
+    ? RTCRtpReceiver.getCapabilities('video')
+    : null;
+  const h264Codecs=videoCaps
+    ? videoCaps.codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264')
+    : [];
+  if(h264Codecs.length && downcamTransceiver.setCodecPreferences){
+    downcamTransceiver.setCodecPreferences(h264Codecs);
+  }
+
+  pc.ontrack=ev=>{
+    if(ev.track.kind!=='video')return;
+    downcamVideo.srcObject=ev.streams[0];
+    downcamVideo.play().catch(()=>{});
+    downcamConnected=true;
+    E('downcamDot').style.background='var(--ok)';
+    E('downcamLabelTxt').textContent='DOWN CAM · IMX219 · WebRTC';
+    drawDowncam();
+    const loop=()=>{
+      if(!downcamConnected)return;
+      drawDowncam();
+      downcamFrameReq=requestAnimationFrame(loop);
+    };
+    if(!downcamFrameReq)downcamFrameReq=requestAnimationFrame(loop);
+  };
+
+  pc.oniceconnectionstatechange=()=>{
+    const s=pc.iceConnectionState;
+    if(s==='disconnected'||s==='failed'||s==='closed'){
+      downcamConnected=false;
+      E('downcamDot').style.background='var(--err)';
+      E('downcamLabelTxt').textContent='DOWN CAM · NO SIGNAL';
+      if(downcamFrameReq){cancelAnimationFrame(downcamFrameReq); downcamFrameReq=null;}
+      drawDowncam();
+      try{pc.close();}catch(_){}
+      if(downcamPc===pc)downcamPc=null;
+      setTimeout(connectDowncam,3000);
+    }
+  };
+
+  const waitForIceGathering=()=>{
+    if(pc.iceGatheringState==='complete')return Promise.resolve();
+    return new Promise(resolve=>{
+      const done=()=>{
+        if(pc.iceGatheringState==='complete'){
+          pc.removeEventListener('icegatheringstatechange',done);
+          resolve();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange',done);
+      setTimeout(resolve,2000);
+    });
+  };
+
+  pc.createOffer()
+    .then(offer=>{
+      return pc.setLocalDescription(offer);
+    })
+    .then(()=>waitForIceGathering())
+    .then(()=>{
+      return fetch(`https://console.airsent.tech/video/downcam/whep`,{
+        method:'POST',
+        headers:{'Content-Type':'application/sdp'},
+        body:pc.localDescription.sdp
+      });
+    })
+    .then(async r=>{if(!r.ok)throw new Error(`WHEP ${r.status}: ${await r.text()}`);return r.text();})
+    .then(sdp=>pc.setRemoteDescription({type:'answer',sdp}))
+    .catch(e=>{
+      console.warn('[Downcam WebRTC]',e);
+      downcamConnected=false;
+      E('downcamDot').style.background='var(--err)';
+      E('downcamLabelTxt').textContent='DOWN CAM · NO SIGNAL';
+      if(downcamFrameReq){cancelAnimationFrame(downcamFrameReq); downcamFrameReq=null;}
+      drawDowncam();
+      try{pc.close();}catch(_){}
+      if(downcamPc===pc)downcamPc=null;
+      setTimeout(connectDowncam,3000);
+    });
+}
+
+downcamImg.onload = ()=>{ if(downcamConnected) drawDowncam(); };
+
+/* ── DOWN CAM DIGITAL ZOOM ──
+   Pure client-side crop-zoom on the canvas. 1.0x = the full captured frame
+   (the whole 160-degree view, once the server is on the full-FOV sensor mode).
+   Zooming IN crops into the centre — useful to read the AprilTag pad during
+   descent. It CANNOT widen past 1.0x: there are no pixels outside the frame. */
+function downcamZoomStep(dir){
+  downcamZoom = clamp(+(downcamZoom + dir*0.5).toFixed(2), 1.0, 4.0);
+  updateDowncamZoomLabel();
+  drawDowncam();
+}
+function downcamZoomReset(){
+  downcamZoom = 1.0;
+  updateDowncamZoomLabel();
+  drawDowncam();
+}
+function updateDowncamZoomLabel(){
+  const el=E('downcamZoomLvl');
+  if(!el)return;
+  el.textContent = downcamZoom.toFixed(1)+'×';
+  el.classList.toggle('zoomed', downcamZoom>1.0);
+}
+
+/* ── TELEMETRY — via VPS relay ── */
+function connectTelem(){
+  try{
+    const ws=new WebSocket(`wss://console.airsent.tech/telem`);
+    ws.onopen=()=>{telemConnected=true;clearLinkLost();
+      E('telemBadge').textContent='● TELEM: PIXHAWK'; E('telemBadge').classList.add('live');
+      E('cs-telem').className='cs-dot ok'; E('cs-telemtxt').textContent='PIXHAWK LINKED';
+    };
+    ws.onmessage=ev=>{
+      try{
+        const d=JSON.parse(ev.data);
+        S.roll=d.roll??S.roll; S.pitch=d.pitch??S.pitch; S.yaw=d.yaw??S.yaw;
+        S.vspd=d.vspd??S.vspd; S.spd=d.spd??S.spd;
+        S.lat=d.lat??S.lat; S.lon=d.lon??S.lon;
+        S.sats=d.sats??S.sats; S.fix_type=d.fix_type??S.fix_type; S.hdop=d.hdop??S.hdop;
+        S.voltage=d.voltage??S.voltage; S.current=d.current??S.current; S.battery=d.battery??S.battery;
+        S.rssi=d.rssi??S.rssi; S.armed=d.armed??S.armed; S.flight_mode=d.flight_mode??S.flight_mode;
+        S.ekf_healthy=d.pixhawk_connected===false?false:(d.ekf_healthy??S.ekf_healthy);
+        S.m1=d.m1??S.m1; S.m2=d.m2??S.m2; S.m3=d.m3??S.m3; S.m4=d.m4??S.m4;
+        S.rangefinder=d.rangefinder??S.rangefinder;
+        if(d.pixhawk_connected===false){
+          S.roll=0;S.pitch=0;S.voltage=0;S.current=0;S.battery=0;
+          S.rssi=0;S.sats=0;S.fix_type='NO FIX';S.armed=false;
+        }
+        if(d.apriltag) downcamTags = d.apriltag.detected ? d.apriltag.tags : [];
+        if(d.detections !== undefined) currentDets = obstDetectionOn ? d.detections : [];
+        if(d.proximity !== undefined){
+          proximityObstacle = obstDetectionOn ? !!d.proximity.obstacle : false;
+          proximityDist = (d.proximity.dist !== undefined) ? d.proximity.dist : -1;
+        }
+        if(d.detection_active !== undefined) applyDetectionState(!!d.detection_active);
+        const lidarValid=S.rangefinder>0.05&&S.rangefinder<12;
+        S.alt=lidarValid?S.rangefinder:(d.alt??S.alt);
+        E('altSrc').textContent=lidarValid?'LiDAR':'BARO';
+        E('altSrc').className='alt-src '+(lidarValid?'lidar':'baro');
+        if(S.spd>1){windEstDeg=Math.round((S.yaw+180)%360);windEstSpd=Math.max(0,Math.abs(S.spd-prevSpd)*10).toFixed(1);}
+        prevYaw=S.yaw; prevSpd=S.spd;
+        const mSpread=Math.max(S.m1,S.m2,S.m3,S.m4)-Math.min(S.m1,S.m2,S.m3,S.m4);
+        vibHistory.push(Math.round(mSpread/5));
+        if(vibHistory.length>30)vibHistory.shift();
+        altHistory.push(S.alt);
+        if(altHistory.length>120)altHistory.shift();
+        if(!homeLat&&S.lat!==0&&S.fix_type!=='NO FIX'){homeLat=S.lat;homeLon=S.lon;
+          if(homeMarker)homeMarker.setLatLng([homeLat,homeLon]);
+          if(geofenceCircle)geofenceCircle.setLatLng([homeLat,homeLon]);}
+        if(S.lat!==0&&S.fix_type!=='NO FIX')updateMap(S.lat,S.lon,S.yaw);
+        if(d.mavlink_log) updateMavLog(d.mavlink_log);
+        if(d.cam_temp !== undefined){
+          const t = d.cam_temp, hot = d.cam_hot;
+          E('tsTemp').textContent = t > 0 ? t+'°C' : '--°C';
+          E('tsTemp').className = 'ts-val '+(hot?'err':t>65?'warn':'ok');
+          E('tempWarn').className = 'warn-overlay'+(hot?' on':'');
+        }
+        updateMapBorder(S.fix_type);
+        if(S.armed){
+          E('armDot').style.background='var(--err)'; E('ftArm').textContent='ARMED';
+          E('cs-arm').className='cs-dot err'; E('cs-armtxt').textContent='ARMED'; flightTicks++;
+        } else {
+          E('armDot').style.background='var(--t3)'; E('ftArm').textContent='DISARMED';
+          E('cs-arm').className='cs-dot'; E('cs-armtxt').textContent='DISARMED';
+        }
+        updateUI();
+      }catch(_){}
+    };
+    ws.onclose=()=>{telemConnected=false;startLinkLost();
+      E('telemBadge').textContent='● TELEM: CONNECTING'; E('telemBadge').classList.remove('live');
+      E('cs-telem').className='cs-dot'; E('cs-telemtxt').textContent='TELEM --';
+      setTimeout(connectTelem,2000);
+    };
+    ws.onerror=()=>ws.close();
+  }catch(e){setTimeout(connectTelem,2000);}
+}
+
+connectCam(); connectTelem(); connectCmd(); connectDowncam();
+
+/* ── OBSTACLE DETECTION TOGGLE ── */
+let obstDetectionOn = true;
+
+function setObstUI(on){
+  const badge = E('obstBadge');
+  const dot = E('obstBadgeDot');
+  const txt = E('obstBadgeTxt');
+  const track = E('obstDetTrack');
+  const knob = E('obstDetKnob');
+  const lbl = E('obstDetLbl');
+  if(on){
+    badge.style.borderColor='rgba(34,197,94,.35)';
+    badge.style.background='rgba(34,197,94,.07)';
+    dot.style.background='var(--ok)';
+    dot.style.boxShadow='0 0 5px var(--ok)';
+    txt.style.color='var(--ok)'; txt.textContent='OBST ON';
+    if(track){track.style.background='var(--ok)';}
+    if(knob){knob.style.left='16px';}
+    if(lbl){lbl.style.color='var(--ok)'; lbl.textContent='ON';}
+  } else {
+    badge.style.borderColor='rgba(255,255,255,.08)';
+    badge.style.background='transparent';
+    dot.style.background='var(--t3)';
+    dot.style.boxShadow='none';
+    txt.style.color='var(--t3)'; txt.textContent='OBST OFF';
+    if(track){track.style.background='var(--t3)';}
+    if(knob){knob.style.left='2px';}
+    if(lbl){lbl.style.color='var(--t3)'; lbl.textContent='OFF';}
+  }
+}
+
+function toggleObstDetection(){
+  if(isViewerMode) return;
+  obstDetectionOn = !obstDetectionOn;
+  sendCmd({action:'set_detection', on: obstDetectionOn});
+  setObstUI(obstDetectionOn);
+  currentDets=[];
+  proximityObstacle=false;
+}
+
+function applyDetectionState(on){
+  if(on === obstDetectionOn) return;
+  obstDetectionOn = on;
+  setObstUI(on);
+  if(!on){ currentDets=[]; proximityObstacle=false; }
+}
+
+/* ── COMMAND WEBSOCKET ── */
+function connectCmd(){
+  if(!canSendCommands) return;
+  try{
+    cmdWs=new WebSocket(`wss://console.airsent.tech/cmd`);
+    cmdWs.onopen=()=>console.log('[CMD] Connected');
+    cmdWs.onmessage=ev=>{
+      try{
+        const d=JSON.parse(ev.data);
+        if(d.log) updateMavLog(d.log);
+        if(d.msg) appendMavLog(d.msg, d.blocked);
+      }catch(_){}
+    };
+    cmdWs.onclose=()=>{cmdWs=null; setTimeout(connectCmd,2000);};
+    cmdWs.onerror=()=>{if(cmdWs)cmdWs.close();};
+  }catch(e){setTimeout(connectCmd,2000);}
+}
+
+function sendCmd(obj){
+  if(!canSendCommands) return false;
+  if(!cmdWs||cmdWs.readyState!==1){console.warn('[CMD] Not connected');return;}
+  cmdWs.send(JSON.stringify(obj));
+  return true;
+}
+
+function updateMavLog(lines){
+  const el=E('mavlogContent');
+  if(!el)return;
+  el.innerHTML=lines.map(l=>`<div>${escHtml(l)}</div>`).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function appendMavLog(msg, blocked){
+  const el=E('mavlogContent');
+  if(!el)return;
+  const ts=new Date().toTimeString().slice(0,8);
+  const color=blocked?'rgba(239,68,68,.8)':'rgba(34,197,94,.7)';
+  el.innerHTML+=`<div style="color:${color}">[${ts}] ${escHtml(msg)}</div>`;
+  el.scrollTop=el.scrollHeight;
+}
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function toggleMavLog(){
+  const p=E('mavlogPanel');
+  p.style.display=p.style.display==='none'?'block':'none';
+  if(p.style.display==='block') sendCmd({action:'get_log'});
+}
+
+/* ── MODE + ACTIONS ── */
+function setMode(m){
+  if(isViewerMode) return;
+  mode=m;
+  E('btnAuto').className='mbtn'+(m==='auto'?' m-auto':'');
+  E('btnMan').className='mbtn'+(m==='manual'?' m-man':'');
+  E('manWarn').className='man-warn'+(m==='manual'?' on':'');
+  E('bMode').className='bval '+(m==='auto'?'ok':'err');
+  E('cs-mode').textContent=m==='auto'?'AUTOPILOT':'MANUAL CTRL';
+
+  if(m==='manual'){
+    iAmManualPilot=true;
+    sendCmd({action:'set_guided'});
+    E('bMode').textContent='MANUAL';
+    startVelSender();
+  } else {
+    iAmManualPilot=false;
+    sendCmd({action:'set_loiter'});
+    E('bMode').textContent='AUTOPILOT';
+    stopVelSender();
+  }
+}
+
+function syncModeFromTelem(){
+  const fm = S.flight_mode || '';
+  const droneManual = (fm === 'GUIDED');
+  if(fm === lastSyncedMode) return;
+  const isFirstSync = (lastSyncedMode === null);  // page just loaded
+  const wasManual = (lastSyncedMode === 'GUIDED');
+  lastSyncedMode = fm;
+
+  const displayManual = droneManual;
+  mode = displayManual ? 'manual' : 'auto';
+  E('btnAuto').className='mbtn'+(displayManual?'':' m-auto');
+  E('btnMan').className='mbtn'+(displayManual?' m-man':'');
+  E('manWarn').className='man-warn'+(displayManual?' on':'');
+  E('cs-mode').textContent=displayManual?'MANUAL CTRL':'AUTOPILOT';
+
+  // Airbus-style cue: three quick beeps the moment the drone ENTERS manual
+  // (GUIDED). Fires once per real transition — guarded so it does NOT sound on
+  // the initial page-load sync (when the drone may already be in manual) or
+  // while staying in manual. Buzzer is whitelisted server-side (reboot-safe).
+  // Delayed ~800ms so ArduPilot's OWN built-in mode-change tone (which plays
+  // on the same single buzzer the instant GUIDED is entered) finishes first —
+  // otherwise the two tunes collide and you only hear one beep.
+  if(droneManual && !wasManual && !isFirstSync){
+    setTimeout(()=>sendCmd({action:'buzzer', tune:'manual'}), 800);
+  }
+
+  // Landing cue: repeat the 3-beep continuously while in LAND (and armed).
+  // Starts on the transition into LAND; stopped here on any change out of it,
+  // and self-stops at touchdown via the interval's own armed check.
+  if(fm === 'LAND' && S.armed){ startLandBuzzer(); }
+  else { stopLandBuzzer(); }
+
+  if(displayManual){
+    if(iAmManualPilot) startVelSender();
+  } else {
+    iAmManualPilot=false;
+    stopVelSender();
+  }
+}
+
+/* ── SLIDE TO CONFIRM ── */
+let slidePendingAction = null;
+
+// Update the topbar to the non-manual (autopilot) state WITHOUT sending a mode
+// command. We used to call setMode('auto') here, but setMode('auto') ALSO sends
+// a set_loiter command — which arrived just after the set_rtl/set_land issued
+// above and silently OVERRODE it, dropping the vehicle into LOITER instead of
+// returning/landing. This only touches the visuals; the real mode comes back
+// via telemetry (syncModeFromTelem).
+function uiAutopilotState(){
+  mode='auto';
+  iAmManualPilot=false;
+  E('btnAuto').className='mbtn m-auto';
+  E('btnMan').className='mbtn';
+  E('manWarn').className='man-warn';
+  E('cs-mode').textContent='AUTOPILOT';
+}
+
+function showSlide(action, title, subtitle, color, anchorId){
+  if(isViewerMode) return;
+  slidePendingAction = action;
+  E('slideTitle').textContent = title;
+  E('slideSubtitle').textContent = subtitle;
+  E('slideKnob').style.background = color || 'var(--ok)';
+  E('slideFill').style.background = (color||'rgba(34,197,94,.15)').replace('var(--ok)','rgba(34,197,94,.15)').replace('var(--warn)','rgba(245,158,11,.15)');
+  const overlay = E('slideOverlay');
+  overlay.style.display = 'block';
+  if(anchorId){
+    const btn = E(anchorId);
+    if(btn){
+      const r = btn.getBoundingClientRect();
+      let left = r.left;
+      let top = r.bottom + 6;
+      const ow = 260;
+      if(left + ow > window.innerWidth) left = window.innerWidth - ow - 8;
+      overlay.style.left = left + 'px';
+      overlay.style.top = top + 'px';
+    }
+  }
+  initSlider();
+}
+
+function closeSlide(){
+  E('slideOverlay').style.display = 'none';
+  slidePendingAction = null;
+  E('slideKnob').style.left = '4px';
+  E('slideFill').style.width = '0%';
+}
+
+function initSlider(){
+  const knob  = E('slideKnob');
+  const fill  = E('slideFill');
+  const track = knob.parentElement;          // the actual box the knob lives in
+  const PAD   = 4;
+  // Clamp to the REAL rendered track width (computed live) so the knob can
+  // never travel past the box edge. Was hardcoded 320px, which was wider than
+  // the box — letting the knob (and the mouse) run off the end.
+  const maxX = ()=> track.clientWidth - knob.offsetWidth - PAD;
+  const getX = e => (e.touches ? e.touches[0].clientX : e.clientX);
+  let dragging=false, startX=0, startLeft=PAD;
+
+  function endSelGuard(){
+    document.body.style.userSelect='';
+    document.body.style.webkitUserSelect='';
+  }
+
+  knob.onmousedown = knob.ontouchstart = (e)=>{
+    e.preventDefault();                       // stop the browser starting a text selection
+    dragging=true;
+    startX=getX(e);
+    startLeft=parseInt(knob.style.left)||PAD;
+    knob.style.cursor='grabbing';
+    // kill page-wide highlighting for the duration of the drag
+    document.body.style.userSelect='none';
+    document.body.style.webkitUserSelect='none';
+  };
+  document.onmousemove = document.ontouchmove = (e)=>{
+    if(!dragging)return;
+    e.preventDefault();                       // stop the selection extending across the page
+    const mx=maxX();
+    const newLeft=Math.max(PAD, Math.min(mx, startLeft + getX(e) - startX));
+    knob.style.left=newLeft+'px';
+    fill.style.width=((newLeft-PAD)/mx*100)+'%';
+    if(newLeft >= mx - 3){
+      dragging=false;
+      knob.style.cursor='grab';
+      endSelGuard();
+      executeSlideAction();
+    }
+  };
+  document.onmouseup = document.ontouchend = ()=>{
+    if(dragging){
+      dragging=false;
+      knob.style.cursor='grab';
+      endSelGuard();
+      knob.style.left=PAD+'px';
+      fill.style.width='0%';
+    }
+  };
+}
+
+function executeSlideAction(){
+  if(isViewerMode) return;
+  const a = slidePendingAction;
+  closeSlide();
+  if(a==='takeoff'){
+    sendCmd({action:'set_guided'});
+    setTimeout(()=>{
+      sendCmd({action:'arm'});
+      setTimeout(()=>{
+        sendCmd({action:'takeoff', alt: qsTakeoffAlt});
+        setMode('auto'); E('bMode').textContent='TAKEOFF'; E('bMode').className='bval ok';
+      }, 2000);
+    }, 1000);
+  } else if(a==='rth'){
+    stopVelSender();
+    sendCmd({action:'set_rtl'});
+    uiAutopilotState(); E('bMode').textContent='RTH'; E('bMode').className='bval warn';
+  } else if(a==='land'){
+    stopVelSender();
+    sendCmd({action:'set_land'});
+    startLandBuzzer();
+    uiAutopilotState(); E('bMode').textContent='LANDING'; E('bMode').className='bval warn';
+  }
+}
+
+function qAction(a){
+  if(isViewerMode) return;
+  const btn=E('qa-'+a);
+  if(btn){btn.classList.add('active'); setTimeout(()=>btn.classList.remove('active'),300);}
+  if(a==='takeoff'){
+    showSlide('takeoff',`▲ TAKEOFF — ${qsTakeoffAlt}m`,`Arm → climb to ${qsTakeoffAlt}m → hover`,'var(--ok)','qa-takeoff');
+  } else if(a==='rth'){
+    showSlide('rth','⌂ RETURN TO HOME','Fly back to launch point and land','var(--warn)','qa-rth');
+  } else if(a==='land'){
+    showSlide('land','▼ LAND NOW','Descend and land at current position','var(--warn)','qa-land');
+  }
+}
+
+/* ── VELOCITY SENDER ── */
+function getVelFromKeys(){
+  let vx=0, vy=0, vz=0, yr=0;
+  if(keysHeld.w) vx=+sensMov;
+  if(keysHeld.s) vx=-sensMov;
+  if(keysHeld.d) vy=+sensMov;
+  if(keysHeld.a) vy=-sensMov;
+  if(keysHeld.space) vz=-sensClimb;
+  if(keysHeld.shift) vz=+sensClimb;
+  if(keysHeld.q) yr=-sensYaw;
+  if(keysHeld.e) yr=+sensYaw;
+  return {vx,vy,vz,yaw_rate:yr};
+}
+
+function startVelSender(){
+  if(velSendInterval)return;
+  velSendInterval=setInterval(()=>{
+    if(mode!=='manual')return;
+    const vel=getVelFromKeys();
+    sendCmd({action:'velocity',...vel});
+  }, 100);
+}
+
+function stopVelSender(){
+  if(velSendInterval){clearInterval(velSendInterval);velSendInterval=null;}
+  sendCmd({action:'velocity',vx:0,vy:0,vz:0,yaw_rate:0});
+}
+
+/* ── LANDING BUZZER ──
+   While the drone is in LAND mode, repeat the 3-beep cue: beep-beep-beep,
+   ~1s break, repeat. The tune itself is ~0.56s, so a 1550ms interval leaves
+   roughly a 1-second gap. Auto-stops when the drone leaves LAND or disarms
+   (touchdown) — landing is the descent, so it falls silent once on the ground.
+   To keep beeping after touchdown, drop the `!S.armed` check below. */
+function startLandBuzzer(){
+  if(landBuzzInterval) return;                       // already running
+  landBuzzStartedAt=Date.now();
+  sendCmd({action:'buzzer', tune:'manual'});         // first 3-beep burst immediately
+  landBuzzInterval=setInterval(()=>{
+    const waitingForLandTelemetry=Date.now()-landBuzzStartedAt<5000;
+    // self-terminate if we've left LAND or touched down (disarmed)
+    if((S.flight_mode!=='LAND'&&!waitingForLandTelemetry) || !S.armed){ stopLandBuzzer(); return; }
+    sendCmd({action:'buzzer', tune:'manual'});
+  }, 1550);
+}
+function stopLandBuzzer(){
+  if(landBuzzInterval){ clearInterval(landBuzzInterval); landBuzzInterval=null; }
+  landBuzzStartedAt=0;
+}
+
+/* ── KEYBOARD ── */
+document.addEventListener('keydown',ev=>{
+  const k=ev.key==='Shift'?'shift':ev.key===' '?'space':ev.key.toLowerCase();
+  if(ev.key===' ')ev.preventDefault();
+  if(isViewerMode) return;
+  if(k==='escape'){qAction('rth');return;}
+  if(mode==='manual') keysHeld[k]=true;
+});
+
+document.addEventListener('keyup',ev=>{
+  const k=ev.key==='Shift'?'shift':ev.key===' '?'space':ev.key.toLowerCase();
+  keysHeld[k]=false;
+  const anyHeld=Object.values(keysHeld).some(v=>v);
+  if(!anyHeld&&mode==='manual'){
+    sendCmd({action:'velocity',vx:0,vy:0,vz:0,yaw_rate:0});
+  }
+});
+
+/* ── UI UPDATE ── */
+function hdgDir(h){return['N','NE','E','SE','S','SW','W','NW'][Math.round(h/45)%8];}
+function fmt1(v){return(v>=0?'+':'')+v.toFixed(1);}
+
+function updateUI(){
+  tick++;
+  syncModeFromTelem();
+  const altD=toAlt(S.alt), spdD=toSpd(S.spd);
+  const batt=Math.round(S.battery), rssi=Math.round(S.rssi), hdg=Math.round(S.yaw);
+  E('bAlt').textContent=altD+' '+altU(); E('bAlt').className='bval '+(S.alt>0.1?'ok':'');
+  E('bSpd').textContent=spdD+' '+spdU();
+  E('bBatt').textContent=batt>0?batt+'%':'--';
+  E('bBatt').className='bval '+(batt>20?batt>50?'ok':'warn':'err');
+  E('bGps').textContent=S.fix_type;
+  E('bGps').className='bval '+(S.fix_type==='RTK FIX'?'ok':S.fix_type==='NO FIX'?'err':'warn');
+  E('bMode').textContent=S.flight_mode||mode.toUpperCase();
+  E('battWarn').className='warn-overlay batt-warn'+(batt>0&&batt<20?' on':'');
+  const hasRedDet=obstDetectionOn&&currentDets.some(d=>d.dist>0&&d.dist<=qsObstStop);
+  const obstNow=obstDetectionOn&&((S.rangefinder>0&&S.rangefinder<=qsObstStop)||hasRedDet||proximityObstacle);
+  if(obstNow){
+    let dTxt='';
+    if(proximityDist>0) dTxt=' · '+proximityDist.toFixed(1)+'m';
+    else if(S.rangefinder>0&&S.rangefinder<=qsObstStop) dTxt=' · '+S.rangefinder.toFixed(1)+'m';
+    E('obstWarn').textContent='\u26A0 OBSTACLE'+dTxt;
+  }
+  E('obstWarn').className='warn-overlay obst-warn'+(obstNow?' on':'');
+  E('hudAlt').textContent=altD; E('hudSpd').textContent=spdD;
+  E('hudVspd').textContent=(S.vspd>=0?'+':'')+toAlt(S.vspd);
+  E('hudGndSpd').textContent=toSpd(S.spd);
+  E('hudHdg').textContent=hdg+'°'; E('hudDir').textContent=hdgDir(hdg);
+  const ft=flightTicks/20;
+  E('ftTime').textContent=`${pad(Math.floor(ft/3600))}:${pad(Math.floor((ft%3600)/60))}:${pad(Math.floor(ft%60))}`;
+  E('ftSat').textContent=S.sats; E('ftRssi').textContent=rssi>0?rssi+'%':'--';
+  if(homeLat&&S.lat){
+    const dLat=S.lat-homeLat, dLon=S.lon-homeLon;
+    const distM=Math.sqrt(dLat*dLat+dLon*dLon)*111000;
+    E('homeDist').textContent=toDst(distM);
+    E('homeBrg').textContent=Math.round((Math.atan2(dLon,dLat)*180/Math.PI+360)%360)+'°';
+    const eta=S.spd>0.5?Math.round(distM/S.spd)+'s':'--s';
+    E('homeEta').textContent=eta;
+    if(mode==='auto'&&S.flight_mode==='RTL'){
+      E('rthInfo').textContent=`RTH · ${toDst(distM)} · ${eta}`;
+      E('rthInfo').className='map-rth-info on';
+    } else { E('rthInfo').className='map-rth-info'; }
+  }
+  E('cs-fix').textContent=`${S.fix_type} · ${S.sats} SAT`;
+  E('cs-gps').className='cs-dot '+(S.fix_type==='RTK FIX'||S.fix_type==='3D FIX'?'ok':S.fix_type==='NO FIX'?'err':'warn');
+  E('cs-pos').textContent=S.lat?`${S.lat.toFixed(4)}°N ${Math.abs(S.lon).toFixed(4)}°W`:'-- °N -- °W';
+  E('mapLbl').textContent=S.lat&&S.fix_type!=='NO FIX'?`MAP · ${S.fix_type}`:'MAP · WAITING GPS';
+  E('missionBadge').className='mission-badge'+(S.flight_mode==='AUTO'?' on':'');
+  E('tsVolt').textContent=S.voltage>0?S.voltage+'V':'--V';
+  E('tsVolt').className='ts-val '+(S.voltage>14?'ok':S.voltage>12?'warn':'err');
+  E('tsCurr').textContent=S.current>0?S.current+'A':'--A';
+  E('tsHdop').textContent=S.hdop>0?S.hdop.toFixed(2):'--';
+  E('tsHdop').className='ts-val '+(S.hdop>0&&S.hdop<1.5?'ok':S.hdop<3?'warn':'err');
+  E('tsEkf').textContent=S.ekf_healthy?'OK':'DEGRADED';
+  E('tsEkf').className='ts-val '+(S.ekf_healthy?'ok':'err');
+  E('tsRoll').textContent=fmt1(S.roll)+'°';
+  E('tsPitch').textContent=fmt1(S.pitch)+'°';
+  E('tsLidar').textContent=S.rangefinder>0?S.rangefinder.toFixed(2)+' m':'-- m';
+  E('tsLidar').className='ts-val '+(S.rangefinder>0&&S.rangefinder<12?'ok':'');
+  const vibAvg=vibHistory.length?Math.round(vibHistory.reduce((a,b)=>a+b,0)/vibHistory.length):0;
+  const vibTxt=vibAvg<5?'LOW':vibAvg<15?'MED':'HIGH';
+  E('tsVib').textContent=vibTxt; E('tsVib').className='ts-val '+(vibAvg<5?'ok':vibAvg<15?'warn':'err');
+  E('vibBadge').textContent='VIB '+vibTxt;
+  E('tsWind').textContent=`${windEstSpd} m/s ${windEstDeg}°`;
+  E('windTxt').textContent=`WIND ${windEstSpd} m/s`;
+  const nd=currentDets.length;
+  E('tsObst').textContent=nd>0?nd+' obj':'--';
+  E('tsObst').className='ts-val '+(nd>0?'warn':'');
+  E('detBadge').textContent=`● ${nd} OBJECT${nd!==1?'S':''}`;
+  E('detBadge').className='det-badge'+(nd>0?' on':'');
+  const p1=pwmPct(S.m1),p2=pwmPct(S.m2),p3=pwmPct(S.m3),p4=pwmPct(S.m4);
+  ['tsM1','tsM2','tsM3','tsM4'].forEach((id,i)=>{
+    const p=[p1,p2,p3,p4][i];
+    E(id).style.width=p+'%'; E(id).className='ts-mfill'+(p>80?' hot':'');
+  });
+  E('downcamRange').textContent=S.rangefinder>0?S.rangefinder.toFixed(2)+' m':'-- m';
+  E('downcamTelem').textContent=`ALT ${altD}${altU()} · ROLL ${fmt1(S.roll)}° · PITCH ${fmt1(S.pitch)}°`;
+  drawHUD(); drawDowncam(); drawAltProfile(); drawWind();
+}
+
+/* ── HUD CANVAS + BOUNDING BOXES ── */
+function getBoxColor(det){
+  const dist = det.dist && det.dist > 0 ? det.dist : null;
+  if(dist !== null){
+    if(dist <= qsObstStop)          return {stroke:'rgba(239,68,68,0.9)',  fill:'rgba(239,68,68,0.08)',  label:'var(--err)'};
+    if(dist <= qsObstStop * 2)      return {stroke:'rgba(245,158,11,0.85)',fill:'rgba(245,158,11,0.06)',label:'var(--warn)'};
+    return                                 {stroke:'rgba(34,197,94,0.8)',  fill:'rgba(34,197,94,0.05)', label:'var(--ok)'};
+  }
+  return {stroke:'rgba(255,255,255,0.3)',fill:'rgba(255,255,255,0.03)',label:'rgba(255,255,255,0.4)'};
+}
+
+function drawHUD(){
+  const cv=E('hudCanvas'), col=E('camCol');
+  const dpr=window.devicePixelRatio||1;
+  const W=col.offsetWidth, H=col.offsetHeight, cx=W/2, cy=H/2;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    cv.style.width=W+'px'; cv.style.height=H+'px';
+  }
+  const ctx=cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  const roll=S.roll*Math.PI/180, pitch=S.pitch;
+
+  ctx.save(); ctx.translate(cx,cy+pitch*3.5); ctx.rotate(roll);
+  ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(-W*2,0); ctx.lineTo(W*2,0); ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-cx+36,0); ctx.lineTo(-55,0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(55,0); ctx.lineTo(cx-36,0); ctx.stroke();
+  [5,10,15,20,25].forEach(deg=>{[-deg,deg].forEach(d=>{
+    const y=-d*3.5,len=d%10===0?50:32,alpha=d%10===0?.45:.25;
+    ctx.strokeStyle=`rgba(255,255,255,${alpha})`; ctx.lineWidth=d%10===0?1:.7; ctx.setLineDash(d<0?[4,4]:[]);
+    ctx.beginPath(); ctx.moveTo(-len,y); ctx.lineTo(-12,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(12,y); ctx.lineTo(len,y); ctx.stroke();
+    if(d%10===0){
+      ctx.setLineDash([]); ctx.font='400 9px IBM Plex Mono';
+      ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=2;
+      ctx.fillStyle=`rgba(255,255,255,${(alpha*0.9).toFixed(2)})`;
+      ctx.textAlign='right'; ctx.fillText(Math.abs(d),-len-5,y+3);
+      ctx.textAlign='left';  ctx.fillText(Math.abs(d),len+5,y+3);
+      ctx.shadowBlur=0;
+    }
+  });});ctx.setLineDash([]); ctx.restore();
+
+  if(qsMaxAlt>0&&S.alt>0){
+    const altPx=(qsMaxAlt-S.alt)*3.5;
+    if(Math.abs(altPx)<cy){
+      ctx.save(); ctx.translate(cx,cy-altPx);
+      ctx.strokeStyle='rgba(239,68,68,0.4)'; ctx.lineWidth=1; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(-cx+52,0); ctx.lineTo(cx-52,0); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle='rgba(239,68,68,0.5)'; ctx.font='8px IBM Plex Mono';
+      ctx.textAlign='left'; ctx.fillText('MAX '+qsMaxAlt+'m',-cx+55,3); ctx.restore();
+    }
+  }
+
+  ctx.save(); ctx.translate(cx,cy);
+  const br=Math.min(cx,cy)*.76;
+  ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
+  [-60,-45,-30,-20,-10,0,10,20,30,45,60].forEach(a=>{
+    const rad=(a-90)*Math.PI/180,len=a%30===0?10:a%10===0?6:4;
+    ctx.beginPath(); ctx.moveTo(Math.cos(rad)*(br-len),Math.sin(rad)*(br-len));
+    ctx.lineTo(Math.cos(rad)*br,Math.sin(rad)*br); ctx.stroke();
+  });
+  ctx.save(); ctx.rotate(roll);
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(0,-(br+2)); ctx.lineTo(-5,-(br-8)); ctx.lineTo(5,-(br-8)); ctx.closePath(); ctx.stroke();
+  ctx.restore(); ctx.restore();
+
+  ctx.save();
+  const vvx=cx+S.roll*0.3,vvy=cy-S.pitch*1.8;
+  ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.arc(vvx,vvy,6,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(vvx-14,vvy); ctx.lineTo(vvx-7,vvy);
+  ctx.moveTo(vvx+7,vvy); ctx.lineTo(vvx+14,vvy);
+  ctx.moveTo(vvx,vvy-13); ctx.lineTo(vvx,vvy-7);
+  ctx.stroke(); ctx.restore();
+
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.strokeStyle='rgba(255,255,255,0.75)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-52,0); ctx.lineTo(-18,0); ctx.lineTo(-12,5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(52,0); ctx.lineTo(18,0); ctx.lineTo(12,5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(0,9); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+
+  if(obstDetectionOn && currentDets.length > 0){
+    const closest = currentDets.filter(d => d.dist > 0).sort((a,b) => a.dist - b.dist)[0];
+    if(closest){
+      const dist = closest.dist;
+      const stopDist = qsObstStop;
+      let alpha = 0, color = '239,68,68';
+      if(dist <= stopDist){ alpha = 0.55 * (1 - dist/stopDist); color = '239,68,68'; }
+      else if(dist <= stopDist * 2){ alpha = 0.25 * (1 - (dist - stopDist)/stopDist); color = '245,158,11'; }
+      if(alpha > 0){
+        const vg = ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.2,cx,cy,Math.max(W,H)*0.75);
+        vg.addColorStop(0, `rgba(${color},0)`);
+        vg.addColorStop(1, `rgba(${color},${alpha.toFixed(2)})`);
+        ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+        const distTxt = `⚠ ${closest.dist.toFixed(1)}m`;
+        ctx.font = 'bold 14px IBM Plex Mono';
+        const tw = ctx.measureText(distTxt).width;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(cx-tw/2-8, H-70, tw+16, 22);
+        ctx.strokeStyle=`rgba(${color},0.9)`; ctx.lineWidth=1.5;
+        ctx.strokeRect(cx-tw/2-8, H-70, tw+16, 22);
+        ctx.strokeStyle='rgba(0,0,0,0.9)'; ctx.lineWidth=3;
+        ctx.strokeText(distTxt, cx-tw/2, H-53);
+        ctx.fillStyle=`rgba(${color},1)`; ctx.textAlign='left';
+        ctx.fillText(distTxt, cx-tw/2, H-53);
+      }
+    }
+  }
+
+  const _lidarValid=S.rangefinder>0.05&&S.rangefinder<12;
+  drawTape(ctx,W-44,cy,50,H*.62,parseFloat(toAlt(S.alt)),units==='imperial'?5:1,'right',
+    {unit:'ALT '+altU(), sub:(_lidarValid?'LIDAR':'BARO'),
+     subColor:_lidarValid?'rgba(34,197,94,.75)':'rgba(255,255,255,.32)'});
+  drawTape(ctx,44,cy,50,H*.62,parseFloat(toSpd(S.spd)),units==='imperial'?5:.5,'left',
+    {unit:'SPD '+spdU(), sub:'V '+((S.vspd>=0?'+':'')+toAlt(S.vspd)),
+     subColor:'rgba(255,255,255,.32)'});
+  drawVSI(ctx,W-13,cy,10,H*.3,S.vspd);
+  drawCompass(ctx,cx,H-46,Math.min(W*.38,200),S.yaw);
+
+  ctx.font='9px IBM Plex Mono'; ctx.textAlign='left';
+  const gVal=(1+Math.sqrt(S.roll*S.roll+S.pitch*S.pitch)*0.012).toFixed(1)+'G';
+  ctx.strokeStyle='rgba(0,0,0,0.85)'; ctx.lineWidth=3;
+  ctx.strokeText(gVal,16,H-54); ctx.strokeText(S.ekf_healthy?'EKF OK':'EKF DEGRADED',16,H-42);
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.fillText(gVal,16,H-54); ctx.fillText(S.ekf_healthy?'EKF OK':'EKF DEGRADED',16,H-42);
+}
+
+function drawTape(ctx,x,cy,w,h,val,step,side,opts){
+  opts=opts||{};
+  const hh=h/2,lx=side==='right'?x-w:x;
+  ctx.save();
+  const grad=ctx.createLinearGradient(lx,0,lx+w,0);
+  if(side==='right'){ grad.addColorStop(0,'rgba(8,12,18,0)'); grad.addColorStop(1,'rgba(8,12,18,0.28)'); }
+  else             { grad.addColorStop(0,'rgba(8,12,18,0.28)'); grad.addColorStop(1,'rgba(8,12,18,0)'); }
+  ctx.fillStyle=grad; ctx.fillRect(lx,cy-hh,w,h);
+  ctx.beginPath(); ctx.rect(lx,cy-hh,w,h); ctx.clip();
+  const ppu=h/20,sv=Math.floor(val)-10;
+  ctx.textBaseline='middle';
+  for(let v=sv;v<=sv+20;v+=step){
+    const py=cy+(val-v)*ppu; if(py<cy-hh||py>cy+hh)continue;
+    const maj=Number.isInteger(v/5),tw=maj?11:6;
+    ctx.strokeStyle=maj?'rgba(255,255,255,.32)':'rgba(255,255,255,.13)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    if(side==='right'){ctx.moveTo(x-tw,py); ctx.lineTo(x,py);}
+    else{ctx.moveTo(x,py); ctx.lineTo(x+tw,py);}
+    ctx.stroke();
+    if(maj&&v>=0){
+      const tx=side==='right'?x-16:x+16;
+      ctx.font='400 8px IBM Plex Mono'; ctx.textAlign=side==='right'?'right':'left';
+      ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=2;
+      ctx.fillStyle='rgba(255,255,255,.45)'; ctx.fillText(v.toFixed(0),tx,py);
+      ctx.shadowBlur=0;
+    }
+  }
+  ctx.restore();
+  const bw=44,bh=18,bx=lx+(w-bw)/2;
+  ctx.save();
+  ctx.fillStyle='rgba(8,12,18,0.46)'; ctx.fillRect(bx,cy-bh/2,bw,bh);
+  ctx.strokeStyle='rgba(255,255,255,.30)'; ctx.lineWidth=1;
+  ctx.strokeRect(bx+0.5,cy-bh/2+0.5,bw-1,bh-1);
+  ctx.fillStyle='rgba(255,255,255,.95)'; ctx.font='300 13px IBM Plex Mono';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=2;
+  ctx.fillText(val.toFixed(1),bx+bw/2,cy);
+  ctx.shadowBlur=0;
+  ctx.textBaseline='alphabetic';
+  ctx.font='400 7px IBM Plex Mono'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,.42)';
+  if(opts.unit) ctx.fillText(opts.unit, bx+bw/2, cy-bh/2-4);
+  if(opts.sub){
+    ctx.fillStyle=opts.subColor||'rgba(255,255,255,.34)';
+    ctx.fillText(opts.sub, bx+bw/2, cy+bh/2+10);
+  }
+  ctx.restore();
+}
+
+function drawVSI(ctx,x,cy,w,h,vspd){
+  const v=clamp(vspd,-5,5),hh=h/2,barH=(v/5)*hh;
+  ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(x-w/2,cy-hh,w,h);
+  ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=.8; ctx.strokeRect(x-w/2,cy-hh,w,h);
+  ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.beginPath(); ctx.moveTo(x-w/2,cy); ctx.lineTo(x+w/2,cy); ctx.stroke();
+  ctx.fillStyle=vspd>0?'rgba(34,197,94,.6)':'rgba(59,130,246,.6)';
+  ctx.fillRect(x-w/2+1,vspd>0?cy-barH:cy,w-2,Math.abs(barH));
+}
+
+function drawCompass(ctx,cx,y,w,hdg){
+  const hw=w/2; ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.52)'; ctx.fillRect(cx-hw,y-10,w,22);
+  ctx.strokeStyle='rgba(255,255,255,.09)'; ctx.lineWidth=.8; ctx.strokeRect(cx-hw,y-10,w,22);
+  ctx.beginPath(); ctx.rect(cx-hw,y-10,w,22); ctx.clip();
+  const degPx=w/60;
+  for(let d=Math.floor(hdg-30);d<=hdg+30;d++){
+    const dx=cx+(d-hdg)*degPx,maj=d%10===0,med=d%5===0; if(!maj&&!med)continue;
+    const th=maj?10:6;
+    ctx.strokeStyle=maj?'rgba(255,255,255,.42)':'rgba(255,255,255,.18)'; ctx.lineWidth=maj?.9:.6;
+    ctx.beginPath(); ctx.moveTo(dx,y-10); ctx.lineTo(dx,y-10+th); ctx.stroke();
+    if(maj){
+      const dirs={0:'N',90:'E',180:'S',270:'W',360:'N'};
+      const nm=((d%360)+360)%360,lbl=dirs[nm]||(nm+'°');
+      ctx.font=dirs[nm]?'bold 9px IBM Plex Mono':'8px IBM Plex Mono';
+      ctx.strokeStyle='rgba(0,0,0,0.8)'; ctx.lineWidth=2.5;
+      ctx.textAlign='center'; ctx.strokeText(lbl,dx,y+6);
+      ctx.fillStyle=dirs[nm]?'rgba(255,255,255,.65)':'rgba(255,255,255,.28)';
+      ctx.fillText(lbl,dx,y+6);
+    }
+  }
+  ctx.strokeStyle='rgba(255,255,255,.72)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(cx,y-10); ctx.lineTo(cx,y+12); ctx.stroke();
+  ctx.restore();
+}
+
+/* ── ALT PROFILE ── */
+function drawAltProfile(){
+  const cv=E('altProfile');if(!cv)return;
+  const container=cv.parentElement;
+  cv.width=container.offsetWidth; cv.height=container.offsetHeight;
+  const ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+  if(altHistory.length<2)return;
+  const maxA=Math.max(...altHistory,1),minA=Math.min(...altHistory,0),range=maxA-minA||1;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(0,0,W,H);
+  ctx.beginPath();
+  altHistory.forEach((a,i)=>{
+    const x=(i/(altHistory.length-1))*W;
+    const y=H-(((a-minA)/range)*(H-4)+2);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle='rgba(59,130,246,0.6)'; ctx.lineWidth=1.2; ctx.stroke();
+  if(qsMaxAlt>0){
+    const y=H-(((qsMaxAlt-minA)/range)*(H-4)+2);
+    if(y>0&&y<H){
+      ctx.strokeStyle='rgba(239,68,68,0.35)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  ctx.fillStyle='rgba(255,255,255,0.18)'; ctx.font='7px IBM Plex Mono'; ctx.textAlign='left';
+  ctx.fillText('ALT HIST',2,H-2);
+}
+
+/* ── WIND ── */
+function drawWind(){
+  const cv=E('windCanvas'); if(!cv)return;
+  cv.width=28; cv.height=28;
+  const ctx=cv.getContext('2d'),cx=14,cy=14,r=10;
+  ctx.clearRect(0,0,28,28);
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  const rad=windEstDeg*Math.PI/180;
+  ctx.strokeStyle='rgba(59,130,246,0.6)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.sin(rad)*r,cy-Math.cos(rad)*r); ctx.stroke();
+  ctx.fillStyle='rgba(59,130,246,.8)';
+  ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2); ctx.fill();
+}
+
+/* ── DOWNCAM — real IMX219 frame or original placeholder ── */
+function drawDowncam(){
+  const cv=E('downcamCanvas'),panel=E('downcamPanel');
+  cv.width=panel.offsetWidth; cv.height=panel.offsetHeight;
+  const ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+
+  const source = downcamVideo.readyState >= 2 && downcamVideo.videoWidth > 0
+    ? downcamVideo
+    : downcamImg;
+  const sourceReady = source === downcamVideo
+    ? source.videoWidth > 0
+    : source.complete && source.naturalWidth > 0;
+
+  if(downcamConnected && sourceReady){
+    // ── Real camera frame ──
+    const iw=source===downcamVideo?source.videoWidth:source.naturalWidth;
+    const ih=source===downcamVideo?source.videoHeight:source.naturalHeight;
+    // CONTAIN base fit (Math.min) so 1.0x shows the WHOLE wide frame — letterbox
+    // bars rather than cropping away the 160-degree FOV. downcamZoom then crops
+    // IN from there (1.0x = full frame, up to 4x for the landing pad).
+    const baseScale=Math.min(W/iw, H/ih);
+    const scale=baseScale*downcamZoom;
+    const dw=iw*scale, dh=ih*scale;
+    const dx=(W-dw)/2, dy=(H-dh)/2;
+    ctx.drawImage(source,dx,dy,dw,dh);
+    // subtle crosshair
+    ctx.strokeStyle='rgba(34,197,94,0.45)'; ctx.lineWidth=1; ctx.setLineDash([4,6]);
+    ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(34,197,94,0.9)';
+    ctx.beginPath(); ctx.arc(W/2,H/2,2.5,0,Math.PI*2); ctx.fill();
+    // rangefinder danger ring
+    if(S.rangefinder>0&&S.rangefinder<=qsObstStop){
+      const alpha=1-(S.rangefinder/qsObstStop);
+      ctx.strokeStyle=`rgba(239,68,68,${(alpha*0.8).toFixed(2)})`;
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(W/2,H/2,Math.min(W,H)*0.45,0,Math.PI*2); ctx.stroke();
+    }
+
+    // ── AprilTag boxes ──
+    // Tag corners arrive normalised 0..1 of the SOURCE frame. The image is
+    // drawn at `scale` (same both axes), centered at (dx,dy), so we map each
+    // normalised point through that exact transform — zoom included.
+    if(downcamTags && downcamTags.length){
+      const nx = px => (px*iw)*scale + dx;   // norm-x → canvas-x
+      const ny = py => (py*ih)*scale + dy;   // norm-y → canvas-y
+      downcamTags.forEach(tag=>{
+        const c = tag.corners;
+        if(c && c.length===4){
+          ctx.strokeStyle='rgba(34,197,94,0.95)';
+          ctx.lineWidth=2; ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(nx(c[0][0]), ny(c[0][1]));
+          for(let i=1;i<4;i++) ctx.lineTo(nx(c[i][0]), ny(c[i][1]));
+          ctx.closePath(); ctx.stroke();
+        }
+        const tcx=nx(tag.cx), tcy=ny(tag.cy);
+        ctx.fillStyle='rgba(34,197,94,1)';
+        ctx.beginPath(); ctx.arc(tcx,tcy,3,0,Math.PI*2); ctx.fill();
+        ctx.font='bold 11px IBM Plex Mono';
+        const lbl='ID '+tag.id;
+        ctx.strokeStyle='rgba(0,0,0,0.85)'; ctx.lineWidth=3;
+        ctx.strokeText(lbl, tcx+7, tcy-7);
+        ctx.fillStyle='rgba(34,197,94,1)';
+        ctx.fillText(lbl, tcx+7, tcy-7);
+      });
+    }
+
+    // ── Zoom indicator (only when zoomed) ──
+    if(downcamZoom>1.0){
+      ctx.font='bold 8px IBM Plex Mono'; ctx.textAlign='left'; ctx.textBaseline='top';
+      const zt=downcamZoom.toFixed(1)+'× ZOOM';
+      ctx.fillStyle='rgba(0,0,0,0.55)';
+      ctx.fillRect(6,H-18,ctx.measureText(zt).width+10,14);
+      ctx.fillStyle='rgba(59,130,246,0.95)';
+      ctx.fillText(zt,11,H-15);
+    }
+  } else {
+    // ── Original placeholder (unchanged) ──
+    const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.7);
+    g.addColorStop(0,'#0c160a'); g.addColorStop(1,'#060d05');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=.5;
+    for(let i=0;i<W;i+=20){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();}
+    for(let j=0;j<H;j+=20){ctx.beginPath();ctx.moveTo(0,j);ctx.lineTo(W,j);ctx.stroke();}
+    const offX=S.roll*0.7,offY=S.pitch*0.7;
+    const px=W*.5+offX,py=H*.5+offY;
+    const cs=Math.min(W,H)*.13;
+    ctx.strokeStyle='rgba(34,197,94,.38)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(px,py,cs*1.3,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='rgba(34,197,94,.68)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(px-cs,py-cs); ctx.lineTo(px-cs,py+cs); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+cs,py-cs); ctx.lineTo(px+cs,py+cs); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px-cs,py); ctx.lineTo(px+cs,py); ctx.stroke();
+    const bw=Math.min(W*.35,80),bh=Math.min(H*.35,55);
+    ctx.strokeStyle='rgba(34,197,94,.28)'; ctx.lineWidth=.8; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.rect(px-bw/2,py-bh/2,bw,bh); ctx.stroke(); ctx.setLineDash([]);
+    [[px-bw/2,py-bh/2],[px+bw/2,py-bh/2],[px-bw/2,py+bh/2],[px+bw/2,py+bh/2]].forEach(([xx,yy])=>{
+      const sx=xx<px?1:-1,sy=yy<py?1:-1,cl=7;
+      ctx.strokeStyle='rgba(34,197,94,.8)'; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.moveTo(xx,yy+sy*cl); ctx.lineTo(xx,yy); ctx.lineTo(xx+sx*cl,yy); ctx.stroke();
+    });
+    ctx.fillStyle='rgba(59,130,246,.8)'; ctx.beginPath(); ctx.arc(W/2,H/2,2.5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(59,130,246,.25)'; ctx.lineWidth=.7;
+    ctx.beginPath(); ctx.arc(W/2,H/2,8,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=.7; ctx.setLineDash([2,4]);
+    ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+    ctx.setLineDash([]);
+    if(S.rangefinder>0&&S.rangefinder<=qsObstStop){
+      const alpha=1-(S.rangefinder/qsObstStop);
+      ctx.strokeStyle=`rgba(239,68,68,${alpha*0.8})`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(W/2,H/2,Math.min(W,H)*0.45,0,Math.PI*2); ctx.stroke();
+    }
+  }
+}
+
+/* ── INIT ── */
+setMode('auto'); setUnits('metric');
+drawHUD(); drawDowncam();
+setInterval(()=>{drawAltProfile();drawWind();},500);
+</script>
+</body>
+</html>
