@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="console-config.js?v=4"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Sensor Status</title>
@@ -1001,7 +1002,7 @@ function connectCameraProbe(id, path, preferH264) {
   pc.createOffer()
     .then(o=>pc.setLocalDescription(o))
     .then(()=>waitIce())
-    .then(()=>fetch(`https://console.airsent.tech/video/${path}/whep`,{method:'POST',headers:{'Content-Type':'application/sdp'},body:pc.localDescription.sdp}))
+    .then(()=>fetch(window.airsentApiUrl(`/video/${path}/whep`),{method:'POST',headers:{'Content-Type':'application/sdp'},body:pc.localDescription.sdp}))
     .then(async r=>{if(!r.ok)throw new Error(`WHEP ${r.status}`);return r.text();})
     .then(sdp=>pc.setRemoteDescription({type:'answer',sdp}))
     .catch(e=>{
@@ -1016,7 +1017,7 @@ function connectCameraProbe(id, path, preferH264) {
 // Connect through the secure nginx websocket route, matching dashboard/pilot.
 let ws = null;
 function connectWs() {
-  ws = new WebSocket("wss://console.airsent.tech/telem");
+  ws = new WebSocket(window.airsentApiUrl("/telem", true));
   ws.onopen = () => addLog("Telemetry link established via VPS relay","ok");
   ws.onmessage = e => { try{applyData(JSON.parse(e.data));}catch(err){} };
   ws.onclose = () => { setDisconnected(); addLog("Link lost — retrying","fault"); setTimeout(connectWs,3000); };

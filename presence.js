@@ -24,10 +24,7 @@
   let reconnect = null;
 
   function presenceUrl(){
-    const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-    if (local) return "wss://console.airsent.tech/presence";
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/presence`;
+    return window.airsentApiUrl("/presence", true);
   }
 
   function sendPresence(){

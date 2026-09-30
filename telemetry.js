@@ -497,13 +497,13 @@ function setConnectedState(data) {
 }
 
 function updateMapFromTelemetry(lat, lon) {
-  if (typeof lat !== "number" || typeof lon !== "number") return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return;
   setText("latVal", lat.toFixed(4) + "°");
   setText("lonVal", lon.toFixed(4) + "°");
 
   if (window.droneMarker) window.droneMarker.setLatLng([lat, lon]);
 
-  if (window.map && !mapHasZoomed && lat !== 0 && lon !== 0) {
+  if (window.map && !mapHasZoomed) {
     window.map.setView([lat, lon], 17);
     mapHasZoomed = true;
     if (window.trailLine) window.trailLine.setLatLngs([[lat, lon]]);
@@ -705,7 +705,7 @@ function applyTelemetry(data) {
   if (data.vib_y !== undefined) pushSmoothedVibration("vib_y", data.vib_y);
   if (data.vib_z !== undefined) pushSmoothedVibration("vib_z", data.vib_z);
 
-  if (data.lat !== undefined && data.lon !== undefined && data.lat !== 0 && data.lon !== 0) {
+  if (data.lat !== undefined && data.lon !== undefined && !(data.lat === 0 && data.lon === 0)) {
     updateMapFromTelemetry(data.lat, data.lon);
   }
 
@@ -726,7 +726,7 @@ function connectTelemetry() {
   // never connect directly to the Jetson for telemetry (the Jetson is behind
   // NAT). The Jetson pushes into port 9001 and the relay re-serves to browsers
   // on port 9101, which nginx exposes securely as wss://console.airsent.tech/telem.
-  socket = new WebSocket("wss://console.airsent.tech/telem");
+  socket = new WebSocket(window.airsentApiUrl("/telem", true));
 
   socket.onopen = () => {
     console.log("✅ WebSocket connected to VPS relay");

@@ -51,6 +51,8 @@ async def presence_handler(ws):
             except Exception:
                 continue
 
+            if not isinstance(data, dict):
+                continue
             if data.get("type") != "presence":
                 continue
 
@@ -76,7 +78,7 @@ async def cleanup_loop():
 async def main():
     server = await websockets.serve(
         presence_handler,
-        "0.0.0.0",
+        "127.0.0.1",
         PRESENCE_PORT,
         max_size=100_000,
         ping_interval=20,

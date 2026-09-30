@@ -56,6 +56,8 @@ async def browser_handler(websocket):
                 data = json.loads(message)
             except Exception:
                 continue
+            if not isinstance(data, dict):
+                continue
             if data.get("type") == "console_presence":
                 role = str(data.get("role", "")).lower()
                 client_roles[websocket] = role if role in ("operator", "viewer") else "unknown"
@@ -87,14 +89,14 @@ async def broadcast_loop():
 async def main():
     jetson_server = await websockets.serve(
         jetson_handler,
-        "0.0.0.0",
+        "127.0.0.1",
         JETSON_PORT,
         max_size=1_000_000,
         ping_interval=None,
     )
     browser_server = await websockets.serve(
         browser_handler,
-        "0.0.0.0",
+        "127.0.0.1",
         BROWSER_PORT,
         max_size=1_000_000,
         ping_interval=None,

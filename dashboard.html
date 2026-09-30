@@ -2,10 +2,11 @@
 <html lang="en">
  
 <head>
+<script src="console-config.js?v=4"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent Flight Console</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=countdown-2">
 <style>
 .lbtn-reset { border-color:rgba(127,220,255,.4); color:#7fdcff; background:rgba(127,220,255,.06); }
 .lbtn-reset:hover { background:rgba(127,220,255,.15); }
@@ -981,8 +982,8 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
       if(btns[k]) btns[k].classList.toggle('active', k===v);
     });
     // Leaflet needs a nudge when it becomes visible again after being hidden
-    if(v==='map' && window.__leafletMapInstance && window.__leafletMapInstance.invalidateSize){
-      setTimeout(()=>window.__leafletMapInstance.invalidateSize(), 50);
+    if(v==='map' && window.map && window.map.invalidateSize){
+      setTimeout(()=>window.map.invalidateSize(), 50);
     }
   }
   Object.keys(btns).forEach(k=>{ if(btns[k]) btns[k].addEventListener('click', ()=>setView(k)); });
@@ -1034,7 +1035,7 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
     pc.createOffer()
       .then(offer => {
         pc.setLocalDescription(offer);
-        return fetch(`https://console.airsent.tech/video/frontcam/whep`, {
+        return fetch(window.airsentApiUrl("/video/frontcam/whep"), {
           method:'POST',
           headers:{'Content-Type':'application/sdp'},
           body:offer.sdp
@@ -1107,7 +1108,7 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
     pc.createOffer()
       .then(offer => pc.setLocalDescription(offer))
       .then(() => waitIce())
-      .then(() => fetch(`https://console.airsent.tech/video/downcam/whep`, {
+      .then(() => fetch(window.airsentApiUrl("/video/downcam/whep"), {
         method:'POST',
         headers:{'Content-Type':'application/sdp'},
         body:pc.localDescription.sdp

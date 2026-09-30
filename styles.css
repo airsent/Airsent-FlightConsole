@@ -3689,3 +3689,31 @@ body.console-fit .app-shell{
   min-height:0 !important;
   overflow:hidden !important;
 }
+
+/* Keep all countdown digits visible in the narrow dashboard column. */
+body.dashboard-fixed .launch-clock-row {
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  row-gap: 6px !important;
+}
+body.dashboard-fixed .launch-clock-label {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+body.dashboard-fixed .launch-clock {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  white-space: nowrap !important;
+  font-size: clamp(24px, calc(27px * var(--dashboard-row-scale, 1)), 36px) !important;
+  letter-spacing: 1px !important;
+}
+body.dashboard-fixed .launch-status-badge {
+  grid-column: 1 / span 2 !important;
+  grid-row: 2 !important;
+  justify-self: start !important;
+}
+body.dashboard-fixed .launch-clock-row a {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+}
+

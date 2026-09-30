@@ -1,0 +1,12 @@
+[Unit]
+Description=Airsent telemetry relay
+After=network.target
+[Service]
+User=airsent
+WorkingDirectory=/opt/airsent
+ExecStart=/opt/airsent/.venv/bin/python /opt/airsent/telemetry_server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target

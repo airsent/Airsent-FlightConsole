@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="console-config.js?v=4"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — System Health</title>
@@ -918,7 +919,7 @@ function connectCameraProbe(id,path,preferH264){
   pc.createOffer()
     .then(offer=>pc.setLocalDescription(offer))
     .then(()=>waitIce())
-    .then(()=>fetch(`https://console.airsent.tech/video/${path}/whep`,{
+    .then(()=>fetch(window.airsentApiUrl(`/video/${path}/whep`),{
       method:'POST',
       headers:{'Content-Type':'application/sdp'},
       body:pc.localDescription.sdp
@@ -938,7 +939,7 @@ function connectCameraProbe(id,path,preferH264){
       Jetson → VPS:9001 → relay → wss://console.airsent.tech/telem ── */
 let ws=null;
 function connectWs(){
-  ws=new WebSocket('wss://console.airsent.tech/telem');
+  ws=new WebSocket(window.airsentApiUrl("/telem", true));
   ws.onopen=()=>addLog('Telemetry link established via VPS relay','ok');
   ws.onmessage=e=>{try{applyData(JSON.parse(e.data));}catch(_){}};
   ws.onclose=()=>{setDisconnected();addLog('Telemetry link lost — reconnecting in 3 s','fault');setTimeout(connectWs,3000);};

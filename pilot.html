@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="console-config.js?v=4"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Pilot</title>
@@ -848,7 +849,7 @@ function connectCam() {
   pc.createOffer()
     .then(offer => {
       pc.setLocalDescription(offer);
-      return fetch(`https://console.airsent.tech/video/frontcam/whep`, {
+      return fetch(window.airsentApiUrl("/video/frontcam/whep"), {
         method: 'POST',
         headers: { 'Content-Type': 'application/sdp' },
         body: offer.sdp
@@ -935,7 +936,7 @@ function connectDowncam(){
     })
     .then(()=>waitForIceGathering())
     .then(()=>{
-      return fetch(`https://console.airsent.tech/video/downcam/whep`,{
+      return fetch(window.airsentApiUrl("/video/downcam/whep"),{
         method:'POST',
         headers:{'Content-Type':'application/sdp'},
         body:pc.localDescription.sdp
@@ -983,7 +984,7 @@ function updateDowncamZoomLabel(){
 /* ── TELEMETRY — via VPS relay ── */
 function connectTelem(){
   try{
-    const ws=new WebSocket(`wss://console.airsent.tech/telem`);
+    const ws=new WebSocket(window.airsentApiUrl("/telem", true));
     ws.onopen=()=>{telemConnected=true;clearLinkLost();
       E('telemBadge').textContent='● TELEM: PIXHAWK'; E('telemBadge').classList.add('live');
       E('cs-telem').className='cs-dot ok'; E('cs-telemtxt').textContent='PIXHAWK LINKED';
@@ -1106,7 +1107,7 @@ function applyDetectionState(on){
 function connectCmd(){
   if(!canSendCommands) return;
   try{
-    cmdWs=new WebSocket(`wss://console.airsent.tech/cmd`);
+    cmdWs=new WebSocket(window.airsentApiUrl("/cmd", true));
     cmdWs.onopen=()=>console.log('[CMD] Connected');
     cmdWs.onmessage=ev=>{
       try{

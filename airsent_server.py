@@ -1,3 +1,4 @@
+import os
 import asyncio
 import websockets
 import depthai as dai
@@ -13,7 +14,7 @@ import socket
 import numpy as np
 from pymavlink import mavutil
 from pymavlink.dialects.v20 import ardupilotmega as mavlink2
-VPS_TELEM_URL = "ws://165.22.210.225:9001"
+VPS_TELEM_URL = os.environ.get("VPS_TELEM_URL", "ws://127.0.0.1:9001")
 
 try:
     from pupil_apriltags import Detector as _AprilDetector
@@ -49,7 +50,7 @@ DOWNCAM_FPS   = 15           # down-cam capture + RTMP + WS preview. Was 30.
                              # separately at 5 fps and is NOT affected by this.
 
 APRILTAG_FAMILY = "tag36h11"
-RTMP_HOST = "165.22.210.225"
+RTMP_HOST = os.environ.get("RTMP_HOST", "127.0.0.1")
 RTMP_PORT = 1935
 
 BLOB_PATH     = '/home/airsent/.cache/blobconverter/yolov8n_coco_640x352_openvino_2022.1_6shave.blob'
@@ -1325,7 +1326,7 @@ async def vps_telem_relay():
 # through the SAME process_command() the local handler uses, and the reply is
 # sent back up so the GCS gets acks / MAVLink log remotely too. Reconnects on
 # failure. This is what makes ARM/DISARM/velocity work over 5G.
-VPS_CMD_URL = "ws://165.22.210.225:9004"
+VPS_CMD_URL = os.environ.get("VPS_CMD_URL", "ws://127.0.0.1:9004")
 
 async def vps_cmd_relay():
     while True:

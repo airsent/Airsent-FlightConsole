@@ -108,7 +108,7 @@ function connectCmd() {
   if (!canSendCommands) return;
   if (cmdSocket && (cmdSocket.readyState === WebSocket.OPEN ||
                     cmdSocket.readyState === WebSocket.CONNECTING)) return;
-  cmdSocket = new WebSocket("wss://console.airsent.tech/cmd");
+  cmdSocket = new WebSocket(window.airsentApiUrl("/cmd", true));
   cmdSocket.onopen  = () => { console.log("\u2705 Command channel connected"); };
   cmdSocket.onclose = () => {
     cmdSocket = null;
@@ -883,12 +883,7 @@ if (leafletMapEl && typeof L !== "undefined") {
     zoomControl: true,
   }).setView(isRealMode ? [usaLat, usaLon] : [initialLat, initialLon], isRealMode ? 4 : 16);
  
-  // Dark map with full road/terrain detail — Stadia Alidade Smooth Dark
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 20,
-    subdomains: "abcd",
-    attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>"
-  }).addTo(map);
+  window.airsentMapLayer(map);
  
   droneMarker = L.circleMarker(isRealMode ? [usaLat, usaLon] : [initialLat, initialLon], {
     radius: 7,
