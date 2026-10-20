@@ -15,3 +15,13 @@ Close the local preview tabs and server. In this checkout, with no newer uncommi
 An independent original-code ZIP is also supplied as FlightConsole-before-failsafe-trial.zip. Its contents come directly from main before this trial. Restoring it does not require Git.
 
 Trial files: failsafe.html, failsafe.css, failsafe.js, failsafe-data.js, failsafe-bridge.js, failsafe-monitor.js; existing HTML menus add one navigation link. dashboard.html loads the optional bridge; telemetry.js publishes selected original demo/received frames; script.js accepts the explicit local demo trial URL. No shared dashboard CSS changes are required.
+
+## Existing-hardware sensor additions
+
+Landing & Sensors contains target loss, obstacle/depth loss, rangefinder validity/freshness, optical-flow degradation, and downward-camera loss/frozen frames. Camera/thermal review is in Power & Flight. Tower/payload interlocks were removed from the catalogue because their feedback integrations are not confirmed. Total: 16 review rules.
+
+The bridge now allows existing rangefinder and optical-flow quality values. The selected-rule evidence display can show those values and the existing downward-camera flag, but explicitly reports missing sensor timestamps / validity. These are display and catalogue additions, not working onboard failsafe logic. Demo frames without those fields correctly show “not supplied”; values are not fabricated. Independent acquisition timestamps, active EKF source, tested sensor limits and onboard integration remain required.
+
+## Visual status semantics
+
+System Health is the reference for this page's IBM Plex Sans / IBM Plex Mono typography and neutral surfaces. Unknown/unverified configuration is neutral gray, incomplete software checks are amber, selection and demo source are blue. Red is reserved for reported fault observations; simulated incidents are labeled and amber. No unknown state is displayed as healthy green. Existing System Health and Sensor Status pages are unchanged.

@@ -27,3 +27,95 @@ body.failsafe-page{background:#04080d;color:var(--text);overflow:hidden;font:14p
 .failsafe-page .fs-rule{min-height:76px;padding-top:13px;padding-bottom:13px}
 .failsafe-page .fs-matrix-note{padding-top:10px}
 .failsafe-page .fs-layers{margin:9px 0}
+
+/* Header matches System Health .bar typography and geometry. */
+.failsafe-page .bar{
+  flex-shrink: 0;
+  height: 44px;
+  background: #0a0e15;
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 0;
+}
+
+.failsafe-page .logo-wrap{ position: relative; display: inline-block; }
+.failsafe-page .logo-btn{ background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; }
+.failsafe-page .logo-menu{
+  display: none; position: absolute; top: calc(100% + 6px); left: 0;
+  min-width: 200px; background: #0d121a; border: 1px solid rgba(255,255,255,0.055);
+  z-index: 9999; box-shadow: 0 16px 48px rgba(0,0,0,.7);
+}
+.failsafe-page .logo-menu a{
+  display: block; padding: 8px 14px; color: #8a9bb0; text-decoration: none;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.failsafe-page .logo-menu a:hover{ background: #111720; color: #e8edf2; }
+.failsafe-page .logo-wrap:hover .logo-menu, .failsafe-page .logo-wrap:focus-within .logo-menu{ display: block; }
+
+.failsafe-page .bar-div{ width: 1px; height: 22px; background: rgba(255,255,255,0.055); margin: 0 14px; flex-shrink: 0; }
+.failsafe-page .bar-lbl{ font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #445566; }
+.failsafe-page .bar-val{ font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e8edf2; margin-left: 6px; }
+.failsafe-page .bar-val.ok{ color: #22c55e; }
+.failsafe-page .bar-val.warn{ color: #f59e0b; }
+.failsafe-page .bar-val.err{ color: #ef4444; }
+.failsafe-page .bar-val.info{ color: #3b82f6; }
+.failsafe-page .bar-right{ margin-left: auto; display: flex; align-items: center; gap: 0; }
+
+.failsafe-page .page-id{
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: #445566;
+  padding: 0 14px; border-right: 1px solid rgba(255,255,255,0.055);
+}
+
+
+.failsafe-page .fs-shell{grid-template-rows:44px 34px minmax(0,1fr) 146px 28px;padding-top:0}
+.failsafe-page .bar{margin:0 -10px;white-space:nowrap;min-width:0;--fs-t3:#445566}
+.failsafe-page .bar .bar-val{white-space:nowrap}
+
+/* More sensor rules fit as distinct rows; no scrolling or hidden content. */
+.failsafe-page .fs-many .fs-rule{min-height:62px;padding-top:8px;padding-bottom:8px}
+.failsafe-page .fs-many .fs-rule small{margin-top:4px}
+.failsafe-page .fs-rule-state{font-size:9px;line-height:1.4}
+.failsafe-page .fs-observation{border-top:1px solid var(--line);padding-top:10px;margin:0 0 10px}
+.failsafe-page .fs-observation p{font-size:11px;margin:6px 0}
+.failsafe-page .fs-detail-grid{margin-top:16px}
+.failsafe-page .fs-recovery{margin-top:14px}
+
+/* Use System Health's palette and font roles consistently across this page. */
+body.failsafe-page{--text:#e8edf2;--muted:#8a9bb0;--line:rgba(255,255,255,.055);--line2:rgba(255,255,255,.12);--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--cyan:#3b82f6;background:#070a0f;font-family:'IBM Plex Sans',Arial,sans-serif}
+.failsafe-page .fs-shell{background:#070a0f}
+.failsafe-page .fs-panel{background:#0a0e15}
+.failsafe-page .fs-panel-head{font-family:'IBM Plex Sans',Arial,sans-serif;font-weight:600;font-size:13px;letter-spacing:.6px}
+.failsafe-page .fs-rule strong,.failsafe-page h1,.failsafe-page h2,.failsafe-page p{font-family:'IBM Plex Sans',Arial,sans-serif}
+.failsafe-page .fs-kicker,.failsafe-page .fs-rule-owner,.failsafe-page .fs-rule-state,.failsafe-page .fs-group,.failsafe-page .fs-table-label,.failsafe-page .fs-selected-id,.failsafe-page .fs-subbar,.failsafe-page .fs-footer,.failsafe-page .fs-panel-head>span:last-child:not(:first-child),.failsafe-page .fs-inline-muted,.failsafe-page .fs-layers,.failsafe-page .fs-check,.failsafe-page .fs-check b,.failsafe-page .fs-mini-foot,.failsafe-page .fs-event-time,.failsafe-page .fs-live-strip,.failsafe-page .fs-incidents label,.failsafe-page select,.failsafe-page .fs-state-tag{font-family:'IBM Plex Mono',monospace}
+.failsafe-page .fs-rule{color:var(--text)}
+.failsafe-page .fs-rule-state{color:var(--muted);font-size:10px;font-weight:400}
+.failsafe-page .fs-rule-state[data-severity="warning"]{color:var(--amber)}
+.failsafe-page .fs-state-tag{color:var(--muted);border-color:var(--line2);background:#0d121a}
+.failsafe-page .fs-side-note h3{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-weight:400}
+.failsafe-page .fs-group{background:#0a0e15;font-size:10px;letter-spacing:.3px;color:var(--muted)}
+.failsafe-page .fs-group[aria-pressed=true],.failsafe-page .fs-rule[aria-pressed=true]{background:#101b2c;color:var(--text)}
+.failsafe-page .fs-rule:hover{background:#0d1622}
+.failsafe-page .fs-table-label{background:#080c12}
+.failsafe-page .fs-response-box{background:#0d121a;border-color:var(--line2);border-left-color:var(--cyan)}
+.failsafe-page .fs-response-box p{color:var(--muted)}
+.failsafe-page .fs-layers span{background:#0d121a;color:var(--muted)}
+.failsafe-page .fs-live-strip b{color:var(--text)}
+.failsafe-page h1{color:var(--text);font-weight:500}
+.failsafe-page .fs-subbar>span{background:#0a0e15}
+.failsafe-page .fs-subbar .amber{color:var(--muted)!important}
+.failsafe-page #fsVehicleState[data-severity="unknown"]{color:var(--muted)}
+.failsafe-page #fsVehicleState[data-severity="warning"]{color:var(--amber)}
+.failsafe-page #fsVehicleState[data-severity="fault"]{color:var(--red)}
+.failsafe-page #fsVehicleState[data-severity="info"]{color:var(--cyan)}
+.failsafe-page #fsEventTitle[data-severity="info"]{color:var(--text)}
+.failsafe-page #fsEventTitle[data-severity="simulation"]{color:var(--amber)}
+.failsafe-page .fs-status-legend{display:flex;gap:12px;font-size:9px;align-items:center}
+.failsafe-page .fs-status-legend i{font-style:normal;color:var(--muted);white-space:nowrap}
+.failsafe-page .fs-status-legend .warning{color:var(--amber)}
+.failsafe-page .fs-status-legend .fault{color:var(--red)}
+.failsafe-page #fsAck{color:var(--text);background:#0d121a;border-color:var(--line2);font-family:'IBM Plex Mono',monospace}
+.failsafe-page #fsAck:disabled{color:var(--muted);opacity:.45}
+.failsafe-page select{background:#0d121a}

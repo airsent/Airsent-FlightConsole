@@ -3,24 +3,55 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Airsent — Failsafe Systems</title>
-<link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="failsafe.css">
+<link rel="stylesheet" href="styles.css"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="failsafe.css">
 <script src="failsafe-bridge.js" defer></script><script src="failsafe-monitor.js" defer></script>
 <script src="failsafe-data.js" defer></script><script src="failsafe.js" defer></script>
 </head>
 <body class="failsafe-page">
 <div class="fs-shell" id="fsShell">
-<header class="fs-top">
-<div class="logo-dropdown"><button class="logo-dropdown-btn" aria-label="Open console navigation"><img src="logo-topbar.png" alt="Airsent" class="fs-logo"></button><div class="logo-dropdown-menu">
-<a href="dashboard.html">Main Dashboard</a><a href="mission.html">Mission Planner</a><a href="preflight.html">Pre-Flight Checklist</a><a href="parameters.html">Parameters</a><a href="logs.html">Flight Logs</a><a href="launch.html">Launch Sequencer</a><a href="pilot.html">Pilot</a><a href="health.html">System Health</a><a href="sensor-status.html">Sensor Status</a><a href="actuators.html">Actuators</a><a href="failsafe.html" aria-current="page">Failsafe Systems</a>
-</div></div>
-<span class="fs-divider"></span><strong>FAILSAFE SYSTEMS</strong><div class="fs-top-state"><span>VEHICLE</span><b id="fsVehicleState">WAITING</b></div><div class="fs-top-state"><span>CONFIG</span><b class="amber">UNVERIFIED</b></div><span class="fs-demo" id="fsSource">READ-ONLY TRIAL</span>
+<header class="bar">
+  <div class="logo-wrap">
+    <button class="logo-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
+    <div class="logo-menu">
+      <a href="dashboard.html">Main Dashboard</a>
+      <a href="mission.html">Mission Planner</a>
+      <a href="preflight.html">Pre-Flight Checklist</a>
+      <a href="parameters.html">Parameters</a>
+      <a href="logs.html">Flight Logs</a>
+      <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
+      <a href="health.html">System Health</a>
+      <a href="failsafe.html">Failsafe Systems</a>
+      <a href="sensor-status.html">Sensor Status</a>
+      <a href="actuators.html">Actuators</a>
+    </div>
+  </div>
+
+  <span class="page-id" style="margin-left:14px;">Failsafes</span>
+
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Vehicle</span><span class="bar-val" id="fsVehicleState">WAITING</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Config</span><span class="bar-val" style="color:#8a9bb0">UNVERIFIED</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Source</span><span class="bar-val info" id="fsSource">TRIAL</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Rules</span><span class="bar-val">16</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Commands</span><span class="bar-val">LOCKED</span>
+
+  <div class="bar-right">
+    <span class="bar-lbl">Updated&nbsp;</span><span class="bar-val" id="fsUpdated">--:--:--</span>
+    <div class="bar-div"></div>
+    <span class="bar-val" style="color:var(--fs-t3);margin-right:2px" id="fsClock">--:--:--</span>
+  </div>
 </header>
-<nav class="fs-nav" aria-label="Console pages"><a href="dashboard.html">DASHBOARD</a><a href="mission.html">MISSION</a><a href="health.html">SYSTEM HEALTH</a><a href="sensor-status.html">SENSORS</a><a href="failsafe.html" aria-current="page">FAILSAFES</a><a href="logs.html">FLIGHT LOGS</a></nav>
-<div class="fs-subbar"><span><i class="fs-dot"></i> POLICY REVIEW <b>14 PROTECTIONS</b></span><span>CONTROL OWNER <b>UNKNOWN</b></span><span>PARAMETER SYNC <b class="amber">NOT READ</b></span><span class="fs-sub-last">AIRCRAFT COMMANDS <b>DISABLED</b></span></div>
+
+<div class="fs-subbar"><span><i class="fs-dot"></i> POLICY REVIEW <b>16 PROTECTIONS</b></span><span><span class="fs-status-legend" aria-label="Status colors"><i>○ UNKNOWN</i><i class="warning">△ CAUTION</i><i class="fault">! FAULT</i></span></span><span>PARAMETER SYNC <b class="amber">NOT READ</b></span><span class="fs-sub-last">AIRCRAFT COMMANDS <b>DISABLED</b></span></div>
 <main class="fs-main">
 <aside class="fs-panel fs-categories"><div class="fs-panel-head">SYSTEM GROUPS <span>04</span></div><div id="fsGroups" class="fs-groups" aria-label="Protection categories"></div><div class="fs-side-note"><span class="fs-kicker">CONFIGURATION EVIDENCE</span><h3>NOT VERIFIED</h3><p>Aircraft parameter readback is required before any protection is shown as configured.</p><div class="fs-check"><span>Firmware</span><b>UNKNOWN</b></div><div class="fs-check"><span>Parameter snapshot</span><b>MISSING</b></div><div class="fs-check"><span>Test evidence</span><b>MISSING</b></div></div><div class="fs-mini-foot">ONBOARD RESPONSE<br><strong>Independent of browser link</strong></div></aside>
 <section class="fs-panel fs-matrix"><div class="fs-panel-head"><span id="fsGroupTitle">LINK & CONTROL</span><span id="fsGroupCount"></span></div><div class="fs-table-label"><span>PROTECTION / TRIGGER</span><span>OWNER</span><span>STATE</span></div><div id="fsRules" class="fs-rules"></div><div class="fs-live-strip"><span>BATTERY <b id="fsVoltage">—</b></span><span>GPS <b id="fsGps">—</b></span><span>DATA AGE <b id="fsAge">—</b></span></div><div class="fs-matrix-note"><span class="fs-kicker">PROTECTION LAYERS</span><div class="fs-layers"><span>FLIGHT CONTROLLER</span><i>↔</i><span>JETSON</span><i>↔</i><span>CONSOLE</span></div><p>Configured policy, trigger evidence, and observed aircraft response are tracked separately.</p></div></section>
-<section class="fs-panel fs-policy"><div class="fs-panel-head">RESPONSE POLICY <span>READ ONLY</span></div><div class="fs-policy-body"><div class="fs-selected-id" id="fsSelectedId">FS / 02</div><h1 id="fsTitle"></h1><span class="fs-state-tag">CONFIGURATION UNVERIFIED</span><div class="fs-detail-grid"><div><span class="fs-kicker">TRIGGER EVIDENCE</span><p id="fsTrigger"></p></div><div><span class="fs-kicker">POLICY OWNER</span><p id="fsOwner"></p></div></div><div class="fs-response-box"><span class="fs-kicker">PROPOSED RESPONSE</span><h2 id="fsResponse"></h2><p id="fsCaveat"></p></div><div class="fs-recovery"><span class="fs-kicker">RECOVERY CONDITIONS</span><p id="fsRecovery"></p></div><div class="fs-policy-bottom"><div><span class="fs-kicker">THRESHOLD</span><p>Not read from aircraft</p></div><button disabled>APPLY TO AIRCRAFT <span>LOCKED</span></button></div></div></section>
+<section class="fs-panel fs-policy"><div class="fs-panel-head">RESPONSE POLICY <span>READ ONLY</span></div><div class="fs-policy-body"><div class="fs-selected-id" id="fsSelectedId">FS / 02</div><h1 id="fsTitle"></h1><span class="fs-state-tag">CONFIGURATION UNVERIFIED</span><div class="fs-detail-grid"><div><span class="fs-kicker">TRIGGER EVIDENCE</span><p id="fsTrigger"></p></div><div><span class="fs-kicker">POLICY OWNER</span><p id="fsOwner"></p></div></div><div class="fs-response-box"><span class="fs-kicker">PROPOSED RESPONSE</span><h2 id="fsResponse"></h2><p id="fsCaveat"></p></div><div class="fs-recovery"><span class="fs-kicker">RECOVERY CONDITIONS</span><p id="fsRecovery"></p></div><div class="fs-observation"><span class="fs-kicker">AVAILABLE SENSOR EVIDENCE</span><p id="fsObservation">Waiting for dashboard data.</p></div><div class="fs-policy-bottom"><div><span class="fs-kicker">THRESHOLD</span><p>Not read from aircraft</p></div><button disabled>APPLY TO AIRCRAFT <span>LOCKED</span></button></div></div></section>
 </main>
 <section class="fs-panel fs-incidents"><div class="fs-panel-head"><span>INCIDENT REVIEW <span class="fs-inline-muted">/ SIMULATED EVENTS</span></span><label for="fsScenario">SCENARIO <select id="fsScenario"><option value="review">Configuration review</option><option value="link">5G link lost</option><option value="landing">Landing target lost</option><option value="battery">Critical battery</option></select></label></div><div class="fs-event-body"><div class="fs-event-time">T+00:00</div><div class="fs-event-copy" aria-live="polite"><strong id="fsEventTitle">Awaiting scenario</strong><p id="fsEventDetail"></p><span id="fsAckState"></span></div><button id="fsAck" disabled>ACKNOWLEDGE</button></div></section>
 <footer class="fs-footer"><span>LOCAL TRIAL · DASHBOARD TELEMETRY MIRROR · NO COMMANDS</span><span>Acknowledging an alert does not clear a failsafe or resume flight.</span></footer>
