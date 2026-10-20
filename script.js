@@ -90,7 +90,8 @@ const telemetryEls = {
   sensorBarometer: document.getElementById("sensorBarometer"),
 };
  
-const appMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
+// Explicit local trial URL uses demo data without changing the saved login mode.
+const appMode = (new URLSearchParams(location.search).get("trial") === "demo" ? "demo" : (localStorage.getItem("airsentMode") || "demo")).toLowerCase();
 const isDemoMode = appMode === "demo";
 const isViewerMode = appMode === "viewer";
 const canSendCommands = appMode === "operator" || appMode === "actual" || appMode === "real";
