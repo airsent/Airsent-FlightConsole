@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Airsent — Failsafe Systems</title>
+<link rel="stylesheet" href="styles.css"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"><link rel="stylesheet" href="failsafe.css?v=activation-2">
+<script src="failsafe-bridge.js" defer></script><script src="failsafe-monitor.js" defer></script>
+<script src="failsafe-data.js" defer></script><script src="failsafe.js?v=activation-2" defer></script><script src="failsafe-planning.js" defer></script><script src="console-select.js" defer></script><script src="asc-lock.js" defer></script><script src="failsafe-auto.js?v=lock-1" defer></script>
+<link rel="stylesheet" href="console-navigation.css?v=uniform-2">
+<script src="console-navigation.js" defer></script>
+<script src="failsafe-activation.js" defer></script>
+</head>
+<body class="failsafe-page">
+<div class="fs-shell" id="fsShell">
+<header class="bar">
+  <div class="logo-wrap">
+    <button class="logo-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
+    <div class="logo-menu">
+      <a href="dashboard.html">Main Dashboard</a>
+      <a href="mission.html">Mission Planner</a>
+      <a href="preflight.html">Pre-Flight Checklist</a>
+      <a href="parameters.html">Parameters</a>
+      <a href="logs.html">Flight Logs</a>
+      <a href="launch.html">Launch Sequencer</a>
+      <a href="pilot.html">Pilot</a>
+      <a href="health.html">System Health</a>
+      <a href="failsafe.html">Failsafe Systems</a>
+      <a href="sensor-status.html">Sensor Status</a>
+      <a href="actuators.html">Actuators</a>
+    </div>
+  </div>
+
+  <span class="page-id" style="margin-left:14px;">Failsafes</span>
+
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Vehicle</span><span class="bar-val" id="fsVehicleState">WAITING</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Config</span><span class="bar-val" style="color:#8a9bb0">UNVERIFIED</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Source</span><span class="bar-val info" id="fsSource">TRIAL</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Rules</span><span class="bar-val">20</span>
+  <div class="bar-div"></div>
+  <span class="bar-lbl">Commands</span><span class="bar-val">LOCKED</span>
+
+  <div class="bar-right">
+    <span class="bar-lbl">Updated&nbsp;</span><span class="bar-val" id="fsUpdated">--:--:--</span>
+    <div class="bar-div"></div>
+    <span class="bar-val" style="color:var(--fs-t3);margin-right:2px" id="fsClock">--:--:--</span>
+  </div>
+</header>
+
+<div class="fs-auto-bar"><strong title="Automatic Safety Check">ASC</strong><button id="fsAutoToggle" type="button" role="switch" aria-checked="false">OFF</button><span class="fs-fault-counter">FAULTS <b id="fsFaultCount">0</b></span><span id="fsAutoSummary" role="status" aria-live="polite">12 SYSTEM CHECKS · OFF</span></div>
+<main class="fs-main">
+<section class="fs-overview" aria-label="Failsafe system overview">
+<div id="fsGroups" class="fs-group-grid"></div>
+<div class="fs-overview-footer"><div class="fs-live-strip"><span>BATTERY <b id="fsVoltage">—</b></span><span>GPS <b id="fsGps">—</b></span><span>DATA AGE <b id="fsAge">—</b></span></div><div class="fs-evidence-summary">FIRMWARE <b>UNKNOWN</b> &nbsp; PARAMETER READBACK <b>MISSING</b> &nbsp; TEST EVIDENCE <b>MISSING</b></div><div class="fs-overview-note">FLIGHT CONTROLLER ↔ JETSON ↔ CONSOLE · Onboard response is independent of the browser link.</div></div>
+</section>
+<section class="fs-panel fs-policy" id="fsPopover" role="dialog" aria-label="Sensor and failsafe details" hidden><div class="fs-panel-head"><span id="fsMetricTitle">SENSOR DETAILS</span><button id="fsClose" type="button" aria-label="Close sensor details">×</button></div><div class="fs-policy-body"><div id="fsMetricExplanation" class="fs-metric-explanation"></div><div class="fs-selected-id" id="fsSelectedId">FS / 02</div><h1 id="fsTitle"></h1><span class="fs-state-tag">CONFIGURATION UNVERIFIED</span><div class="fs-detail-grid"><div><span class="fs-kicker">TRIGGER EVIDENCE</span><p id="fsTrigger"></p></div><div><span class="fs-kicker">POLICY OWNER</span><p id="fsOwner"></p></div></div><div class="fs-response-box"><span class="fs-kicker">PROTECTIVE ACTION OPTIONS · NOT ENABLED</span><h2 id="fsResponse" hidden></h2><div id="fsActions"></div><p id="fsCaveat"></p></div><div class="fs-recovery"><span class="fs-kicker">RECOVERY CONDITIONS</span><p id="fsRecovery"></p></div><div class="fs-observation"><span class="fs-kicker">AVAILABLE SENSOR EVIDENCE</span><p id="fsObservation">Waiting for dashboard data.</p></div><div class="fs-policy-bottom"><div><span class="fs-kicker">THRESHOLD</span><p>Not read from aircraft</p></div><button type="button" id="fsEditDraft">EDIT RESPONSE DRAFT</button></div></div></section>
+</main>
+<section class="fs-panel fs-incidents"><div class="fs-panel-head"><span>INCIDENT REVIEW <span class="fs-inline-muted">/ SIMULATED EVENTS</span></span><button type="button" id="fsRouteOpen">COMPARE RECOVERY ROUTES</button><label for="fsScenario">SCENARIO <select id="fsScenario"><option value="review">Configuration review</option><option value="link">5G link lost</option><option value="landing">Landing target lost</option><option value="battery">Critical battery</option></select></label></div><div class="fs-event-body"><div class="fs-event-time">T+00:00</div><div class="fs-event-copy" aria-live="polite"><strong id="fsEventTitle">Awaiting scenario</strong><p id="fsEventDetail"></p><span id="fsAckState"></span></div><button id="fsAck" disabled>ACKNOWLEDGE</button></div></section>
+<footer class="fs-footer"><span>LOCAL TRIAL · DASHBOARD TELEMETRY MIRROR · NO COMMANDS</span><span>Acknowledging an alert does not clear a failsafe or resume flight.</span></footer>
+</div>
+<dialog id="fsDraftDialog" class="fs-plan-dialog" aria-labelledby="fsDraftTitle">
+<form id="fsDraftForm"><div class="fs-plan-head"><h2 id="fsDraftTitle">Failsafe Settings</h2><button type="button" data-close="fsDraftDialog" aria-label="Close response editor">×</button></div><p class="fs-plan-notice">LOCAL SETTINGS · No aircraft writes</p><p id="fsDraftRule"></p>
+<div id="fsGenericEditor"><label>Response when triggered<select id="fsDraftAction"><option value="">Select a response…</option></select></label></div>
+<div id="fsMotorEditor" hidden></div>
+<div id="fsReturnEditor" hidden><label>Return altitude above home (m)<input id="fsReturnAltitude" type="number" min="1" step="1" placeholder="Enter reviewed height"></label></div>
+<div id="fsBatteryEditor" hidden><div class="fs-plan-grid"><label>Low battery threshold (%)<input id="fsLowThreshold" type="number" min="1" max="100" step="1" placeholder="Enter test value"></label><label>Critical threshold (%)<input id="fsCriticalThreshold" type="number" min="1" max="100" step="1" placeholder="Enter test value"></label><label>Low battery response<select id="fsLowAction"><option value="">Select…</option><option>Return home (RTL)</option><option>SmartRTL</option><option>Controlled landing</option><option>Alert only</option></select></label><label>Critical battery response<select id="fsCriticalAction"><option value="">Select…</option><option>Controlled landing</option><option>Return home (RTL)</option><option>SmartRTL</option><option>Alert only</option></select></label></div><p>Percentages are for this simulation. Real thresholds need calibrated voltage/capacity, timers and aircraft parameter readback. RTL / SmartRTL also require usable navigation, home/path and energy.</p><label>Simulated battery remaining (%)<input id="fsTestBattery" type="number" min="0" max="100" value="50"></label></div>
+<p id="fsDraftConditions"></p><div class="fs-plan-actions"><button type="submit">SAVE SETTINGS</button><button type="button" id="fsTestDraft">TEST RESPONSE</button><button type="button" id="fsDiscardDraft">RESET</button></div><p id="fsDraftResult" role="status" aria-live="polite"></p></form></dialog>
+<dialog id="fsRouteDialog" class="fs-plan-dialog fs-route-dialog" aria-labelledby="fsRouteTitle"><div class="fs-plan-head"><h2 id="fsRouteTitle">Recovery route comparison</h2><button type="button" data-close="fsRouteDialog" aria-label="Close recovery comparison">×</button></div><p class="fs-plan-notice">DEMO ROUTES · NO LIVE MAP · NOT FLIGHT GUIDANCE</p><p>Ranks predefined sample routes by estimated energy after reserve. This does not generate or validate an operational flight path.</p><div class="fs-plan-grid fs-energy-inputs"><label>Usable energy now (Wh)<input id="fsEnergy" type="number" value="16" min="0" step=".1"></label><label>Energy per metre (Wh/m)<input id="fsRate" type="number" value=".02" min=".0001" step=".001"></label><label>Required reserve (Wh)<input id="fsReserve" type="number" value="4" min="0" step=".1"></label><label>Landing allowance (Wh)<input id="fsLandingEnergy" type="number" value="2" min="0" step=".1"></label></div>
+<div class="fs-route-schematic" aria-label="Schematic sample routes, not geography"><span>DRONE</span><div>→ Home · 900 m<br>→ Alternate A · 280 m<br>→ Alternate B · 480 m</div></div>
+<div id="fsRouteCandidates"></div><button type="button" id="fsCalculateRoutes">COMPARE DEMO ROUTES</button><p id="fsRouteResult" role="status" aria-live="polite"></p><p>Actual routing needs approved landing sites/corridors, fresh vehicle position, airspace and fence checks, terrain, wind and a validated energy model. A feasible estimate is not a safety clearance.</p></dialog>
+</body></html>

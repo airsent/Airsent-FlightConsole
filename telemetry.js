@@ -576,6 +576,7 @@ function updateMotors(data) {
 
 // ─── MAIN APPLY ───────────────────────────────────────────────────────────────
 function applyTelemetry(data) {
+  window.AirsentReviewBridge?.publish(data, "telemetry");
   const pxOk = data.pixhawk_connected !== false;
   setConnectedState(data);
   if (losActive) return;
@@ -836,6 +837,8 @@ function updateDemoTelemetry() {
   pushBuffer("motor_avg", pwmVals.reduce((a,p) => a + pwmPct(p), 0) / 4);
   pushBuffer("throttle", rnd(30, 45));
 
+  // Mirror the existing demo frame; no second simulator or flight commands.
+  window.AirsentReviewBridge?.publish({voltage,current,sats,hdop,vib_x,vib_y,vib_z,alt,spd,fix_type:"RTK FIX",ekf_healthy:true,pixhawk_connected:true,battery:Number(getEl("topBattery")?.textContent.replace("%", ""))}, "demo");
   redrawAllCharts();
 }
 
