@@ -14,9 +14,9 @@ Return-home settings, motor responses, and parachute requirements are local revi
 
 failsafe.html, failsafe.css, failsafe.js, failsafe-data.js, failsafe-bridge.js, failsafe-monitor.js, failsafe-auto.js, failsafe-planning.js, asc-lock.js and console-select.js implement the page. console-navigation.css standardizes console page menus. Dashboard telemetry publishes whitelisted ephemeral fields through the optional bridge; telemetry is not persisted.
 
-## Rollback
+## Backup and deployment
 
-The original console is preserved in outputs/FlightConsole-before-failsafe-trial.zip outside this project directory. The trial remains on codex/failsafe-trial; no live deployment or GitHub push is included. Preserve current edits before switching branches. The latest full-project ZIP is outputs/Airsent-FlightConsole-with-failsafes.zip.
+The original console is preserved in outputs/FlightConsole-before-failsafe-trial.zip outside this project directory. The failsafe console is integrated into main. Deploying the GitHub code to the droplet is a separate step. The latest full-project ZIP is outputs/Airsent-FlightConsole-with-failsafes.zip.
 
 ## Dashboard integration update
 
