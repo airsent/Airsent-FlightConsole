@@ -185,6 +185,15 @@ const realModeEventLog = [
 ];
  
 let eventLogData = isRealMode ? [...realModeEventLog] : [...initialEventLog];
+const sessionEventArchive=eventLogData.map(entry=>({...entry,timestamp:'',source:'initial display'}));
+function updateDashboardUtcClock(){const el=document.getElementById('dashboardUtcClock');if(el){const now=new Date();el.textContent=now.toISOString().slice(11,19)+' UTC';el.dateTime=now.toISOString()}}
+updateDashboardUtcClock();setInterval(updateDashboardUtcClock,1000);
+document.getElementById('eventsDownloadBtn')?.addEventListener('click',()=>{
+ const quote=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+ const rows=[['UTC timestamp','Display time','Event','Source'],...sessionEventArchive.map(e=>[e.timestamp,e.time,e.text,e.source])];
+ const blob=new Blob(['\uFEFF'+rows.map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='airsent-events-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
  
 /* ---------------------------
    HELPERS
@@ -255,10 +264,11 @@ function closeConfirm() {
  
 function getCurrentClockTime() {
   const now = new Date();
-  return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  return now.toISOString().slice(11,19);
 }
  
 function prependEvent(text) {
+  sessionEventArchive.push({timestamp:new Date().toISOString(),time:getCurrentClockTime(),text:String(text).toUpperCase(),source:isRealMode?'telemetry / console':'demo / console'});
   if (eventLogPaused) return;
   eventLogData.unshift({
     time: getCurrentClockTime(),
@@ -467,7 +477,7 @@ function bindFailsafeControls() {
 	  failsafeSelects.forEach((select) => {
 	    select.addEventListener("change", () => {
 	      const label = select.closest(".failsafe-row")?.querySelector("span")?.textContent || "FAILSAFE";
-	      prependEvent(`${label} SET TO ${select.value}`);
+	      prependEvent(`${label} LOCAL POLICY ${select.value === 'true' ? 'ACTIVATED' : 'DEACTIVATED'}`);
 	    });
 	  });
 }

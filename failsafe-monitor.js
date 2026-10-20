@@ -9,6 +9,19 @@ function draw(){
  if(!$('fsSource'))return;
  const age=frame?Math.max(0,Date.now()-frame.receivedAt):Infinity;
  const fresh=age<=4000;
+ document.querySelectorAll('.fs-square-tile').forEach(tile=>{
+ const light=tile.querySelector('.fs-status-light');if(!light)return;
+ const i=Number(tile.dataset.system),v=fresh?frame.values:null;
+ let state='unknown',reason='No verified status data';
+ if(frame&&!fresh&&i!==9){state='warning';reason='Dashboard data is stale'}
+ if(v){
+  const checks={0:v.ekf_healthy,1:v.ekf_healthy,5:v.front_cam_active};
+  if(typeof checks[i]==='boolean'){state=checks[i]?'healthy':'fault';reason=i===0||i===1?'Reported EKF health':i===5?'Reported front-camera activity (frame age unverified)':'Reported status'}
+  if(i===4&&v.cam_hot===true){state='warning';reason='Reported camera thermal warning'}
+ }
+ const label=(frame?.source==='demo'&&fresh?'SIMULATED · ':'')+({unknown:'Unknown',healthy:'Healthy',warning:'Caution',fault:'Fault'}[state])+' — '+reason+'. Failsafe configuration remains unverified.';
+ light.dataset.state=state;light.title=label;light.setAttribute('aria-label',label);
+});
  if($('fsClock'))$('fsClock').textContent=new Date().toLocaleTimeString('en-GB');
  if($('fsUpdated'))$('fsUpdated').textContent=frame?new Date(frame.receivedAt).toLocaleTimeString('en-GB'):'--:--:--';
  if($('fsObservation')){

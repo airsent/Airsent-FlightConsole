@@ -1,0 +1,12 @@
+/* Shared page navigation: identical typography across console pages. */
+.logo-menu,.logo-dropdown-menu{min-width:230px!important;background:#07111f!important;border:1px solid rgba(127,220,255,.22)!important;border-radius:8px!important;overflow:hidden!important;box-shadow:0 18px 42px #0008!important}
+.logo-menu a,.logo-dropdown-menu a{font-family:Arial,Helvetica,sans-serif!important;font-size:13px!important;font-weight:400!important;letter-spacing:.2px!important;line-height:1.2!important;padding:12px 14px!important;text-transform:uppercase!important;color:#d7e6f5!important;background:#07111f!important;text-decoration:none!important;display:block!important;border-bottom:1px solid rgba(127,220,255,.08)!important;white-space:nowrap!important}
+.logo-menu a:hover,.logo-dropdown-menu a:hover{background:#0d1b2d!important;color:#7fffd4!important}
+
+/* Screen-space sizing compensates for each page's console scaling. */
+.logo-wrap,.logo-dropdown{--nav-scale:1;position:relative!important;flex:0 0 auto!important}
+.logo-btn,.logo-dropdown-btn{display:flex!important;align-items:center!important;justify-content:flex-start!important;padding:0!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important;cursor:pointer!important}
+.logo-btn img,.logo-dropdown-btn img{width:calc(180px / var(--nav-scale))!important;height:calc(30px / var(--nav-scale))!important;max-width:none!important;max-height:none!important;min-width:0!important;object-fit:contain!important;object-position:left center!important;display:block!important}
+.logo-menu,.logo-dropdown-menu{box-sizing:border-box!important;top:calc(100% + 8px / var(--nav-scale))!important;left:0!important;width:calc(240px / var(--nav-scale))!important;min-width:calc(240px / var(--nav-scale))!important;border-radius:calc(6px / var(--nav-scale))!important;max-height:calc(80vh / var(--nav-scale));overflow-y:auto!important}
+.logo-menu a,.logo-dropdown-menu a{box-sizing:border-box!important;font-size:calc(13px / var(--nav-scale))!important;line-height:1.2!important;letter-spacing:calc(.2px / var(--nav-scale))!important;padding:calc(12px / var(--nav-scale)) calc(14px / var(--nav-scale))!important}
+.logo-btn:focus-visible,.logo-dropdown-btn:focus-visible{outline:1px solid #6ba5c1!important;outline-offset:5px!important}

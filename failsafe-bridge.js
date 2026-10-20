@@ -2,7 +2,7 @@
    Channel data is transient: no vehicle data is written to persistent storage. */
 (()=>{
   'use strict';
-  const keys=['rangefinder','of_quality','voltage','current','battery','sats','hdop','ekf_healthy','pixhawk_connected','fix_type','cam_hot','jetson_temp','front_cam_active','down_cam_active','vib_x','vib_y','vib_z'];
+  const keys=['in_air','armed','roll','pitch','yaw','alt','vspd','spd','rssi','rangefinder','of_quality','voltage','current','battery','sats','hdop','ekf_healthy','pixhawk_connected','fix_type','cam_hot','jetson_temp','front_cam_active','down_cam_active','vib_x','vib_y','vib_z'];
   const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('airsent-failsafe-trial-v1'):null;
   let latest=null;
   function publish(data,source){

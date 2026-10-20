@@ -1,0 +1,7 @@
+/* Shared browser-local activation state. Never sends aircraft commands. */
+(()=>{'use strict';const key='airsent-failsafe-activation-v1';
+function read(){try{return JSON.parse(localStorage.getItem(key)||'{}')}catch{return {}}}
+function draw(){const states=read();document.querySelectorAll('.fs-square-tile').forEach(card=>{const active=states[card.dataset.system]===true,b=card.querySelector('.fs-card-activation');card.dataset.active=String(active);if(b){b.setAttribute('aria-pressed',String(active));b.textContent=active?'DEACTIVATE':'ACTIVATE';b.setAttribute('aria-label',(active?'Deactivate ':'Activate ')+card.getAttribute('aria-label')+' local policy')}});document.querySelectorAll('[data-policy-system]').forEach(select=>{select.value=String(states[select.dataset.policySystem]===true);select.style.color=select.value==='true'?'#58df8d':'#ff6374'})}
+function save(id,active){try{const states=read();states[id]=active;localStorage.setItem(key,JSON.stringify(states));draw()}catch{alert('Activation was not saved: browser storage is unavailable.')}}
+addEventListener('DOMContentLoaded',()=>{draw();document.querySelectorAll('.fs-card-activation').forEach(b=>b.addEventListener('click',()=>save(b.closest('.fs-square-tile').dataset.system,b.getAttribute('aria-pressed')==='true')));document.querySelectorAll('[data-policy-system]').forEach(select=>select.addEventListener('change',()=>save(select.dataset.policySystem,select.value==='true')))});addEventListener('storage',event=>{if(event.key===key)draw()});
+})();

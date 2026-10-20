@@ -49,14 +49,14 @@ body.failsafe-page{background:#04080d;color:var(--text);overflow:hidden;font:14p
 }
 .failsafe-page .logo-menu a{
   display: block; padding: 8px 14px; color: #8a9bb0; text-decoration: none;
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-family: 'Share Tech Mono', monospace; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .failsafe-page .logo-menu a:hover{ background: #111720; color: #e8edf2; }
 .failsafe-page .logo-wrap:hover .logo-menu, .failsafe-page .logo-wrap:focus-within .logo-menu{ display: block; }
 
 .failsafe-page .bar-div{ width: 1px; height: 22px; background: rgba(255,255,255,0.055); margin: 0 14px; flex-shrink: 0; }
-.failsafe-page .bar-lbl{ font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #445566; }
-.failsafe-page .bar-val{ font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e8edf2; margin-left: 6px; }
+.failsafe-page .bar-lbl{ font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #445566; }
+.failsafe-page .bar-val{ font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #e8edf2; margin-left: 6px; }
 .failsafe-page .bar-val.ok{ color: #22c55e; }
 .failsafe-page .bar-val.warn{ color: #f59e0b; }
 .failsafe-page .bar-val.err{ color: #ef4444; }
@@ -64,7 +64,7 @@ body.failsafe-page{background:#04080d;color:var(--text);overflow:hidden;font:14p
 .failsafe-page .bar-right{ margin-left: auto; display: flex; align-items: center; gap: 0; }
 
 .failsafe-page .page-id{
-  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 2px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 2px;
   text-transform: uppercase; color: #445566;
   padding: 0 14px; border-right: 1px solid rgba(255,255,255,0.055);
 }
@@ -84,17 +84,17 @@ body.failsafe-page{background:#04080d;color:var(--text);overflow:hidden;font:14p
 .failsafe-page .fs-recovery{margin-top:14px}
 
 /* Use System Health's palette and font roles consistently across this page. */
-body.failsafe-page{--text:#e8edf2;--muted:#8a9bb0;--line:rgba(255,255,255,.055);--line2:rgba(255,255,255,.12);--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--cyan:#3b82f6;background:#070a0f;font-family:'IBM Plex Sans',Arial,sans-serif}
+body.failsafe-page{--text:#e8edf2;--muted:#8a9bb0;--line:rgba(255,255,255,.055);--line2:rgba(255,255,255,.12);--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--cyan:#3b82f6;background:#070a0f;font-family:'Rajdhani',Arial,sans-serif}
 .failsafe-page .fs-shell{background:#070a0f}
 .failsafe-page .fs-panel{background:#0a0e15}
-.failsafe-page .fs-panel-head{font-family:'IBM Plex Sans',Arial,sans-serif;font-weight:600;font-size:13px;letter-spacing:.6px}
-.failsafe-page .fs-rule strong,.failsafe-page h1,.failsafe-page h2,.failsafe-page p{font-family:'IBM Plex Sans',Arial,sans-serif}
-.failsafe-page .fs-kicker,.failsafe-page .fs-rule-owner,.failsafe-page .fs-rule-state,.failsafe-page .fs-group,.failsafe-page .fs-table-label,.failsafe-page .fs-selected-id,.failsafe-page .fs-subbar,.failsafe-page .fs-footer,.failsafe-page .fs-panel-head>span:last-child:not(:first-child),.failsafe-page .fs-inline-muted,.failsafe-page .fs-layers,.failsafe-page .fs-check,.failsafe-page .fs-check b,.failsafe-page .fs-mini-foot,.failsafe-page .fs-event-time,.failsafe-page .fs-live-strip,.failsafe-page .fs-incidents label,.failsafe-page select,.failsafe-page .fs-state-tag{font-family:'IBM Plex Mono',monospace}
+.failsafe-page .fs-panel-head{font-family:'Rajdhani',Arial,sans-serif;font-weight:600;font-size:13px;letter-spacing:.6px}
+.failsafe-page .fs-rule strong,.failsafe-page h1,.failsafe-page h2,.failsafe-page p{font-family:'Rajdhani',Arial,sans-serif}
+.failsafe-page .fs-kicker,.failsafe-page .fs-rule-owner,.failsafe-page .fs-rule-state,.failsafe-page .fs-group,.failsafe-page .fs-table-label,.failsafe-page .fs-selected-id,.failsafe-page .fs-subbar,.failsafe-page .fs-footer,.failsafe-page .fs-panel-head>span:last-child:not(:first-child),.failsafe-page .fs-inline-muted,.failsafe-page .fs-layers,.failsafe-page .fs-check,.failsafe-page .fs-check b,.failsafe-page .fs-mini-foot,.failsafe-page .fs-event-time,.failsafe-page .fs-live-strip,.failsafe-page .fs-incidents label,.failsafe-page select,.failsafe-page .fs-state-tag{font-family:'Share Tech Mono',monospace}
 .failsafe-page .fs-rule{color:var(--text)}
 .failsafe-page .fs-rule-state{color:var(--muted);font-size:10px;font-weight:400}
 .failsafe-page .fs-rule-state[data-severity="warning"]{color:var(--amber)}
 .failsafe-page .fs-state-tag{color:var(--muted);border-color:var(--line2);background:#0d121a}
-.failsafe-page .fs-side-note h3{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-weight:400}
+.failsafe-page .fs-side-note h3{color:var(--muted);font-family:'Share Tech Mono',monospace;font-weight:400}
 .failsafe-page .fs-group{background:#0a0e15;font-size:10px;letter-spacing:.3px;color:var(--muted)}
 .failsafe-page .fs-group[aria-pressed=true],.failsafe-page .fs-rule[aria-pressed=true]{background:#101b2c;color:var(--text)}
 .failsafe-page .fs-rule:hover{background:#0d1622}
@@ -116,6 +116,428 @@ body.failsafe-page{--text:#e8edf2;--muted:#8a9bb0;--line:rgba(255,255,255,.055);
 .failsafe-page .fs-status-legend i{font-style:normal;color:var(--muted);white-space:nowrap}
 .failsafe-page .fs-status-legend .warning{color:var(--amber)}
 .failsafe-page .fs-status-legend .fault{color:var(--red)}
-.failsafe-page #fsAck{color:var(--text);background:#0d121a;border-color:var(--line2);font-family:'IBM Plex Mono',monospace}
+.failsafe-page #fsAck{color:var(--text);background:#0d121a;border-color:var(--line2);font-family:'Share Tech Mono',monospace}
 .failsafe-page #fsAck:disabled{color:var(--muted);opacity:.45}
 .failsafe-page select{background:#0d121a}
+
+/* Launch Sequencer type system: Rajdhani titles + Share Tech Mono details. */
+body.failsafe-page{font-family:'Rajdhani',sans-serif}
+.failsafe-page .fs-rule strong{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:.5px;font-size:15px}
+.failsafe-page .fs-rule small,.failsafe-page p,.failsafe-page .fs-event-copy p,.failsafe-page #fsObservation,.failsafe-page .fs-subbar,.failsafe-page .logo-menu a{font-family:'Share Tech Mono',monospace}
+.failsafe-page .fs-rule small{font-size:11px;line-height:1.4;letter-spacing:0}
+.failsafe-page .fs-panel-head,.failsafe-page .fs-group,.failsafe-page h1,.failsafe-page h2,.failsafe-page .fs-event-copy strong{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:.5px}
+.failsafe-page .fs-group{font-size:12px}
+.failsafe-page .fs-panel-head{font-size:14px}
+.failsafe-page h1{font-size:25px}
+.failsafe-page .fs-policy-bottom button,.failsafe-page #fsAck{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:1px}
+
+/* Sensor Status variation: tiled systems and a persistent response rail. */
+.failsafe-page{--text:#e2eaf0;--muted:#7a95a8;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--green:#4ade80;--amber:#fbbf24;--red:#f87171;--cyan:#60a5fa}
+.failsafe-page .fs-shell{background:#060c12;gap:1px;padding:0;grid-template-rows:44px 36px minmax(0,1fr) 118px 25px}
+.failsafe-page .bar{margin:0;background:#0a131c}
+.failsafe-page .fs-subbar{gap:1px;padding:0}
+.failsafe-page .fs-subbar>span{background:#0a131c;border-color:var(--line)}
+.failsafe-page .fs-main{grid-template-columns:minmax(0,1fr) 410px;gap:1px}
+.failsafe-page .fs-overview{display:grid;grid-template-rows:minmax(0,1fr) 80px;min-width:0;min-height:0;gap:1px}
+.failsafe-page .fs-group-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));min-height:0;gap:1px;background:var(--line)}
+.failsafe-page .fs-sensor-card{border:0;border-top:2px solid #4b6275;background:#060c12;min-width:0;min-height:0}
+.failsafe-page .fs-sensor-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);min-height:50px}
+.failsafe-page .fs-sensor-heading h3{font:700 14px 'Rajdhani',sans-serif;letter-spacing:.6px;margin:0 0 3px;color:var(--text)}
+.failsafe-page .fs-sensor-heading>div>span{font:10px 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page .fs-count-badge{border:1px solid var(--line2);border-radius:12px;font:10px 'Share Tech Mono',monospace;color:var(--muted);padding:4px 8px;white-space:nowrap}
+.failsafe-page .fs-sensor-rows{display:flex;flex-direction:column;flex:1;min-height:0}
+.failsafe-page .fs-rule{grid-template-columns:minmax(0,1fr) 80px;padding:6px 12px;min-height:0;flex:1;border-top:0;border-bottom:1px solid var(--line);background:#060c12;gap:10px}
+.failsafe-page .fs-rule strong{font-size:14px;line-height:1.2}
+.failsafe-page .fs-rule small{font-size:10px;line-height:1.25;margin-top:4px;color:var(--muted)}
+.failsafe-page .fs-rule[aria-pressed=true]{background:#0e1a26;box-shadow:inset 3px 0 var(--cyan)}
+.failsafe-page .fs-rule:hover{background:#0a131c}
+.failsafe-page .fs-rule-state{justify-self:end;white-space:nowrap;font-size:9px;border:1px solid var(--line2);border-radius:12px;padding:3px 6px;line-height:1.2}
+.failsafe-page .fs-rule-state[data-severity=warning]{border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.05)}
+.failsafe-page .fs-overview-footer{background:#0a131c;padding:7px 12px;min-height:0}
+.failsafe-page .fs-overview-footer .fs-live-strip{margin:0;padding:0 0 7px;border-top:0;gap:24px;font-size:11px}
+.failsafe-page .fs-evidence-summary{font:9px 'Share Tech Mono',monospace;color:var(--muted);letter-spacing:.2px}
+.failsafe-page .fs-evidence-summary b{font-weight:400;color:var(--text)}
+.failsafe-page .fs-overview-note{font:9px 'Share Tech Mono',monospace;color:var(--muted);margin-top:6px}
+.failsafe-page .fs-policy{background:#060c12;border:0;border-left:1px solid var(--line)}
+.failsafe-page .fs-policy-body{padding:16px}
+.failsafe-page .fs-panel-head{background:#0a131c}
+.failsafe-page h1{font-size:23px;margin:8px 0 12px}
+.failsafe-page .fs-response-box{background:#0a131c;padding:12px;margin-top:16px}
+.failsafe-page .fs-recovery p,.failsafe-page .fs-response-box p{font-size:11px}
+.failsafe-page .fs-response-box h2{font-size:16px}
+.failsafe-page .fs-incidents{margin:0;border:0;border-top:1px solid var(--line);background:#0a131c}
+.failsafe-page .fs-event-body{padding:10px 14px}
+.failsafe-page .fs-event-time{color:var(--cyan)}
+.failsafe-page .fs-footer{background:#060c12;padding:0 12px}
+body.failsafe-page{--text:#e2eaf0;--muted:#7a95a8;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--green:#4ade80;--amber:#fbbf24;--red:#f87171;--cyan:#60a5fa}
+/* Full sensor overview with on-demand, hover/focus details. */
+.failsafe-page .fs-main{grid-template-columns:minmax(0,1fr) 220px}
+.failsafe-page .fs-overview{grid-template-rows:minmax(0,1fr) 62px}
+.failsafe-page .fs-group-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}
+.failsafe-page .fs-sensor-heading{min-height:43px;padding:6px 10px}
+.failsafe-page .fs-sensor-heading h3{font-size:13px;margin-bottom:2px}
+.failsafe-page .fs-sensor-heading>div>span{font-size:9px}
+.failsafe-page .fs-count-badge{font-size:8px;padding:3px 6px}
+.failsafe-page .fs-reading{display:flex;align-items:center;gap:7px;flex:1;min-height:0;width:100%;padding:4px 10px;border:0;border-bottom:1px solid var(--line);text-align:left;background:transparent;color:var(--muted);font:11px 'Share Tech Mono',monospace}
+.failsafe-page .fs-reading>b{margin-left:auto;font:500 12px 'Share Tech Mono',monospace;color:var(--text);white-space:nowrap}
+.failsafe-page .fs-reading>b[data-available=false]{color:var(--muted)}
+.failsafe-page .fs-reading>i{font-style:normal;color:var(--muted);font-size:10px}
+.failsafe-page .fs-reading:hover,.failsafe-page .fs-reading:focus-visible{background:#0e1a26;color:var(--text)}
+.failsafe-page .fs-status-rail{min-height:0;background:#060c12;border-left:1px solid var(--line);display:flex;flex-direction:column}
+.failsafe-page .fs-status-rail>.fs-panel-head{font-size:12px;min-height:43px}
+.failsafe-page .fs-verdict{padding:16px 12px;text-align:center;border-bottom:1px solid var(--line)}
+.failsafe-page .fs-verdict>span{display:block;font:9px 'Share Tech Mono',monospace;color:var(--muted);letter-spacing:1px}
+.failsafe-page .fs-verdict>strong{display:block;font:700 31px 'Rajdhani',sans-serif;letter-spacing:3px;color:var(--muted);margin:8px 0}
+.failsafe-page .fs-verdict>small{font:10px 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page #fsReadiness{display:flex;flex:1;flex-direction:column;min-height:0}
+.failsafe-page .fs-readiness-item{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;padding:6px 10px;border-bottom:1px solid var(--line);font:10px 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page .fs-readiness-item b{border:1px solid var(--line2);padding:3px 5px;border-radius:10px;font-size:8px;font-weight:400}
+.failsafe-page .fs-rail-note{padding:12px;font:10px/1.5 'Share Tech Mono',monospace;color:var(--muted);border-top:1px solid var(--line)}
+.failsafe-page .fs-overview-footer{padding:6px 10px}
+.failsafe-page .fs-overview-footer .fs-live-strip{padding-bottom:4px}
+.failsafe-page .fs-overview-note{display:none}
+.failsafe-page #fsPopover{position:absolute;z-index:10000;width:430px;height:auto;max-height:720px;box-shadow:0 12px 36px rgba(0,0,0,.8);border:1px solid #254358;border-top:2px solid var(--cyan);background:#0a131c;display:flex}
+.failsafe-page #fsPopover[hidden]{display:none}
+.failsafe-page #fsPopover .fs-panel-head{background:#0e1a26;font-size:12px;min-height:35px}
+.failsafe-page #fsClose{border:0;background:transparent;color:var(--text);font:20px Arial;padding:2px 7px}
+.failsafe-page #fsPopover .fs-policy-body{padding:12px;flex:none}
+.failsafe-page .fs-metric-explanation{font:11px/1.45 'Share Tech Mono',monospace;color:var(--muted);border-bottom:1px solid var(--line);padding:0 0 10px;margin-bottom:10px}
+.failsafe-page #fsPopover h1{font-size:20px;margin:6px 0}
+.failsafe-page #fsPopover .fs-detail-grid{margin-top:12px}
+.failsafe-page #fsPopover .fs-response-box{margin-top:10px;padding:10px}
+.failsafe-page #fsPopover .fs-response-box h2{font-size:15px;margin:6px 0}
+.failsafe-page #fsPopover p{font-size:10px;line-height:1.4;margin:6px 0}
+.failsafe-page #fsPopover .fs-recovery{margin:10px 0}
+.failsafe-page #fsPopover .fs-observation{margin-bottom:8px;padding-top:8px}
+.failsafe-page #fsPopover .fs-policy-bottom{padding-top:8px}
+
+/* Action options are descriptions, deliberately not command buttons. */
+.failsafe-page #fsPopover{width:520px}
+.failsafe-page #fsActions{margin-top:6px}
+.failsafe-page .fs-action-option{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:3px;padding:6px 0;border-bottom:1px solid var(--line)}
+.failsafe-page .fs-action-option:last-child{border-bottom:0}
+.failsafe-page .fs-action-option strong{font:700 13px 'Rajdhani',sans-serif;color:var(--text)}
+.failsafe-page .fs-action-option>span{font:9px 'Share Tech Mono',monospace;color:var(--amber)}
+.failsafe-page .fs-action-option small{grid-column:1 / -1;font:10px/1.3 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page #fsPopover .fs-response-box{margin-top:8px;padding:9px}
+.failsafe-page #fsPopover .fs-response-box>p{font-size:9px;line-height:1.3}
+.failsafe-page #fsPopover .fs-detail-grid{margin-top:8px}
+.failsafe-page #fsPopover .fs-recovery{margin:8px 0}
+
+/* Remove the readiness rail and tighten the on-demand detail boxes. */
+.failsafe-page .fs-main{grid-template-columns:minmax(0,1fr)}
+.failsafe-page #fsPopover{width:460px}
+.failsafe-page #fsPopover .fs-policy-body{padding:10px}
+.failsafe-page #fsPopover .fs-panel-head{min-height:30px}
+.failsafe-page #fsPopover .fs-metric-explanation{font-size:10px;padding-bottom:7px;margin-bottom:7px;line-height:1.3}
+.failsafe-page #fsPopover h1{font-size:18px;margin:4px 0}
+.failsafe-page #fsPopover .fs-detail-grid{margin-top:7px}
+.failsafe-page #fsPopover .fs-response-box{padding:7px;margin-top:7px}
+.failsafe-page #fsPopover .fs-action-option{padding:4px 0}
+.failsafe-page #fsPopover .fs-recovery{margin:6px 0}
+.failsafe-page #fsPopover .fs-observation{padding-top:6px;margin-bottom:6px}
+.failsafe-page #fsPopover p{margin:4px 0}
+.failsafe-page #fsPopover .fs-policy-bottom{padding-top:6px}
+.failsafe-page #fsPopover .fs-policy-bottom button{padding:6px 8px}
+/* Working local draft editors and a clearly scoped demo route comparison. */
+.failsafe-page #fsEditDraft,.failsafe-page #fsRouteOpen{background:#0e1a26;border:1px solid #254358;color:var(--text);padding:7px 10px;font:700 12px 'Rajdhani',sans-serif;letter-spacing:.5px}
+.failsafe-page .fs-plan-dialog{color:#e2eaf0;background:#0a131c;border:1px solid #254358;border-top:2px solid #60a5fa;width:min(600px,94vw);padding:18px;max-height:92dvh;font:12px 'Share Tech Mono',monospace}
+.failsafe-page .fs-plan-dialog::backdrop{background:rgba(0,0,0,.72)}
+.failsafe-page .fs-plan-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:10px}
+.failsafe-page .fs-plan-head h2{font:700 23px 'Rajdhani',sans-serif;margin:0}
+.failsafe-page .fs-plan-head button{background:none;color:#e2eaf0;border:0;font:24px Arial}
+.failsafe-page .fs-plan-dialog p{font:11px/1.45 'Share Tech Mono',monospace;color:#7a95a8;margin:10px 0}
+.failsafe-page .fs-plan-dialog .fs-plan-notice{color:#fbbf24;font-size:10px}
+.failsafe-page .fs-plan-dialog label{display:flex;flex-direction:column;gap:7px;color:#7a95a8;font:11px 'Share Tech Mono',monospace}
+.failsafe-page .fs-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.failsafe-page .fs-plan-dialog select,.failsafe-page .fs-plan-dialog input[type=number]{background:#060c12;color:#e2eaf0;border:1px solid #254358;padding:8px;width:100%;font:12px 'Share Tech Mono',monospace;box-sizing:border-box}
+.failsafe-page .fs-plan-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.failsafe-page .fs-plan-actions button,.failsafe-page #fsCalculateRoutes{background:#0e1a26;color:#e2eaf0;border:1px solid #254358;padding:9px;font:700 12px 'Rajdhani',sans-serif}
+.failsafe-page #fsDraftResult{min-height:25px;color:#60a5fa}
+.failsafe-page .fs-route-dialog{width:min(760px,94vw)}
+.failsafe-page .fs-energy-inputs{grid-template-columns:repeat(4,1fr)}
+.failsafe-page .fs-route-schematic{display:flex;gap:40px;align-items:center;border:1px solid #254358;padding:12px;margin:14px 0;line-height:1.8;color:#60a5fa}
+.failsafe-page .fs-plan-dialog .fs-candidate{flex-direction:row;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.failsafe-page .fs-candidate span{margin-left:auto;font-size:10px}
+.failsafe-page #fsRouteResult strong{font:700 15px 'Rajdhani',sans-serif;color:#60a5fa}
+@media(max-width:600px){.failsafe-page .fs-energy-inputs{grid-template-columns:1fr 1fr}}
+/* Custom menus avoid OS popup styling and inherit the console type system. */
+.failsafe-page .fs-select-wrap{position:relative;min-width:0;width:100%}
+.failsafe-page select.fs-native-select{position:absolute;width:1px!important;height:1px!important;opacity:0;pointer-events:none;padding:0!important;border:0!important}
+.failsafe-page .fs-select-trigger{display:block;position:relative;width:100%;padding:9px 30px 9px 10px;background:#060c12;color:#e2eaf0;border:1px solid #254358;text-align:left;font:12px 'Share Tech Mono',monospace;min-height:35px;line-height:1.35}
+.failsafe-page .fs-select-trigger::after{content:'⌄';position:absolute;right:10px;top:8px;color:#7a95a8}
+.failsafe-page .fs-select-trigger[aria-expanded=true]{border-color:#60a5fa;background:#0e1a26}
+.failsafe-page .fs-select-menu{position:absolute;z-index:20;top:calc(100% + 3px);left:0;right:0;background:#0a131c;border:1px solid #254358;box-shadow:0 10px 25px rgba(0,0,0,.6);padding:3px}
+.failsafe-page .fs-select-menu[hidden]{display:none}
+.failsafe-page .fs-select-wrap.open-up .fs-select-menu{top:auto;bottom:calc(100% + 3px)}
+.failsafe-page .fs-select-option{display:block;width:100%;text-align:left;padding:9px 10px;background:transparent;color:#7a95a8;border:0;border-bottom:1px solid rgba(255,255,255,.06);font:12px/1.35 'Share Tech Mono',monospace;white-space:normal}
+.failsafe-page .fs-select-option:last-child{border-bottom:0}
+.failsafe-page .fs-select-option[aria-selected=true]{color:#e2eaf0;background:#0e1a26;box-shadow:inset 2px 0 #60a5fa}
+.failsafe-page .fs-select-option:hover,.failsafe-page .fs-select-option.is-active{background:#132638;color:#e2eaf0}
+.failsafe-page .fs-panel-head label>.fs-select-wrap{width:200px}
+.failsafe-page .fs-panel-head .fs-select-trigger{min-height:27px;padding:5px 25px 5px 8px;font-size:10px}
+.failsafe-page .fs-panel-head .fs-select-trigger::after{top:4px}
+
+/* Custom parachute requirements remain visible without implying readiness. */
+.failsafe-page .fs-group-grid{grid-template-rows:repeat(3,minmax(0,1fr)) 88px}
+.failsafe-page .fs-parachute-card{grid-column:1 / -1;display:grid;grid-template-columns:220px minmax(0,1fr);border-top-color:#7a95a8}
+.failsafe-page .fs-parachute-card .fs-sensor-heading{border-bottom:0;border-right:1px solid var(--line);padding:9px 12px}
+.failsafe-page .fs-parachute-card .fs-sensor-rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+.failsafe-page .fs-parachute-card .fs-reading{border-right:1px solid var(--line)}
+.failsafe-page #fsEditDraft:disabled{color:var(--muted);opacity:.6;cursor:default}
+/* Half-width reading columns and button-opened, in-card controls. */
+.failsafe-page .fs-sensor-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;flex:1;min-height:0}
+.failsafe-page .fs-sensor-rows[hidden],.failsafe-page .fs-card-detail[hidden]{display:none}
+.failsafe-page .fs-reading{border-right:1px solid var(--line);padding:5px 9px;font-size:10px;min-height:0}
+.failsafe-page .fs-reading>b{font-size:11px}
+.failsafe-page .fs-reading:hover{background:transparent;color:var(--muted)}
+.failsafe-page .fs-card-toggle{white-space:nowrap;border:1px solid #254358;background:#0e1a26;color:var(--cyan);padding:5px 7px;font:700 11px 'Rajdhani',sans-serif;letter-spacing:.5px}
+.failsafe-page .fs-card-detail{display:flex;flex-direction:column;flex:1;min-height:0;padding:7px 10px;gap:5px}
+.failsafe-page .fs-inline-nav{display:flex;gap:4px;flex-wrap:wrap}
+.failsafe-page .fs-inline-nav button{border:1px solid var(--line2);background:#060c12;color:var(--muted);font:10px 'Rajdhani',sans-serif;padding:3px 5px}
+.failsafe-page .fs-inline-nav button[aria-pressed=true]{color:var(--cyan);border-color:#254358;background:#0e1a26}
+.failsafe-page .fs-inline-title{font:700 13px 'Rajdhani',sans-serif;color:var(--text)}
+.failsafe-page .fs-inline-actions{font:10px/1.4 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page .fs-inline-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
+.failsafe-page .fs-inline-footer>span{font:8px 'Share Tech Mono',monospace;color:var(--muted)}
+.failsafe-page .fs-inline-footer>button{background:#0e1a26;border:1px solid #254358;color:var(--text);font:700 11px 'Rajdhani',sans-serif;padding:4px 6px}
+.failsafe-page .fs-inline-footer>button:disabled{opacity:.4;cursor:default}
+.failsafe-page .fs-parachute-card .fs-card-detail{display:grid;grid-template-columns:1fr 1.5fr;gap:5px 15px}
+.failsafe-page .fs-parachute-card .fs-inline-footer{grid-column:2;grid-row:1 / span 2}
+.failsafe-page .fs-parachute-card .fs-inline-actions{grid-column:1 / span 2}
+.failsafe-page .fs-parachute-card .fs-inline-nav{display:none}
+.failsafe-page .fs-parachute-card .fs-inline-title{grid-column:1;grid-row:1}
+.failsafe-page .fs-parachute-card .fs-inline-actions{grid-column:1;grid-row:2;font-size:9px;line-height:1.25}
+.failsafe-page .fs-parachute-card .fs-inline-footer{grid-column:2;grid-row:1 / span 2;align-self:center}
+.failsafe-page .fs-card-detail[hidden],.failsafe-page .fs-sensor-rows[hidden]{display:none!important}
+.failsafe-page .fs-card-detail{padding:6px 9px;gap:3px}
+.failsafe-page .fs-inline-nav{gap:3px}
+.failsafe-page .fs-inline-nav button{padding:2px 4px;font-size:10px;line-height:1.2}
+.failsafe-page .fs-inline-actions{font-size:9px;line-height:1.3}
+.failsafe-page .fs-inline-footer>button{padding:3px 5px;font-size:10px}
+.failsafe-page .fs-parachute-card .fs-sensor-heading{min-width:0}
+.failsafe-page .fs-parachute-card .fs-sensor-heading>div{min-width:0}
+.failsafe-page .fs-parachute-card .fs-sensor-heading>div>span{font-size:8px;line-height:1.3}
+.failsafe-page .fs-parachute-card .fs-card-toggle{font-size:10px;padding:4px}
+
+/* Minimal square system tiles: policies rather than duplicated telemetry. */
+.failsafe-page .fs-overview{display:block;min-height:0}
+.failsafe-page .fs-overview-footer{display:none}
+.failsafe-page .fs-group-grid{height:100%;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(2,auto);align-content:center;gap:10px;padding:12px;background:transparent}
+.failsafe-page .fs-square-tile{aspect-ratio:1;min-height:0;display:flex;flex-direction:column;padding:15px;border:1px solid var(--line2);border-top:2px solid #254358;background:#060c12}
+.failsafe-page .fs-tile-number{font:10px 'Share Tech Mono',monospace;color:#4b6275;letter-spacing:2px}
+.failsafe-page .fs-square-tile h3{font:700 18px 'Rajdhani',sans-serif;letter-spacing:.6px;color:var(--text);margin:10px 0 0}
+.failsafe-page .fs-square-tile p{font:10px/1.4 'Share Tech Mono',monospace;color:var(--muted);margin:6px 0 12px;min-height:28px}
+.failsafe-page .fs-tile-buttons{display:grid;gap:6px;margin-top:auto}
+.failsafe-page .fs-tile-buttons button{text-align:left;border:1px solid #254358;background:#0e1a26;color:var(--text);font:600 12px 'Rajdhani',sans-serif;padding:7px 9px;line-height:1.2}
+.failsafe-page .fs-tile-buttons button:hover{background:#132638;border-color:var(--cyan);color:var(--cyan)}
+.failsafe-page .fs-tile-status{font:8px 'Share Tech Mono',monospace;color:var(--muted);margin-top:10px;letter-spacing:.5px}
+
+/* System-policy cards: compact hierarchy and useful policy context. */
+.failsafe-page .fs-group-grid{gap:8px;padding:10px;align-content:center}
+.failsafe-page .fs-square-tile{padding:12px 14px;position:relative;background:linear-gradient(145deg,#0b151e,#070c12 65%);border-color:#20303d;border-top-color:#497b9c;overflow:hidden}
+.failsafe-page .fs-tile-number{position:absolute;right:13px;top:14px;font-size:18px;color:#315064;letter-spacing:0}
+.failsafe-page .fs-square-tile h3{font-size:18px;margin:0 22px 0 0;line-height:1.1}
+.failsafe-page .fs-square-tile p{font-size:9px;line-height:1.3;margin:5px 0 10px;min-height:0;color:#829baa}
+.failsafe-page .fs-tile-brief{display:grid;gap:8px;border-top:1px solid #1a2934;padding-top:9px;margin-bottom:9px}
+.failsafe-page .fs-tile-brief div{display:grid;gap:3px}
+.failsafe-page .fs-tile-brief span{font:8px 'Share Tech Mono',monospace;letter-spacing:1px;color:#51768d}
+.failsafe-page .fs-tile-brief strong{font:500 11px/1.25 'Rajdhani',sans-serif;color:#c0ced8}
+.failsafe-page .fs-tile-buttons{gap:4px;margin-top:auto}
+.failsafe-page .fs-tile-buttons button{padding:5px 8px;background:#0c1b28;border-color:#27445a;font-size:11px;display:flex;align-items:center;justify-content:space-between}
+.failsafe-page .fs-tile-buttons button::after{content:'↗';color:#5b9fcb;font:12px monospace}
+.failsafe-page .fs-tile-status{font-size:7px;margin-top:7px;color:#607f94}
+.failsafe-page .fs-square-tile:hover{border-color:#3b6581}
+
+.failsafe-page .fs-editing{border-color:#5499c7}
+.failsafe-page .fs-editing> :not(.fs-embedded-editor){visibility:hidden}
+.failsafe-page .fs-embedded-editor[open]{display:block;position:absolute;inset:0;width:100%;height:100%;max-height:none;margin:0;padding:12px;box-sizing:border-box;border:0;background:#0a141e;overflow:auto;z-index:3}
+.failsafe-page .fs-embedded-editor .fs-plan-head{gap:5px;padding-bottom:7px}
+.failsafe-page .fs-embedded-editor h2{font:700 17px 'Rajdhani',sans-serif;margin:0}
+.failsafe-page .fs-embedded-editor .fs-plan-head button{font-size:17px;padding:0 4px}
+.failsafe-page .fs-embedded-editor p{font-size:9px;line-height:1.3;margin:7px 0;min-height:0}
+.failsafe-page .fs-embedded-editor .fs-plan-notice{font-size:7px}
+.failsafe-page .fs-embedded-editor label{font-size:9px;gap:4px}
+.failsafe-page .fs-embedded-editor .fs-plan-actions{gap:4px;flex-wrap:wrap;margin-top:9px}
+.failsafe-page .fs-embedded-editor .fs-plan-actions button{font-size:10px;padding:5px}
+.failsafe-page .fs-embedded-editor .console-select-trigger{font-size:10px;padding:6px}
+.failsafe-page .fs-embedded-editor input[type=number]{font-size:10px;padding:4px}
+.failsafe-page .fs-embedded-editor #fsDraftConditions{color:#7891a5}
+
+/* Embedded selectors expand in the card instead of overlaying its edges. */
+.failsafe-page .fs-embedded-editor .fs-select-wrap{min-width:0;width:100%}
+.failsafe-page .fs-embedded-editor .fs-select-trigger{width:100%;min-height:32px;padding:7px 23px 7px 8px;font:600 12px/1.25 'Rajdhani',sans-serif;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.failsafe-page .fs-embedded-editor .fs-select-menu,.failsafe-page .fs-embedded-editor .fs-select-wrap.open-up .fs-select-menu{position:relative;inset:auto;width:100%;max-height:116px;overflow-y:auto;margin:4px 0 0;box-sizing:border-box;box-shadow:none}
+.failsafe-page .fs-embedded-editor .fs-select-option{padding:7px 8px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font:600 12px/1.2 'Rajdhani',sans-serif;white-space:normal;overflow-wrap:anywhere}
+.failsafe-page .fs-embedded-editor .fs-select-option small{font:8px/1.2 'Share Tech Mono',monospace;color:#7c9bae}
+.failsafe-page .fs-embedded-editor .fs-plan-actions button{font-size:10px;padding:5px 6px}
+
+/* Evidence-based system status lights. Gray means no status evidence. */
+.failsafe-page .fs-status-light{position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:#53616e;border:1px solid #83909b;box-shadow:0 0 0 3px #53616e18}
+.failsafe-page .fs-status-light[data-state=healthy]{background:#36df80;border-color:#85f5af;box-shadow:0 0 8px #36df8070}
+.failsafe-page .fs-status-light[data-state=warning]{background:#f5bf35;border-color:#ffe08a;box-shadow:0 0 8px #f5bf3570}
+.failsafe-page .fs-status-light[data-state=fault]{background:#f05264;border-color:#ff9da8;box-shadow:0 0 8px #f0526470}
+.failsafe-page .fs-tile-number{right:28px;top:10px;font-size:13px}
+
+.failsafe-page .fs-group-grid{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:repeat(2,auto)}
+.failsafe-page .fs-square-tile h3{font-size:16px}
+.failsafe-page .fs-tile-brief{gap:5px;padding-top:6px;margin-bottom:6px}
+.failsafe-page .fs-square-tile p{margin-bottom:6px}
+.failsafe-page .fs-square-tile{padding:10px}
+
+.failsafe-page #fsMotorEditor{display:grid;gap:6px}.failsafe-page #fsMotorEditor[hidden]{display:none}
+
+/* Three columns, four rows; compact cards keep the overview on one screen. */
+.failsafe-page .fs-group-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));align-content:stretch}
+.failsafe-page .fs-square-tile{aspect-ratio:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.85fr);grid-template-rows:auto auto 1fr auto;column-gap:12px;padding:9px 12px}
+.failsafe-page .fs-square-tile h3{grid-column:1;grid-row:1;font-size:16px}
+.failsafe-page .fs-square-tile>p{grid-column:1;grid-row:2;margin:3px 0 5px;font-size:8px}
+.failsafe-page .fs-tile-brief{grid-column:1;grid-row:3;gap:4px;margin:0;padding-top:5px}
+.failsafe-page .fs-tile-brief span{font-size:7px}
+.failsafe-page .fs-tile-brief strong{font-size:10px;line-height:1.15}
+.failsafe-page .fs-tile-buttons{grid-column:2;grid-row:2/4;align-self:center;width:100%;margin:0}
+.failsafe-page .fs-tile-buttons button{font-size:11px;padding:6px}
+.failsafe-page .fs-tile-status{grid-column:1/3;grid-row:4;margin-top:4px;font-size:7px}
+.failsafe-page .fs-embedded-editor #fsDraftForm{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px}
+.failsafe-page .fs-embedded-editor .fs-plan-head{grid-column:1/3}
+.failsafe-page .fs-embedded-editor .fs-plan-notice{display:none}
+.failsafe-page .fs-embedded-editor #fsDraftRule{grid-column:1;margin:0}
+.failsafe-page .fs-embedded-editor #fsGenericEditor{grid-column:1;grid-row:3/6}
+.failsafe-page .fs-embedded-editor #fsDraftConditions{grid-column:2;grid-row:2/4;margin:0}
+.failsafe-page .fs-embedded-editor .fs-plan-actions{grid-column:2;grid-row:4;margin:0}
+.failsafe-page .fs-embedded-editor #fsDraftResult{grid-column:1/3}
+.failsafe-page .fs-embedded-editor #fsBatteryEditor{grid-column:1/3}
+
+/* Scrollable 3 × 4 overview, with two rows visible at a time. */
+.failsafe-page .fs-group-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:calc((100% - 28px)/2);overflow-y:auto;overflow-x:hidden;align-content:start;scrollbar-width:thin;scrollbar-color:#34566d #080f16}
+.failsafe-page .fs-square-tile{display:flex;flex-direction:column;padding:14px;aspect-ratio:auto}
+.failsafe-page .fs-square-tile h3{font-size:18px}
+.failsafe-page .fs-square-tile>p{font-size:10px;margin:5px 0 10px}
+.failsafe-page .fs-tile-brief{gap:8px;padding-top:9px;margin-bottom:10px}
+.failsafe-page .fs-tile-brief span{font-size:8px}
+.failsafe-page .fs-tile-brief strong{font-size:12px;line-height:1.3}
+.failsafe-page .fs-tile-buttons{margin-top:auto;align-self:stretch}
+.failsafe-page .fs-tile-buttons button{font-size:12px;padding:7px 9px}
+.failsafe-page .fs-tile-status{font-size:8px;margin-top:7px}
+.failsafe-page .fs-embedded-editor #fsDraftForm{display:block}
+.failsafe-page .fs-embedded-editor .fs-plan-notice{display:block}
+.failsafe-page .fs-embedded-editor #fsDraftConditions{margin:7px 0}
+.failsafe-page .fs-embedded-editor .fs-plan-actions{margin-top:9px}
+
+/* Balanced single-screen overview: twelve cards, four columns by three rows. */
+.failsafe-page .fs-group-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));grid-auto-rows:auto;overflow:hidden;align-content:stretch;gap:8px;padding:10px}
+.failsafe-page .fs-square-tile{padding:10px 12px;min-width:0;min-height:0}
+.failsafe-page .fs-square-tile h3{font-size:16px;line-height:1.1;margin-right:30px}
+.failsafe-page .fs-square-tile>p{font-size:8px;line-height:1.25;margin:3px 0 6px}
+.failsafe-page .fs-tile-brief{gap:5px;padding-top:6px;margin-bottom:6px}
+.failsafe-page .fs-tile-brief span{font-size:7px;letter-spacing:.8px}
+.failsafe-page .fs-tile-brief strong{font-size:10px;line-height:1.2}
+.failsafe-page .fs-tile-buttons{gap:4px;margin-top:auto}
+.failsafe-page .fs-tile-buttons button{font-size:11px;padding:5px 7px;line-height:1.15}
+.failsafe-page .fs-tile-status{font-size:7px;margin-top:5px}
+.failsafe-page .fs-status-light{top:11px;right:11px}
+.failsafe-page .fs-tile-number{top:9px;right:27px;font-size:12px}
+
+/* Larger card typography without changing the single-screen grid. */
+.failsafe-page .fs-square-tile h3{font-size:18px}
+.failsafe-page .fs-square-tile>p{font-size:10px;line-height:1.25}
+.failsafe-page .fs-tile-brief span{font-size:9px}
+.failsafe-page .fs-tile-brief strong{font-size:13px;line-height:1.2}
+.failsafe-page .fs-tile-buttons button{font-size:13px;padding:5px 8px}
+.failsafe-page .fs-tile-status{font-size:8px}
+.failsafe-page .fs-embedded-editor h2{font-size:19px}
+.failsafe-page .fs-embedded-editor p{font-size:11px}
+.failsafe-page .fs-embedded-editor label{font-size:11px}
+.failsafe-page .fs-embedded-editor .fs-select-trigger,.failsafe-page .fs-embedded-editor .fs-select-option{font-size:14px}
+.failsafe-page .fs-embedded-editor .fs-select-option small{font-size:10px}
+.failsafe-page .fs-embedded-editor .fs-plan-actions button{font-size:12px}
+
+/* Logo-only top header; retain the separate policy/status bar beneath it. */
+.failsafe-page .bar>:not(.logo-wrap){display:none!important}
+.failsafe-page .bar{border-bottom:1px solid #20303d}
+
+.failsafe-page .fs-auto-bar{display:flex;align-items:center;gap:16px;padding:7px 12px;background:#0a141d;border:1px solid #20303d;font:11px 'Share Tech Mono',monospace}
+.failsafe-page .fs-auto-bar strong{font:700 14px 'Rajdhani',sans-serif;letter-spacing:1px}
+.failsafe-page #fsAutoToggle{min-width:58px;padding:5px 12px;background:#111d28;border:1px solid #405568;color:#a4b5c3;font:700 13px 'Rajdhani',sans-serif;cursor:pointer}
+.failsafe-page #fsAutoToggle[aria-checked=true]{background:#123324;color:#74eea2;border-color:#45ca7d}
+.failsafe-page .fs-auto-note{margin-left:auto;color:#627f92;font-size:9px}
+.failsafe-page #fsAutoSummary{color:#91a8b8}
+.failsafe-page #fsAutoSummary[data-fault=true]{color:#ff6578}
+.failsafe-page .fs-square-tile.fs-monitor-on{border-top:2px solid #72e99b;box-shadow:inset 0 6px 14px -12px #72e99b}
+.failsafe-page .fs-square-tile.fs-emergency{animation:fs-emergency-flash 1s steps(2,end) infinite}
+@keyframes fs-emergency-flash{0%,100%{border-top-color:#ff4058;box-shadow:inset 0 10px 18px -8px #ff405880}50%{border-top-color:#722531;box-shadow:none}}
+@media(prefers-reduced-motion:reduce){.failsafe-page .fs-square-tile.fs-emergency{animation:none;border-top-color:#ff4058}}
+
+/* ASC status is shown only along the top edge. */
+.failsafe-page .fs-auto-bar{border-top:2px solid #20303d}
+.failsafe-page .fs-auto-bar.fs-asc-on{border-top-color:#72e99b}
+.failsafe-page .fs-auto-bar.fs-asc-emergency{animation:fs-asc-line-flash 1s steps(2,end) infinite}
+@keyframes fs-asc-line-flash{0%,100%{border-top-color:#ff4058}50%{border-top-color:#722531}}
+@media(prefers-reduced-motion:reduce){.failsafe-page .fs-auto-bar.fs-asc-emergency{animation:none;border-top-color:#ff4058}}
+
+/* Neutral ASC control with color carried by its ON/OFF label only. */
+.failsafe-page #fsAutoToggle,.failsafe-page #fsAutoToggle[aria-checked=true]{background:#0a141d;border:1px solid #304353;box-shadow:none}
+.failsafe-page #fsAutoToggle[aria-checked=true]{color:#55e68e}
+.failsafe-page #fsAutoToggle[aria-checked=false]{color:#ff596e}
+
+/* Card health presentation is independent of the ASC switch. */
+.failsafe-page .fs-square-tile,.failsafe-page .fs-square-tile.fs-monitor-on{border-top:2px solid #72e99b;box-shadow:none}
+.failsafe-page .fs-square-tile.fs-card-caution{border-top-color:#f5bf35}
+.failsafe-page .fs-square-tile.fs-emergency{border-top-color:#ff4058}
+.failsafe-page .fs-card-footer{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:5px}
+.failsafe-page .fs-card-footer .fs-tile-status{margin:0;font-size:7px}
+.failsafe-page .fs-card-activation{background:#0a141d;border:1px solid #314453;color:#58df8d;font:700 10px 'Rajdhani',sans-serif;padding:3px 8px;cursor:pointer;white-space:nowrap}
+.failsafe-page .fs-card-activation[aria-pressed=true]{color:#ff6374}
+
+/* Place activation beside the policy information on the right. */
+.failsafe-page .fs-card-activation{position:absolute;right:12px;top:74px;min-width:76px;padding:5px 8px;font-size:11px}
+.failsafe-page .fs-tile-brief{padding-right:90px}
+.failsafe-page .fs-card-footer{justify-content:flex-start}
+
+/* Remove repeated card footer labels; page-level trial context remains. */
+.failsafe-page .fs-card-footer .fs-tile-status{display:none}
+.failsafe-page .fs-card-footer{margin-top:0;min-height:0;height:0}
+
+.failsafe-page .fs-fault-counter{display:flex;gap:9px;align-items:center;padding:4px 10px;border-left:1px solid #263846;color:#91a8b8;font:11px 'Share Tech Mono',monospace}
+.failsafe-page .fs-fault-counter b{font-size:13px;color:#d9e4ec}
+.failsafe-page .fs-fault-counter.fs-multiple-faults,.failsafe-page .fs-fault-counter.fs-multiple-faults b{color:#ffab45}
+
+/* Prominent, readable fault counter in the ASC strip. */
+.failsafe-page .fs-fault-counter{gap:12px;padding:4px 14px;border:1px solid #466075;background:#122332;color:#c6d9e7;font:700 14px 'Rajdhani',sans-serif;letter-spacing:1.2px;min-width:110px;justify-content:space-between}
+.failsafe-page .fs-fault-counter b{font:700 23px/1 'Rajdhani',sans-serif;color:#f1f6fa}
+.failsafe-page .fs-fault-counter.fs-multiple-faults{border-color:#e49232;background:#342313;color:#ffb75c}
+.failsafe-page .fs-fault-counter.fs-multiple-faults b{color:#ffb75c}
+.failsafe-page #fsAutoSummary{font-size:12px;letter-spacing:.5px}
+
+/* Fault count follows the console's flat status-bar styling. */
+.failsafe-page .fs-fault-counter{min-width:0;gap:10px;padding:3px 16px;border:0;border-left:1px solid #263846;border-right:1px solid #263846;background:transparent;color:#9bb3c4;font:12px 'Share Tech Mono',monospace;letter-spacing:1px}
+.failsafe-page .fs-fault-counter b{font:20px/1 'Share Tech Mono',monospace;color:#e4eef5}
+.failsafe-page .fs-fault-counter.fs-multiple-faults{background:transparent;border-color:#263846;color:#ffab45}
+.failsafe-page .fs-fault-counter.fs-multiple-faults b{color:#ffab45}
+
+/* Full-height systems view, without the incident-review panel or footer. */
+.failsafe-page .fs-incidents,.failsafe-page .fs-footer{display:none}
+.failsafe-page .fs-shell{grid-template-rows:44px 38px minmax(0,1fr)}
+
+/* Clearer typography, larger actions, and activation-driven top edge. */
+.failsafe-page .fs-tile-number,.failsafe-page .fs-status-light{display:none}
+.failsafe-page .fs-square-tile h3{font-size:21px;margin-right:0}
+.failsafe-page .fs-square-tile>p{font-size:11px;margin:5px 0 9px;line-height:1.3}
+.failsafe-page .fs-tile-brief span{font-size:10px}
+.failsafe-page .fs-tile-brief strong{font-size:15px;line-height:1.25}
+.failsafe-page .fs-tile-brief{gap:8px}
+.failsafe-page .fs-tile-buttons button{font-size:15px;padding:8px 10px;min-height:32px}
+.failsafe-page .fs-card-activation{font-size:12px;padding:6px 9px;top:84px}
+.failsafe-page .fs-square-tile[data-active=false],.failsafe-page .fs-square-tile[data-active=false].fs-monitor-on{border-top-color:#f15e70;box-shadow:none}
+.failsafe-page .fs-square-tile[data-active=true],.failsafe-page .fs-square-tile[data-active=true].fs-monitor-on{border-top-color:#72e99b;box-shadow:none}
+.failsafe-page .fs-square-tile.fs-emergency{animation:fs-emergency-flash 1s steps(2,end) infinite}
+
+/* The visible toggle is the source of truth for activation color. */
+.failsafe-page .fs-square-tile:has(.fs-card-activation[aria-pressed="false"]){border-top-color:#f15e70!important;box-shadow:none}
+.failsafe-page .fs-square-tile:has(.fs-card-activation[aria-pressed="true"]){border-top-color:#72e99b!important;box-shadow:none}
+
+/* ASC top line is red while off, green while on. */
+.failsafe-page .fs-auto-bar{border-top-color:#f15e70}
+.failsafe-page .fs-auto-bar.fs-asc-on{border-top-color:#72e99b}
+
+.fs-asc-lock{color:#e2eaf0;background:#0a131c;border:1px solid #34536b;border-top:2px solid #60a5fa;width:min(420px,90vw);padding:20px;font:13px 'Share Tech Mono',monospace}.fs-asc-lock::backdrop{background:#000b}.fs-asc-lock h2{font:700 23px 'Rajdhani',sans-serif;margin:0}.fs-asc-lock label{display:grid;gap:7px;margin:14px 0}.fs-asc-lock input{background:#060c12;color:#e2eaf0;border:1px solid #34536b;padding:10px;font:16px monospace}.fs-asc-lock button{background:#102231;border:1px solid #34536b;color:#e2eaf0;padding:8px 12px;cursor:pointer}.fs-asc-lock p{color:#8da8ba;font-size:11px;line-height:1.5}.fs-asc-lock label[hidden]{display:none}

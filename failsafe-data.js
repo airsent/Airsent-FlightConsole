@@ -16,3 +16,40 @@ const FAILSAFE_RULES = [
 ['Camera / thermal degradation','Sensor frame age, CPU temperature, process health','Companion','Distinguish video loss from navigation-sensor loss','Thresholds and sensor dependencies must be verified on this vehicle.','Healthy sustained readings; inspect root cause.'],
 ['Optical-flow degradation','Optical-flow quality, freshness and active EKF source','Flight controller','Use verified fallback when flow-dependent navigation degrades','Quality is available. Active EKF source, measurement age and calibrated quality limits are not yet exposed; do not treat flow loss as rangefinder failure.','Stable flow measurements or a confirmed alternate navigation source.','SOFTWARE NEEDED'],
 ['Downward camera loss / frozen frames','Downward frame updates and detection freshness','Companion + FC','Report landing-vision loss to the onboard landing policy','Camera-active flag exists, but a cached image can remain after capture stops. Frame sequence and acquisition timestamps are required before freeze detection can be verified.','New frames and fresh target detections; landing recovery checked for the current altitude.','SOFTWARE NEEDED']];
+
+// Custom parachute hardware and control architecture are not yet defined.
+FAILSAFE_RULES.push(['Parachute emergency recovery','Deployment trigger, usable height, release power and motor-stop sequence','Dedicated controller / FC — undecided','Validate emergency sequence before enabling deployment','Hardware is not designed yet. Motor stop and release must execute onboard; a browser acknowledgment is not evidence that motors stopped or the canopy opened.','No automatic restart after deployment; inspect, recover and reset under an approved procedure.','DESIGN REQUIRED']);
+// Candidate responses only. Actual availability depends on firmware, mode,
+// configured parameters and vehicle state; these labels never issue commands.
+const FAILSAFE_ACTIONS = {
+  0:[['Return home / SmartRTL','Onboard option','Valid navigation, home / recorded path and energy required.'],['Controlled landing','Onboard option','Configured RC-loss action; landing area must be assessed.']],
+  1:[['Return home / SmartRTL','Onboard option','Requires an enabled GCS failsafe and valid navigation.'],['Controlled landing','Onboard option','Alternative configured GCS-loss response.'],['Expire remote input','Software needed','Companion must detect end-to-end operator loss.']],
+  2:[['Return on low battery','Onboard option','Calibrated low threshold and sufficient return energy.'],['Land on critical battery','Onboard option','Separate critical threshold; verify configured priority.']],
+  3:[['Land using configured EKF response','Onboard option','Depends on estimator health, firmware and flight mode.'],['Pilot takeover in a suitable mode','Pilot action','Trained pilot, working RC and usable attitude / height control.']],
+  4:[['Fence recovery / return','Onboard option','Requires uploaded fence, configured action and navigation.'],['Controlled landing fallback','Onboard option','Only if supported and selected by the vehicle policy.']],
+  5:[['Retry target acquisition','Onboard option','Verified precision-landing integration and retry configuration.'],['Land normally or remain hovering','Onboard option','PLND_STRICT, altitude and retry limits determine behavior.'],['Divert to approved alternate','Software needed','Validated route, navigation and remaining energy.']],
+  6:[['Block forward motion','Existing code','Only the current forward-velocity path is covered.'],['Gate sensor-dependent navigation','Software needed','Requires valid sensor coverage and onboard fallback.']],
+  7:[['Expire stale setpoints','Software needed','Independent command-age watchdog on companion.'],['Use onboard link-loss fallback','Onboard option','Must detect the lost source; repeated stale sends can mask loss.']],
+  8:[['Use onboard vibration mitigation','Onboard option','Verify firmware settings; this does not imply a mode change.'],['Pilot recovery / landing assessment','Pilot action','Review estimator stability and available control.']],
+  9:[['Use terrain-loss response','Onboard option','Relevant only when the selected mode depends on terrain.'],['Use a verified alternate mission profile','Software needed','Validated altitude reference and obstacle-clearance plan.']],
+  10:[['Onboard crash disarm','Onboard option','Only when aircraft crash-check criteria are met.'],['Block restart pending inspection','Operational rule','Inspect aircraft before a deliberate re-arm workflow.']],
+  11:[['Prevent arming','Onboard option','Keep required pre-arm checks enabled; resolve reported faults.'],['Cancel launch sequence','Software needed','Console launch gate must follow actual aircraft check results.']],
+  12:[['Use configured height-source fallback','Onboard option','Depends on mode, sensor validity and estimator setup.'],['Gate precision descent / retry','Software needed','Phase-aware policy; not an unconditional hover command.']],
+  13:[['Leave camera-dependent operation','Software needed','Requires an approved fallback and healthy navigation sources.'],['Report thermal / camera failure','Observation','An alert alone does not execute aircraft protection.']],
+  14:[['Use verified alternate navigation source','Onboard option','Alternate source must be configured, healthy and supported.'],['Pilot recovery / controlled landing','Conditional option','Use approved mode-specific policy; no automatic RTL assumption.']],
+  15:[['Report landing-vision loss','Software needed','Needs fresh-frame detection and onboard landing integration.'],['Retry / use configured target-loss response','Onboard option','Only after integration; altitude and PLND_STRICT matter.']]
+};
+
+FAILSAFE_ACTIONS[16]=[
+ ['Validate deployment conditions','Design requirement','Define trigger authority, usable-height envelope and safety interlocks.'],
+ ['Coordinate motor stop and release','Design requirement','Define onboard sequencing, timing and failure handling; no browser-dependent delay.'],
+ ['Verify deployment and prevent restart','Design requirement','Separate requested release, actuator feedback and canopy confirmation.']
+];
+
+FAILSAFE_RULES.push(['Return to home','Home validity, navigation, energy and clearance','Flight controller','Climb if below configured return height, then return home','Return height is relative to home; requires verified clearance, flight limits and sufficient energy. Never automatically climb to the aircraft maximum.','Verify arrival and configured landing behavior.']);
+FAILSAFE_ACTIONS[17]=[['Climb to return height, then return home','Local test','If already above return height, do not descend solely for the return. Requires verified onboard RTL behavior.']];
+FAILSAFE_RULES.push(['Back camera loss','Rear-camera frame validity','Companion','Use approved vision-loss response','Rear camera hardware and telemetry are not verified; existing down camera is not a back camera.','Verify rear-camera integration before enabling.']);
+FAILSAFE_ACTIONS[18]=[['Report rear camera unavailable','Observation','No verified rear-camera integration.'],['Use approved camera-loss fallback','Integration required','Requires onboard integration and validated fallback.']];
+
+FAILSAFE_RULES.push(['Motor protection','Individual ESC / motor fault evidence','Flight controller','Review motor-specific recovery','PWM output alone does not prove a motor is running. Recovery depends on aircraft capability and validated onboard logic.','Land and inspect before restart.']);
+FAILSAFE_ACTIONS[19]=[['Alert operator','Observation','Report a detected motor fault.'],['Request validated landing recovery','Integration required','Requires supported aircraft recovery and onboard validation.'],['Escalate to emergency recovery review','Operational review','No automatic parachute or motor-stop command.']];
