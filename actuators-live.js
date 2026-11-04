@@ -15,7 +15,7 @@
     });
     const all = motors.every(m => m.live && finite(m.output));
     const outputs = motors.map(m => m.output);
-    return {feed, link, motors, average:all ? outputs.reduce((a,b)=>a+b,0)/4 : null,
+    return {feed, fc:feed && data.pixhawk_connected === true, link, motors, average:all ? outputs.reduce((a,b)=>a+b,0)/4 : null,
       spread:all ? Math.max(...outputs)-Math.min(...outputs) : null};
   }
   globalThis.AirsentActuatorView = {model};
@@ -35,6 +35,7 @@
   const summary=document.querySelector('.summary-chip.ok');
   if(summary) { summary.classList.remove('ok');summary.textContent='WAITING FOR TELEMETRY';summary.id='actuatorLiveState'; }
   document.querySelectorAll('.motor-card').forEach((card,i)=>{
+    const title=card.querySelector('.motor-card-title');if(title) {title.textContent=`M${i+1} / D${i+1}`;title.title='Confirm Datalink slot to motor mapping during individual motor tests';}
     const metrics=document.createElement('div');metrics.className='esc-metrics';
     metrics.innerHTML=`<div>RPM <b id="escRpm${i+1}">--</b></div><div>ESC INPUT <b id="escInput${i+1}">--</b></div><div>VOLTAGE <b id="escVoltage${i+1}">--</b></div><div>CURRENT <b id="escCurrent${i+1}">--</b></div><div>ESC D${i+1} <b id="escState${i+1}">NO DATA</b></div>`;
     card.insertBefore(metrics,card.querySelector('canvas'));
@@ -51,11 +52,11 @@
   }
   function render(data, fresh, append) {
     const view=model(data,fresh);
-    text('actuatorLiveState',view.feed ? (data.armed ? 'ARMED' : 'DISARMED') : 'TELEMETRY OFFLINE');
-    text('summaryMode',view.feed ? data.flight_mode||'--' : '--');
+    text('actuatorLiveState',!view.feed ? 'TELEMETRY OFFLINE' : !view.fc ? 'PIXHAWK OFFLINE' : data.armed ? 'ARMED' : 'DISARMED');
+    text('summaryMode',view.fc ? data.flight_mode||'--' : '--');
     if(el('flightModeSelect') && view.feed) el('flightModeSelect').value=data.flight_mode;
-    if(el('statusSelect')) el('statusSelect').value=view.feed&&data.armed ? 'armed' : 'disarmed';
-    text('topVoltage',format(view.feed ? data.voltage : null,'V',1));text('topCurrent',format(view.feed ? data.current : null,'A',1));text('topBattery',format(view.feed&&data.battery>=0 ? data.battery : null,'%'));
+    if(el('statusSelect')) { if(!el('statusSelect').querySelector('option[value="unknown"]')) { const option=document.createElement('option');option.value='unknown';option.textContent='NO FC DATA';el('statusSelect').appendChild(option); } el('statusSelect').value=!view.fc ? 'unknown' : data.armed ? 'armed' : 'disarmed'; }
+    text('topVoltage',format(view.fc ? data.voltage : null,'V',1));text('topCurrent',format(view.fc ? data.current : null,'A',1));text('topBattery',format(view.fc&&data.battery>=0 ? data.battery : null,'%'));
     for(const id of ['avgMotorOutput','summaryAverage','diagAverage']) text(id,format(view.average,'%'));
     for(const id of ['motorSpread','summarySpread','diagSpread']) text(id,format(view.spread,'%'));
     for(const id of ['throttlePercent','summaryThrottle']) text(id,'--'); // No unreported collective throttle estimate.
@@ -91,5 +92,5 @@
     ws.onclose=ws.onerror=()=>reconnect(ws);
   }
   setInterval(()=>{if(socket&&Date.now()-(lastReceived||started)>(lastReceived?maxAge:5000))reconnect(socket);else if(lastReceived)render(latest,true,false);},500);
-  render({},false,false);connect();
+  text('missionTime','--:--:--');render({},false,false);connect();
 })();
