@@ -25,6 +25,7 @@
       return;
     }
     const d = snapshot, state = d.state;
+    byId("launchMiniPanel")?.classList.toggle("has-countdown-message", state === "abort" || state === "hold");
     window.airsentRenderSharedCountdown?.(d);
     const remaining = d.remaining, elapsed = d.launchElapsed;
     clock.textContent = (state === 'launch' && !launchPage ? 'T+' : '') + format(state === 'launch' ? elapsed : remaining);

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent Flight Console</title>
 <link rel="stylesheet" href="styles.css?v=countdown-2">
-<link rel="stylesheet" href="countdown-card.css?v=1">
+<link rel="stylesheet" href="countdown-card.css?v=2">
 <style>
 .lbtn-reset { border-color:rgba(127,220,255,.4); color:#7fdcff; background:rgba(127,220,255,.06); }
 .lbtn-reset:hover { background:rgba(127,220,255,.15); }
@@ -770,7 +770,10 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
       else                         { fb.textContent = ''; }
     }
  
-    if (panel) panel.classList.toggle('alert', state === 'abort');
+    if (panel) {
+      panel.classList.toggle('alert', state === 'abort');
+      panel.classList.toggle('has-countdown-message', state === 'abort' || state === 'hold');
+    }
     var hb = el('lmHandoverBadge');
     if (hb) hb.style.display = (state === 'counting' || state === 'hold' || state === 'launch') && handoverFired ? '' : 'none';
  
@@ -1135,6 +1138,6 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   connectDownCam();
 })();
 </script>
-<script src="shared-countdown.js?v=1"></script>
+<script src="shared-countdown.js?v=2"></script>
 </body>
 </html>

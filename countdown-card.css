@@ -12,7 +12,7 @@ body.dashboard-fixed .launch-clock-row {
   overflow: visible !important;
 }
 body.dashboard-fixed .launch-clock {
-  font-size: 30px !important;
+  font-size: 32px !important;
   line-height: 1.05 !important;
 }
 body.dashboard-fixed .launch-status-badge {
@@ -53,4 +53,16 @@ body.dashboard-fixed .launch-btn-row .launch-mini-btn {
   height: 34px !important;
   font-size: 9px !important;
   letter-spacing: .35px !important;
+}
+
+/* Center the normal clock in the space above the controls; lift for notices. */
+body.dashboard-fixed .launch-clock-row {
+  transform: translateY(10px);
+  transition: transform 180ms ease;
+}
+body.dashboard-fixed .has-countdown-message .launch-clock-row {
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.dashboard-fixed .launch-clock-row { transition: none; }
 }
