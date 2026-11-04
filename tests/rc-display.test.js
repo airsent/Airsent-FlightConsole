@@ -15,12 +15,17 @@ context.updateSignalIndicators(valid,true);
 assert.equal(elements.get('rssiVal').innerText,'100%');
 for (const overrides of [
   {connected:false}, {connected:undefined}, {source:'RADIO_STATUS'},
-  {age:3}, {age:-1}, {health_age:3}, {health_age:undefined}, {percent:255}
+  {age:3}, {age:-1}, {health_age:3}, {health_age:undefined}
 ]) {
   context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,...overrides}},true);
   assert.equal(elements.get('rssiVal').innerText,'--',JSON.stringify(overrides));
   assert.equal(elements.get('rcTelemetryState').textContent,'NO SIGNAL');
 }
+context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,percent:null}},true);
+assert.equal(elements.get('rssiVal').innerText,'--');
+assert.equal(elements.get('rcTelemetryState').textContent,'RC CONNECTED');
+context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,percent:null,connected:false}},true);
+assert.equal(elements.get('rcTelemetryState').textContent,'NO SIGNAL');
 context.updateSignalIndicators(valid,false);
 assert.equal(elements.get('rssiVal').innerText,'--');
 context.updateSignalIndicators({...valid,pixhawk_connected:false},true);

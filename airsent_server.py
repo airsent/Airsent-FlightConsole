@@ -99,6 +99,7 @@ class RCSignalMonitor:
         self.sample_at = None
         self.health_at = None
         self.healthy = False
+        self.has_channels = False
 
     def update(self, msg, now):
         kind = msg.get_type()
@@ -112,6 +113,7 @@ class RCSignalMonitor:
                 self.percent = None
                 self.sample_at = None
         elif kind == 'RC_CHANNELS':
+            self.has_channels = getattr(msg, 'chancount', 0) > 0
             value = getattr(msg, 'rssi', 255)
             # Unknown RSSI and absent channels invalidate the previous sample immediately.
             self.percent = round(value * 100 / 254) if 0 <= value <= 254 and getattr(msg, 'chancount', 0) > 0 else None
@@ -122,7 +124,7 @@ class RCSignalMonitor:
         health_age = now - self.health_at if self.health_at is not None else None
         connected = bool(pixhawk_connected and self.healthy and health_age is not None
                          and 0 <= health_age < 3 and age is not None and 0 <= age < 3
-                         and self.percent is not None and self.percent > 0)
+                         and self.has_channels)
         return {'percent': self.percent if connected else None, 'connected': connected,
                 'age': age, 'health_age': health_age, 'source': 'RC_CHANNELS'}
 

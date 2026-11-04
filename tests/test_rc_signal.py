@@ -40,11 +40,19 @@ class RCChecks(unittest.TestCase):
         self.health(); self.sample(); self.health(False); self.sample()
         self.assertIsNone(self.monitor.snapshot(11, True)['percent'])
 
-    def test_unknown_zero_and_disconnected_channels_clear_signal(self):
-        for value, channels in [(255, 16), (0, 16), (254, 0)]:
-            with self.subTest(value=value, channels=channels):
-                self.health(); self.sample(); self.sample(value, channels)
-                self.assertFalse(self.monitor.snapshot(11, True)['connected'])
+    def test_unknown_rssi_keeps_connection_without_inventing_strength(self):
+        self.health(); self.sample(); self.sample(255)
+        result = self.monitor.snapshot(11, True)
+        self.assertTrue(result['connected'])
+        self.assertIsNone(result['percent'])
+
+    def test_measured_zero_is_not_replaced_with_full_strength(self):
+        self.health(); self.sample(0)
+        self.assertEqual(self.monitor.snapshot(11, True)['percent'], 0)
+
+    def test_disconnected_channels_clear_connection(self):
+        self.health(); self.sample(); self.sample(254, 0)
+        self.assertFalse(self.monitor.snapshot(11, True)['connected'])
 
     def test_telemetry_radio_cannot_supply_rc(self):
         self.health()

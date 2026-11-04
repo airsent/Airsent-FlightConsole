@@ -372,7 +372,8 @@ function resetSignalIndicators() {
 }
 function updateSignalIndicators(data, feedFresh) {
   const pixhawk = feedFresh && data.pixhawk_connected === true;
-  const rc = pixhawk && data.rc_signal && data.rc_signal.connected === true && data.rc_signal.source === "RC_CHANNELS" && Number.isFinite(data.rc_signal.health_age) && data.rc_signal.health_age >= 0 && data.rc_signal.health_age < 3 && Number.isFinite(data.rc_signal.age) && data.rc_signal.age >= 0 && data.rc_signal.age < 3 ? data.rc_signal.percent : null;
+  const rcConnected = !!(pixhawk && data.rc_signal && data.rc_signal.connected === true && data.rc_signal.source === "RC_CHANNELS" && Number.isFinite(data.rc_signal.health_age) && data.rc_signal.health_age >= 0 && data.rc_signal.health_age < 3 && Number.isFinite(data.rc_signal.age) && data.rc_signal.age >= 0 && data.rc_signal.age < 3);
+  const rc = rcConnected ? data.rc_signal.percent : null;
   const link = feedFresh && data.cellular_signal && data.cellular_signal.age != null && data.cellular_signal.age < 6
     ? data.cellular_signal : null;
   const rcValid = typeof rc === "number" && Number.isFinite(rc) && rc >= 0 && rc <= 100;
@@ -384,8 +385,16 @@ function updateSignalIndicators(data, feedFresh) {
   setText("cellularNetworkType", networkType);
   setText("signalFreshness", !feedFresh ? "FEED STALE" : pixhawk ? "LIVE" : "PIXHAWK OFFLINE");
   setSignalStatus("rcTelemetryState", rc, rcValid);
+  if (rcConnected && !rcValid) {
+    const state = getEl("rcTelemetryState");
+    if (state) {
+      state.textContent = "RC CONNECTED";
+      state.classList.remove("signal-none");
+      state.classList.add("signal-good");
+    }
+  }
   setSignalStatus("networkSignalState", linkValid ? link.percent : null, linkValid);
-  const ok = pixhawk && rcValid && rc >= 40 && linkValid && link.percent >= 40;
+  const ok = pixhawk && rcConnected && (!rcValid || rc >= 40) && linkValid && link.percent >= 40;
   setOnlineStatus(getEl("linkTop"), ok ? "REPORTED" : "CHECK LINK", ok);
 }
 
