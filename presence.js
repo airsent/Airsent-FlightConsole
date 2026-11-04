@@ -5,7 +5,15 @@
   if (role() === 'demo' || window.airsentPresenceStarted) return;
   window.airsentPresenceStarted = true;
   let clientId = localStorage.getItem('airsentPresenceId');
-  if (!clientId) { clientId = crypto.randomUUID(); localStorage.setItem('airsentPresenceId', clientId); }
+  if (!clientId) {
+    if (typeof crypto.randomUUID === 'function') clientId = crypto.randomUUID();
+    else {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      clientId = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    }
+    localStorage.setItem('airsentPresenceId', clientId);
+  }
   if (!document.getElementById('consoleUsersTotal')) {
     const counter = document.createElement('aside');
     counter.className = 'presence-counter';
@@ -40,7 +48,7 @@
     };
     current.onmessage = event => {
       if (current !== ws) return;
-      try { const data = JSON.parse(event.data); if (data.type === 'presence_counts') { lastSeen = Date.now(); render(data); } } catch (_) {}
+      try { const data = JSON.parse(event.data); if (data.type === 'presence_registered') window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:data})); if (data.type === 'presence_counts') { lastSeen = Date.now(); render(data); } } catch (_) {}
     };
     current.onclose = () => {
       if (current !== ws) return;

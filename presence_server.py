@@ -66,6 +66,8 @@ async def presence_handler(ws, *args):
             if previous.get("clientId") != clients[ws]["clientId"] or previous.get("role") != role:
                 tag = hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10]
                 print(f"[PRESENCE] registered {role} device={tag} sockets={len(clients)}", flush=True)
+            await ws.send(json.dumps({"type": "presence_registered", "role": clients[ws]["role"],
+                                      "device": hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10]}))
             await broadcast_counts()
     finally:
         clients.pop(ws, None)
