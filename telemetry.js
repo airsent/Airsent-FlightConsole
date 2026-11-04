@@ -424,10 +424,7 @@ function setDisconnectedState() {
   setText("mapModeVal", "DISCONNECTED");
   setText("positionVal", "NO DATA"); setText("mslVal", "0.0m");
   resetSignalIndicators();
-  setText("m1pwm","0"); setText("m2pwm","0");
-  setText("m3pwm","0"); setText("m4pwm","0");
-  setText("m1out","0%"); setText("m2out","0%");
-  setText("m3out","0%"); setText("m4out","0%");
+  updateMotors({});
 
   setOnlineStatus(getEl("gpsFixTop"), "NO FIX", false);
   setText("satCountTop", "0");
@@ -591,34 +588,31 @@ function updateAttitude(data) {
   }
 }
 
-// ─── FIX 2: updateMotors ─────────────────────────────────────────────────────
-// Jetson sends m1/m2/m3/m4 as raw PWM (e.g. 1449). There are no m1_out fields.
-// Percentage is computed from PWM: clamp((pwm - 1000) / 10, 0, 100).
+// Pixhawk command PWM and Datalink-measured output are independent sources.
 function updateMotors(data) {
-  const pwmPct = p => Math.min(100, Math.max(0, Math.round((p - 1000) / 10)));
-  const outs = [];
-
-  ["m1","m2","m3","m4"].forEach(m => {
-    if (data[m] !== undefined) {
-      const pwm = Math.floor(data[m]);
-      const pct = pwmPct(pwm);
-      setText(`${m}pwm`, pwm);
-      setText(`${m}out`, `${pct}%`);
-      const bar = getEl(`${m}bar`);
-      if (bar) bar.style.width = `${pct}%`;
-      outs.push(pct);
-    }
-  });
-
-  if (outs.length > 0) {
-    pushBuffer("motor_avg", outs.reduce((a,b) => a+b, 0) / outs.length);
+  const finite = value => typeof value === "number" && Number.isFinite(value);
+  const esc = data.esc_telemetry;
+  const linkFresh = esc?.connected === true && finite(esc.age) && esc.age >= 0 && esc.age < 2;
+  const outputs = [];
+  for (let id = 1; id <= 4; id++) {
+    const pwm = data.pixhawk_connected === true && finite(data[`m${id}`]) ? Math.floor(data[`m${id}`]) : null;
+    const row = esc?.channels?.find(item => item.channel === id);
+    const valid = linkFresh && row?.connected === true && finite(row.age) && row.age >= 0 && row.age < 2 &&
+      finite(row.output_percent) && row.output_percent >= 0 && row.output_percent <= 100;
+    const percent = valid ? row.output_percent : null;
+    setText(`m${id}pwm`, pwm === null ? "--" : pwm);
+    setText(`m${id}out`, percent === null ? "--" : `${Math.round(percent)}%`);
+    const bar = getEl(`m${id}bar`);
+    if (bar) bar.style.width = `${percent === null ? 0 : percent}%`;
+    if (percent !== null) outputs.push(percent);
   }
+  if (outputs.length === 4) pushBuffer("motor_avg", outputs.reduce((a,b) => a+b, 0) / 4);
 }
 
 // ─── MAIN APPLY ───────────────────────────────────────────────────────────────
 function applyTelemetry(data) {
   window.AirsentReviewBridge?.publish(data, "telemetry");
-  const pxOk = data.pixhawk_connected !== false;
+  const pxOk = data.pixhawk_connected === true;
   const feedFresh = typeof data.telemetry_age === "number" && Number.isFinite(data.telemetry_age) && data.telemetry_age >= 0 && data.telemetry_age < 2;
   if (!feedFresh) {
     setDisconnectedState();
@@ -628,6 +622,7 @@ function applyTelemetry(data) {
   lastFreshTelemetryAt = Date.now();
   setConnectedState(data);
   updateSignalIndicators(data, true);
+  updateMotors(data);
   if (losActive) return;
 
   // Jetson-sourced — always update regardless of FC connection
@@ -749,7 +744,6 @@ function applyTelemetry(data) {
   // Camera status driven by WebRTC — do not overwrite here.
 
   updateAttitude(data);
-  updateMotors(data);
 
   if (data.vib_x !== undefined) pushSmoothedVibration("vib_x", data.vib_x);
   if (data.vib_y !== undefined) pushSmoothedVibration("vib_y", data.vib_y);
