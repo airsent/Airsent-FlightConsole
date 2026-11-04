@@ -603,8 +603,8 @@
       diagSpread.textContent = `${spread}%`;
 
       pwm.forEach((value, i) => {
-        pwmEls[i].textContent = value;
-        quadPwmEls[i].textContent = value;
+        if (pwmEls[i]) pwmEls[i].textContent = value;
+        if (quadPwmEls[i]) quadPwmEls[i].textContent = value;
         outEls[i].textContent = `${outputs[i]}%`;
         quadOutEls[i].textContent = `${outputs[i]}%`;
         barEls[i].style.width = `${outputs[i]}%`;
