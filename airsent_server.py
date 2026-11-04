@@ -88,6 +88,47 @@ telem = {
     "of_flow_y":0.0,
 }
 
+# Signal measurements are independent. Unknown is never treated as 0% or healthy.
+rc_signal = {"percent": None, "last_seen": 0.0, "source": None}
+cellular_signal = {"percent": None, "last_seen": 0.0, "technology": None,
+                   "connected": False, "source": "ModemManager"}
+cellular_lock = threading.Lock()
+last_mav_heartbeat = 0.0
+
+
+def cellular_signal_reader():
+    """Read modem-reported signal quality, not guessed bandwidth/latency.
+
+    Requires ModemManager/mmcli on the Jetson and an attached supported modem.
+    A cellular data connection does not imply that the negotiated RAT is 5G.
+    """
+    while True:
+        result = {"percent": None, "last_seen": 0.0, "technology": None,
+                  "connected": False, "source": "ModemManager"}
+        try:
+            proc = subprocess.run(["mmcli", "-m", "any", "--output-json"],
+                                  capture_output=True, text=True, timeout=3, check=True)
+            modem = json.loads(proc.stdout).get("modem", {})
+            generic = modem.get("generic", {})
+            quality = generic.get("signal-quality", {})
+            quality_value = quality.get("value") if isinstance(quality, dict) else quality
+            state = str(generic.get("state", "")).lower()
+            tech = generic.get("access-technologies") or generic.get("access-technology")
+            if isinstance(tech, list):
+                tech = ", ".join(map(str, tech))
+            if isinstance(quality_value, (int, float)) and 0 <= quality_value <= 100:
+                result["percent"] = round(quality_value)
+                result["last_seen"] = time.time()
+            result["technology"] = str(tech) if tech else None
+            result["connected"] = state == "connected"
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            # Missing mmcli, inaccessible modem, or query failure: data unavailable.
+            pass
+        with cellular_lock:
+            cellular_signal.update(result)
+        time.sleep(2)
+
+
 detections = []
 det_lock = threading.Lock()
 
@@ -258,7 +299,7 @@ def thermal_monitor():
 
 # ── MAVLink thread ───────────────────────────────
 def mavlink_reader():
-    global mav_conn, _last_imu_accel, last_mav_report
+    global mav_conn, _last_imu_accel, last_mav_report, last_mav_heartbeat
     while True:
         try:
             print(f"[MAV] Connecting on {PIXHAWK_PORT} @ {PIXHAWK_BAUD}...")
@@ -321,8 +362,19 @@ def mavlink_reader():
                     telem['current'] = round(msg.current_battery/100, 1)
                     telem['battery'] = msg.battery_remaining
                 elif t == 'RC_CHANNELS':
-                    telem['rssi'] = round(msg.rssi/2.54)
+                    # MAVLink RSSI: 0..254 maps to 0..100%, 255 means unknown.
+                    if 0 <= msg.rssi <= 254:
+                        rc_signal.update(percent=round(msg.rssi * 100 / 254),
+                                         last_seen=_now, source="RC_CHANNELS")
+                        telem['rssi'] = rc_signal['percent']
+                elif t == 'RADIO_STATUS':
+                    # Report radio link RSSI if the radio publishes RADIO_STATUS.
+                    # RC_CHANNELS remains preferred for actual RC receiver strength.
+                    if _now - rc_signal['last_seen'] > 3 and 0 <= msg.rssi <= 254:
+                        rc_signal.update(percent=round(msg.rssi * 100 / 254),
+                                         last_seen=_now, source="RADIO_STATUS")
                 elif t == 'HEARTBEAT':
+                    last_mav_heartbeat = _now
                     telem['armed'] = bool(msg.base_mode & 128)
                     mode_map={0:'STABILIZE',1:'ACRO',2:'ALT HOLD',3:'AUTO',
                               4:'GUIDED',5:'LOITER',6:'RTL',9:'LAND',16:'POSHOLD'}
@@ -672,9 +724,28 @@ def build_telemetry_payload():
         log = list(mavlink_log)
     payload = dict(telem)
     payload['mavlink_log'] = log
+    payload['telemetry_age'] = 0.0  # Local link; VPS relay overwrites with its measured age
     with mav_lock:
         px_ok = mav_conn is not None
-    payload['pixhawk_connected'] = px_ok
+    heartbeat_age = now - last_mav_heartbeat if last_mav_heartbeat else None
+    payload['pixhawk_connected'] = px_ok and heartbeat_age is not None and heartbeat_age < 5
+    payload['pixhawk_heartbeat_age'] = round(heartbeat_age, 2) if heartbeat_age is not None else None
+    rc_age = now - rc_signal['last_seen'] if rc_signal['last_seen'] else None
+    payload['rc_signal'] = {
+        'percent': rc_signal['percent'] if payload['pixhawk_connected'] and rc_age is not None and rc_age < 3 else None,
+        'age': round(rc_age, 2) if rc_age is not None else None,
+        'source': rc_signal['source'],
+    }
+    with cellular_lock:
+        cellular = dict(cellular_signal)
+    cell_age = now - cellular['last_seen'] if cellular['last_seen'] else None
+    payload['cellular_signal'] = {
+        'percent': cellular['percent'] if cell_age is not None and cell_age < 6 else None,
+        'age': round(cell_age, 2) if cell_age is not None else None,
+        'technology': cellular['technology'],
+        'connected': cellular['connected'] and cell_age is not None and cell_age < 6,
+        'source': cellular['source'],
+    }
     payload['cam_temp'] = cam_temp['jetson_c']
     payload['cam_hot']  = cam_temp['hot']
     payload['jetson_temp'] = cam_temp['jetson_c']
@@ -1380,6 +1451,7 @@ async def main():
 
 if __name__ == "__main__":
     threading.Thread(target=mavlink_reader,         daemon=True).start()
+    threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
     threading.Thread(target=thermal_monitor,        daemon=True).start()
     threading.Thread(target=downcam_capture_thread, daemon=True).start()

@@ -349,6 +349,46 @@ function setSensorStatus(id, text, online) {
   el.classList.add(online ? "sensor-ok" : "sensor-offline");
 }
 
+// Live signal measurements are displayed only while the full data path is fresh.
+let lastFreshTelemetryAt = 0;
+function setSignalStatus(id, percent, available) {
+  const el = getEl(id);
+  if (!el) return;
+  // A missing/stale measurement is never shown as a healthy signal.
+  const valid = available && typeof percent === "number" && Number.isFinite(percent) && percent >= 0 && percent <= 100;
+  const state = !valid || percent <= 0 ? "none" : percent < 40 ? "weak" : percent < 80 ? "good" : "strong";
+  const labels = { none: "NO SIGNAL", weak: "WEAK SIGNAL", good: "GOOD SIGNAL", strong: "STRONG SIGNAL" };
+  el.textContent = labels[state];
+  el.classList.remove("signal-none", "signal-weak", "signal-good", "signal-strong", "green-text", "status-online", "status-offline");
+  el.classList.add(`signal-${state}`);
+}
+function resetSignalIndicators() {
+  setText("rssiVal", "--");
+  setText("cellularSignalVal", "--");
+  setText("cellularNetworkType", "UNKNOWN");
+  setText("signalFreshness", "OFFLINE");
+  setSignalStatus("rcTelemetryState", null, false);
+  setSignalStatus("networkSignalState", null, false);
+}
+function updateSignalIndicators(data, feedFresh) {
+  const pixhawk = feedFresh && data.pixhawk_connected === true;
+  const rc = pixhawk && data.rc_signal && data.rc_signal.age != null && data.rc_signal.age < 3 ? data.rc_signal.percent : null;
+  const link = feedFresh && data.cellular_signal && data.cellular_signal.age != null && data.cellular_signal.age < 6
+    ? data.cellular_signal : null;
+  const rcValid = typeof rc === "number" && Number.isFinite(rc) && rc >= 0 && rc <= 100;
+  const linkValid = !!(link && link.connected === true && typeof link.percent === "number" && Number.isFinite(link.percent) && link.percent >= 0 && link.percent <= 100);
+  setText("rssiVal", rcValid ? `${Math.round(rc)}%` : "--");
+  setText("cellularSignalVal", linkValid ? `${Math.round(link.percent)}%` : "--");
+  // Reflect the reported technology; never label a connection Wi-Fi/5G without hardware data.
+  const networkType = link && link.technology ? String(link.technology).toUpperCase() : "UNKNOWN";
+  setText("cellularNetworkType", networkType);
+  setText("signalFreshness", !feedFresh ? "FEED STALE" : pixhawk ? "LIVE" : "PIXHAWK OFFLINE");
+  setSignalStatus("rcTelemetryState", rc, rcValid);
+  setSignalStatus("networkSignalState", linkValid ? link.percent : null, linkValid);
+  const ok = pixhawk && rcValid && rc >= 40 && linkValid && link.percent >= 40;
+  setOnlineStatus(getEl("linkTop"), ok ? "REPORTED" : "CHECK LINK", ok);
+}
+
 function setDisconnectedState() {
   setStatusSelect("disarmed");
   setText("topVoltage", "0.0V"); setText("topCurrent", "0.0A");
@@ -361,7 +401,7 @@ function setDisconnectedState() {
   setText("latVal", "0.0000°");  setText("lonVal", "0.0000°");
   setText("mapModeVal", "DISCONNECTED");
   setText("positionVal", "NO DATA"); setText("mslVal", "0.0m");
-  setText("rssiVal", "0");
+  resetSignalIndicators();
   setText("m1pwm","0"); setText("m2pwm","0");
   setText("m3pwm","0"); setText("m4pwm","0");
   setText("m1out","0%"); setText("m2out","0%");
@@ -371,13 +411,6 @@ function setDisconnectedState() {
   setText("satCountTop", "0");
   setOnlineStatus(getEl("ekfTop"), "OFFLINE", false);
   setOnlineStatus(getEl("linkTop"), "NO SIGNAL", false);
-
-  const rc = getEl("rcTelemetryState");
-  if (rc) {
-    rc.innerText = "NO SIGNAL";
-    rc.classList.remove("green-text", "status-online");
-    rc.classList.add("status-offline");
-  }
 
   ["sensorGps","sensorLidar","sensorOpticalFlow","sensorCompass",
    "sensorBattery","sensorImu","sensorBarometer"].forEach(id => {
@@ -426,14 +459,6 @@ function setLOSState() {
     linkEl.style.color = "#f87171";
     linkEl.style.fontWeight = "700";
     linkEl.style.animation = "blink-los 0.8s infinite";
-  }
-
-  const rc = getEl("rcTelemetryState");
-  if (rc) {
-    rc.innerText = "LOSS OF SIGNAL";
-    rc.classList.remove("green-text", "status-online");
-    rc.classList.add("status-offline");
-    rc.style.color = "#f87171";
   }
 
   ["sensorGps","sensorLidar","sensorOpticalFlow","sensorCompass",
@@ -487,13 +512,7 @@ function setConnectedState(data) {
   }
   clearLOSState();
   setOnlineStatus(getEl("linkTop"), "GOOD", true);
-  const rc = getEl("rcTelemetryState");
-  if (rc) {
-    rc.innerText = "LINK GOOD";
-    rc.style.color = "";
-    rc.classList.remove("status-offline");
-    rc.classList.add("green-text", "status-online");
-  }
+
 }
 
 function updateMapFromTelemetry(lat, lon) {
@@ -578,7 +597,15 @@ function updateMotors(data) {
 function applyTelemetry(data) {
   window.AirsentReviewBridge?.publish(data, "telemetry");
   const pxOk = data.pixhawk_connected !== false;
+  const feedFresh = typeof data.telemetry_age === "number" && data.telemetry_age < 2;
+  if (!feedFresh) {
+    setDisconnectedState();
+    updateSignalIndicators(data, false);
+    return;
+  }
+  lastFreshTelemetryAt = Date.now();
   setConnectedState(data);
+  updateSignalIndicators(data, true);
   if (losActive) return;
 
   // Jetson-sourced — always update regardless of FC connection
@@ -587,7 +614,7 @@ function applyTelemetry(data) {
   if (!pxOk) {
     // FC offline — blank all FC-dependent displays
     setText("topVoltage", "--V"); setText("topCurrent", "--A"); setText("topBattery", "--%");
-    setText("satCountTop", "--"); setText("rssiVal", "--");
+    setText("satCountTop", "--");
     setText("altVal", "-- m"); setText("spdVal", "-- m/s");
     setOnlineStatus(getEl("gpsFixTop"), "OFFLINE", false);
     setOnlineStatus(getEl("ekfTop"), "OFFLINE", false);
@@ -649,7 +676,7 @@ function applyTelemetry(data) {
   if (data.spd !== undefined) setText("spdVal", data.spd.toFixed(1) + " m/s");
   if (data.vspd !== undefined) pushBuffer("climb", data.vspd);
 
-  if (data.rssi !== undefined) setText("rssiVal", data.rssi.toFixed ? data.rssi.toFixed(1) : data.rssi);
+  // Signal indicators are handled by updateSignalIndicators with age checks.
 
   if (data.flight_mode !== undefined) {
     setText("mapModeVal", data.flight_mode);
@@ -752,6 +779,14 @@ function connectTelemetry() {
   };
 }
 
+// A connected WebSocket is not proof that live telemetry is still arriving.
+setInterval(() => {
+  if (isRealMode && lastFreshTelemetryAt && Date.now() - lastFreshTelemetryAt > 2500) {
+    lastFreshTelemetryAt = 0;
+    setDisconnectedState();
+  }
+}, 500);
+
 // ─── DEMO MODE ────────────────────────────────────────────────────────────────
 function rnd(min, max) { return Math.random() * (max - min) + min; }
 
@@ -796,7 +831,12 @@ function updateDemoTelemetry() {
   setText("mapModeVal", "POSHOLD");
   setText("positionVal", "17.20 WAYPOINT");
   setText("mslVal", "-1.5m");
-  setText("rssiVal", rnd(82, 86).toFixed(1));
+  setText("rssiVal", "DEMO");
+  setText("cellularSignalVal", "DEMO");
+  setText("cellularNetworkType", "DEMO");
+  setText("signalFreshness", "DEMO");
+  setSignalStatus("rcTelemetryState", null, false);
+  setSignalStatus("networkSignalState", null, false);
 
   const arrow = getEl("miniCompassArrow");
   if (arrow) arrow.style.transform = `translate(-50%, -50%) rotate(${hdg}deg)`;

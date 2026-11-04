@@ -555,21 +555,18 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
  
 <aside class="right-column">
  
-<section class="panel side-panel">
- 
-<div class="panel-title">
-RC / TELEMETRY
-</div>
- 
-<div id="rcTelemetryState" class="side-big green-text">
-LINK GOOD
-</div>
- 
-<div class="side-mini-row">
-<span>RSSI</span>
-<b id="rssiVal">84.2</b>
-</div>
- 
+<section class="panel side-panel signal-split-panel" aria-label="RC and network signal monitoring">
+  <div class="signal-half" aria-label="RC telemetry">
+    <div class="signal-half-heading">RC TELEMETRY</div>
+    <div id="rcTelemetryState" class="signal-state signal-none" role="status">NO SIGNAL</div>
+    <div class="signal-reading"><span>RSSI / QUALITY</span><b id="rssiVal">--</b></div>
+  </div>
+  <div class="signal-half" aria-label="Network data link">
+    <div class="signal-half-heading"><span>NETWORK / DATA LINK</span><b id="cellularNetworkType">UNKNOWN</b></div>
+    <div id="networkSignalState" class="signal-state signal-none" role="status">NO SIGNAL</div>
+    <div class="signal-reading"><span>SIGNAL QUALITY</span><b id="cellularSignalVal">--</b></div>
+  </div>
+  <span id="signalFreshness" class="signal-visually-hidden">OFFLINE</span>
 </section>
  
  
@@ -661,6 +658,23 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
 <script src="failsafe-bridge.js"></script>
+<style>
+/* Compact, independent RC / network readouts with no decorative signal bars. */
+.signal-split-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); padding:0 !important; overflow:hidden; }
+.signal-half { min-width:0; display:flex; flex-direction:column; justify-content:space-between; padding:9px 11px 10px; gap:3px; }
+.signal-half + .signal-half { border-left:1px solid #294559; }
+.signal-half-heading { min-height:19px; display:flex; justify-content:space-between; align-items:center; gap:5px; border-bottom:1px solid #253f50; padding-bottom:5px; font-size:clamp(9px, .75vw, 12px); font-weight:700; letter-spacing:.55px; color:#ddeaf4; white-space:nowrap; }
+.signal-half-heading b { color:#00c9a7; font-size:inherit; letter-spacing:0; }
+.signal-state { font-weight:800; font-size:clamp(11px, .9vw, 16px); white-space:nowrap; letter-spacing:.2px; }
+.signal-reading { display:flex; align-items:center; justify-content:space-between; gap:4px; color:#91a8ba; font-size:clamp(9px,.76vw,12px); white-space:nowrap; }
+.signal-reading b { color:#ddeaf4; font-size:clamp(11px,.9vw,15px); }
+.signal-none { color:#ff506a !important; }
+.signal-weak { color:#f5c542 !important; }
+.signal-good { color:#18c78f !important; }
+.signal-strong { color:#00c9a7 !important; }
+.signal-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+@media (max-width:720px) { .signal-half {padding:7px 6px;} .signal-half-heading {font-size:9px;letter-spacing:0;} .signal-state {font-size:11px;} .signal-reading {font-size:9px;} }
+</style>
 <script src="telemetry.js"></script>
 <script>
 (function(){
