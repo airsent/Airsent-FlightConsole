@@ -53,7 +53,7 @@
         nodes.forEach(node => { if (node) node.title = 'Sign in again to verify this device role'; });
         window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:{role:'SIGN IN REQUIRED', device:'--'}}));
         if (!document.getElementById('presenceSignIn')) {
-          const link = document.createElement('a'); link.id='presenceSignIn'; link.href='index.html'; link.textContent='VERIFY LOGIN';
+          const link = document.createElement('a'); link.id='presenceSignIn'; link.href='index.html?login=verified'; link.textContent='VERIFY LOGIN';
           link.style.cssText='color:#ffbd59;margin-left:6px;font-size:10px'; nodes[0]?.parentElement.append(link);
         }
       }
