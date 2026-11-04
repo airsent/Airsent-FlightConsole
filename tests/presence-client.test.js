@@ -17,7 +17,7 @@ assert.equal(mismatched.socket.sent[0].role,undefined);
 mismatched.socket.onmessage({data:JSON.stringify({type:'presence_registered',role:'viewer',device:'a'})});
 assert.equal(mismatched.storage.get('airsentMode'),'operator');
 assert.equal(mismatched.storage.has('airsentPresenceToken'),false);
-assert.equal(mismatched.redirected(),'signin.html?reason=role-mismatch');
+assert.equal(mismatched.redirected(),'index.html?reason=role-mismatch');
 const correct=browser('operator');
 correct.socket.onmessage({data:JSON.stringify({type:'presence_registered',role:'operator',device:'b'})});
 assert.equal(correct.redirected(),undefined);
