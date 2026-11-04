@@ -597,10 +597,11 @@ function updateMotors(data) {
   for (let id = 1; id <= 4; id++) {
     const pwm = data.pixhawk_connected === true && finite(data[`m${id}`]) ? Math.floor(data[`m${id}`]) : null;
     const row = esc?.channels?.find(item => item.channel === id);
-    const valid = linkFresh && row?.connected === true && finite(row.age) && row.age >= 0 && row.age < 2 &&
-      finite(row.output_percent) && row.output_percent >= 0 && row.output_percent <= 100;
+    const sampleFresh = linkFresh && row?.connected === true && finite(row.age) && row.age >= 0 && row.age < 2;
+    const valid = sampleFresh && finite(row.output_percent) && row.output_percent >= 0 && row.output_percent <= 100;
     const percent = valid ? row.output_percent : null;
     setText(`m${id}pwm`, pwm === null ? "--" : pwm);
+    setText(`m${id}rpm`, sampleFresh && finite(row.rpm) && row.rpm >= 0 ? Math.round(row.rpm).toLocaleString("en-US") : "--");
     setText(`m${id}out`, percent === null ? "--" : `${Math.round(percent)}%`);
     const bar = getEl(`m${id}bar`);
     if (bar) bar.style.width = `${percent === null ? 0 : percent}%`;
