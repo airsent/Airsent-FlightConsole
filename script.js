@@ -839,12 +839,8 @@ function applyRealModeZeroState() {
   if (telemetryEls.positionVal) telemetryEls.positionVal.textContent = "NO DATA";
   if (telemetryEls.mslVal) telemetryEls.mslVal.textContent = "0.0m";
  
-  if (telemetryEls.rcTelemetryState) {
-    telemetryEls.rcTelemetryState.textContent = "NO SIGNAL";
-    telemetryEls.rcTelemetryState.classList.remove("green-text");
-    telemetryEls.rcTelemetryState.classList.add("status-offline");
-  }
-  if (telemetryEls.rssiVal) telemetryEls.rssiVal.textContent = "0";
+  // Signal reset is owned by telemetry.js.
+
  
   setSensorState(telemetryEls.sensorGps, "OFFLINE", false);
   setSensorState(telemetryEls.sensorLidar, "OFFLINE", false);
@@ -958,7 +954,6 @@ function updateTelemetry() {
   const cpu = `${Math.floor(rand(20, 28))}%`;
   const missionDistance = rand(22.4, 23.9).toFixed(1);
   const ltValue = Math.floor(rand(10, 13));
-  const rssiValue = rand(82.0, 86.0).toFixed(1);
  
   if (telemetryEls.topVoltage) telemetryEls.topVoltage.textContent = `${voltage}V`;
   if (telemetryEls.topCurrent) telemetryEls.topCurrent.textContent = `${current}A`;
@@ -990,13 +985,8 @@ function updateTelemetry() {
   if (telemetryEls.positionVal) telemetryEls.positionVal.textContent = "17.20 WAYPOINT";
   if (telemetryEls.mslVal) telemetryEls.mslVal.textContent = "-1.5m";
  
-  if (telemetryEls.rcTelemetryState) {
-    telemetryEls.rcTelemetryState.textContent = "LINK GOOD";
-    telemetryEls.rcTelemetryState.classList.remove("status-offline");
-    telemetryEls.rcTelemetryState.classList.add("green-text", "status-online");
-  }
-  if (telemetryEls.rssiVal) telemetryEls.rssiVal.textContent = rssiValue;
- 
+  // RC and network indicators are owned exclusively by telemetry.js.
+
   setSensorState(telemetryEls.sensorGps, "NOMINAL", true);
   setSensorState(telemetryEls.sensorLidar, "NOMINAL", true);
   setSensorState(telemetryEls.sensorOpticalFlow, "NOMINAL", true);

@@ -89,7 +89,46 @@ telem = {
 }
 
 # Signal measurements are independent. Unknown is never treated as 0% or healthy.
-rc_signal = {"percent": None, "last_seen": 0.0, "source": None}
+class RCSignalMonitor:
+    """RC quality is usable only with fresh autopilot receiver-health evidence."""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.percent = None
+        self.sample_at = None
+        self.health_at = None
+        self.healthy = False
+
+    def update(self, msg, now):
+        kind = msg.get_type()
+        if kind == 'SYS_STATUS':
+            bit = 1 << 16  # MAV_SYS_STATUS_SENSOR_RC_RECEIVER
+            self.health_at = now
+            self.healthy = all(getattr(msg, field, 0) & bit for field in (
+                'onboard_control_sensors_present', 'onboard_control_sensors_enabled',
+                'onboard_control_sensors_health'))
+            if not self.healthy:
+                self.percent = None
+                self.sample_at = None
+        elif kind == 'RC_CHANNELS':
+            value = getattr(msg, 'rssi', 255)
+            # Unknown RSSI and absent channels invalidate the previous sample immediately.
+            self.percent = round(value * 100 / 254) if 0 <= value <= 254 and getattr(msg, 'chancount', 0) > 0 else None
+            self.sample_at = now
+
+    def snapshot(self, now, pixhawk_connected):
+        age = now - self.sample_at if self.sample_at is not None else None
+        health_age = now - self.health_at if self.health_at is not None else None
+        connected = bool(pixhawk_connected and self.healthy and health_age is not None
+                         and 0 <= health_age < 3 and age is not None and 0 <= age < 3
+                         and self.percent is not None and self.percent > 0)
+        return {'percent': self.percent if connected else None, 'connected': connected,
+                'age': age, 'health_age': health_age, 'source': 'RC_CHANNELS'}
+
+
+rc_monitor = RCSignalMonitor()
+rc_lock = threading.Lock()
 cellular_signal = {"percent": None, "last_seen": 0.0, "technology": None,
                    "connected": False, "source": "ModemManager"}
 cellular_lock = threading.Lock()
@@ -307,11 +346,15 @@ def mavlink_reader():
                 PIXHAWK_PORT, baud=PIXHAWK_BAUD,
                 source_system=255, autoreconnect=True
             )
+            with rc_lock:
+                rc_monitor.reset()
+            last_mav_heartbeat = 0.0
             hb = mav.wait_heartbeat(timeout=15)
             if hb is None:
                 print("[MAV] No heartbeat — retrying")
                 time.sleep(3)
                 continue
+            last_mav_heartbeat = time.time()
             print(f"[MAV] Pixhawk connected — system {mav.target_system}")
             with mav_lock:
                 mav_conn = mav
@@ -336,7 +379,11 @@ def mavlink_reader():
                     continue
                 t = msg.get_type()
                 if t == 'BAD_DATA': continue
+                if msg.get_srcSystem() != mav.target_system or msg.get_srcComponent() != mav.target_component:
+                    continue
                 _now = time.time()
+                with rc_lock:
+                    rc_monitor.update(msg, _now)
                 last_mav_msg = _now
                 if _now - last_mav_report > 5:
                     last_mav_report = _now
@@ -361,18 +408,6 @@ def mavlink_reader():
                     telem['voltage'] = round(msg.voltage_battery/1000, 1)
                     telem['current'] = round(msg.current_battery/100, 1)
                     telem['battery'] = msg.battery_remaining
-                elif t == 'RC_CHANNELS':
-                    # MAVLink RSSI: 0..254 maps to 0..100%, 255 means unknown.
-                    if 0 <= msg.rssi <= 254:
-                        rc_signal.update(percent=round(msg.rssi * 100 / 254),
-                                         last_seen=_now, source="RC_CHANNELS")
-                        telem['rssi'] = rc_signal['percent']
-                elif t == 'RADIO_STATUS':
-                    # Report radio link RSSI if the radio publishes RADIO_STATUS.
-                    # RC_CHANNELS remains preferred for actual RC receiver strength.
-                    if _now - rc_signal['last_seen'] > 3 and 0 <= msg.rssi <= 254:
-                        rc_signal.update(percent=round(msg.rssi * 100 / 254),
-                                         last_seen=_now, source="RADIO_STATUS")
                 elif t == 'HEARTBEAT':
                     last_mav_heartbeat = _now
                     telem['armed'] = bool(msg.base_mode & 128)
@@ -730,12 +765,10 @@ def build_telemetry_payload():
     heartbeat_age = now - last_mav_heartbeat if last_mav_heartbeat else None
     payload['pixhawk_connected'] = px_ok and heartbeat_age is not None and heartbeat_age < 5
     payload['pixhawk_heartbeat_age'] = round(heartbeat_age, 2) if heartbeat_age is not None else None
-    rc_age = now - rc_signal['last_seen'] if rc_signal['last_seen'] else None
-    payload['rc_signal'] = {
-        'percent': rc_signal['percent'] if payload['pixhawk_connected'] and rc_age is not None and rc_age < 3 else None,
-        'age': round(rc_age, 2) if rc_age is not None else None,
-        'source': rc_signal['source'],
-    }
+    with rc_lock:
+        payload['rc_signal'] = rc_monitor.snapshot(now, payload['pixhawk_connected'])
+    # Keep legacy consumers from receiving a stale/default RSSI.
+    payload['rssi'] = payload['rc_signal']['percent']
     with cellular_lock:
         cellular = dict(cellular_signal)
     cell_age = now - cellular['last_seen'] if cellular['last_seen'] else None

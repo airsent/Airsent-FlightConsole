@@ -372,7 +372,7 @@ function resetSignalIndicators() {
 }
 function updateSignalIndicators(data, feedFresh) {
   const pixhawk = feedFresh && data.pixhawk_connected === true;
-  const rc = pixhawk && data.rc_signal && data.rc_signal.age != null && data.rc_signal.age < 3 ? data.rc_signal.percent : null;
+  const rc = pixhawk && data.rc_signal && data.rc_signal.connected === true && data.rc_signal.source === "RC_CHANNELS" && Number.isFinite(data.rc_signal.health_age) && data.rc_signal.health_age >= 0 && data.rc_signal.health_age < 3 && Number.isFinite(data.rc_signal.age) && data.rc_signal.age >= 0 && data.rc_signal.age < 3 ? data.rc_signal.percent : null;
   const link = feedFresh && data.cellular_signal && data.cellular_signal.age != null && data.cellular_signal.age < 6
     ? data.cellular_signal : null;
   const rcValid = typeof rc === "number" && Number.isFinite(rc) && rc >= 0 && rc <= 100;
@@ -597,7 +597,7 @@ function updateMotors(data) {
 function applyTelemetry(data) {
   window.AirsentReviewBridge?.publish(data, "telemetry");
   const pxOk = data.pixhawk_connected !== false;
-  const feedFresh = typeof data.telemetry_age === "number" && data.telemetry_age < 2;
+  const feedFresh = typeof data.telemetry_age === "number" && Number.isFinite(data.telemetry_age) && data.telemetry_age >= 0 && data.telemetry_age < 2;
   if (!feedFresh) {
     setDisconnectedState();
     updateSignalIndicators(data, false);

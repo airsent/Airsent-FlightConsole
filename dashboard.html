@@ -562,7 +562,7 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
     <div class="signal-reading"><span>RSSI / QUALITY</span><b id="rssiVal">--</b></div>
   </div>
   <div class="signal-half" aria-label="Network data link">
-    <div class="signal-half-heading"><span>NETWORK / DATA LINK</span><b id="cellularNetworkType">UNKNOWN</b></div>
+    <div class="signal-half-heading">NETWORK / DATA LINK</div>
     <div id="networkSignalState" class="signal-state signal-none" role="status">NO SIGNAL</div>
     <div class="signal-reading"><span>SIGNAL QUALITY</span><b id="cellularSignalVal">--</b></div>
   </div>
@@ -656,7 +656,7 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
 </div>
  
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js"></script>
+<script src="script.js?v=rc-health-2"></script>
 <script src="failsafe-bridge.js"></script>
 <style>
 /* Compact, independent RC / network readouts with no decorative signal bars. */
@@ -675,7 +675,7 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
 .signal-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 @media (max-width:720px) { .signal-half {padding:7px 6px;} .signal-half-heading {font-size:9px;letter-spacing:0;} .signal-state {font-size:11px;} .signal-reading {font-size:9px;} }
 </style>
-<script src="telemetry.js"></script>
+<script src="telemetry.js?v=rc-health-2"></script>
 <script>
 (function(){
   const REF_W = 2048;
