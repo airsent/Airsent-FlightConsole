@@ -1,5 +1,6 @@
 import asyncio
 import json
+import hashlib
 import time
 
 
@@ -9,10 +10,9 @@ clients = {}
 
 
 def counts():
-    now = time.time()
     active = {}
     for ws, meta in clients.items():
-        if now - meta.get("seen", 0) > 30 or meta.get("role") not in ("operator", "viewer"):
+        if meta.get("role") not in ("operator", "viewer"):
             continue
         key = meta.get("clientId") or str(id(ws))
         if key not in active or meta["seen"] > active[key]["seen"]:
@@ -56,12 +56,16 @@ async def presence_handler(ws, *args):
                 continue
 
             role = str(data.get("role", "")).lower()
+            previous = clients.get(ws, {})
             clients[ws] = {
                 "role": role if role in ("operator", "viewer") else "unknown",
                 "page": str(data.get("page", "unknown"))[:80],
                 "clientId": str(data.get("clientId", ""))[:80],
                 "seen": time.time(),
             }
+            if previous.get("clientId") != clients[ws]["clientId"] or previous.get("role") != role:
+                tag = hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10]
+                print(f"[PRESENCE] registered {role} device={tag} sockets={len(clients)}", flush=True)
             await broadcast_counts()
     finally:
         clients.pop(ws, None)

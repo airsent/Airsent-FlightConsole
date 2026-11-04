@@ -2,7 +2,8 @@
 (() => {
   let mode = () => (localStorage.getItem('airsentMode') || 'demo').toLowerCase();
   const role = () => ['operator','actual','real'].includes(mode()) ? 'operator' : mode() === 'viewer' ? 'viewer' : 'demo';
-  if (role() === 'demo') return;
+  if (role() === 'demo' || window.airsentPresenceStarted) return;
+  window.airsentPresenceStarted = true;
   let clientId = localStorage.getItem('airsentPresenceId');
   if (!clientId) { clientId = crypto.randomUUID(); localStorage.setItem('airsentPresenceId', clientId); }
   if (!document.getElementById('consoleUsersTotal')) {
@@ -52,5 +53,11 @@
   window.addEventListener('storage', e => { if (e.key === 'airsentMode') { if (role() === 'demo') { stopped=true; ws?.close(); render(null); } else send(); } });
   window.addEventListener('pagehide', () => { stopped=true; clearInterval(heartbeat); clearTimeout(reconnect); ws?.close(); });
   window.addEventListener('pageshow', e => { if (e.persisted) { stopped=false; connect(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (!ws || ws.readyState === WebSocket.CLOSED) { clearTimeout(reconnect); stopped=false; connect(); }
+      else send();
+    }
+  });
   render(null); connect();
 })();

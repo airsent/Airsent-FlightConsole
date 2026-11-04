@@ -15,6 +15,12 @@ class PresenceTests(unittest.TestCase):
             self.assertEqual(presence.counts()['viewers'],1)
         presence.clients.pop(2)
         with patch('presence_server.time.time',return_value=101):self.assertEqual(presence.counts()['total'],1)
-    def test_stale_demo_and_unknown_not_counted(self):
+    def test_background_device_stays_counted_until_socket_disconnects(self):
         presence.clients.update({1:dict(role='viewer',seen=1),2:dict(role='demo',seen=100),3:dict(role='unknown',seen=100)})
-        with patch('presence_server.time.time',return_value=101):self.assertEqual(presence.counts()['total'],0)
+        with patch('presence_server.time.time',return_value=101):self.assertEqual(presence.counts()['total'],1)
+        presence.clients.pop(1)
+        self.assertEqual(presence.counts()['total'],0)
+
+    def test_two_operator_laptops_and_one_viewer(self):
+        presence.clients.update({1:dict(clientId='laptop-a',role='operator',seen=100),2:dict(clientId='laptop-b',role='operator',seen=100),3:dict(clientId='laptop-c',role='viewer',seen=100),4:dict(clientId='laptop-a',role='operator',seen=100)})
+        self.assertEqual(presence.counts(),dict(type='presence_counts',total=3,operators=2,viewers=1))

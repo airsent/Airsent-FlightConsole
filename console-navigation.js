@@ -3,3 +3,16 @@
 function schedule(){requestAnimationFrame(()=>requestAnimationFrame(sync))}
 addEventListener('DOMContentLoaded',schedule);addEventListener('load',schedule);addEventListener('resize',schedule);window.visualViewport?.addEventListener('resize',schedule);document.fonts?.ready.then(schedule);
 })();
+
+/* Also attach presence on cached console HTML that predates the script tag. */
+(() => {
+  const start = () => {
+    if (window.airsentPresenceStarted || /(?:^|\/)index\.html$/.test(location.pathname) || location.pathname === '/') return;
+    if (document.querySelector('script[src*="presence.js"]')) return;
+    const script = document.createElement('script');
+    script.src = 'presence.js?v=4';
+    document.body.append(script);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
