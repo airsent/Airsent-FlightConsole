@@ -351,6 +351,7 @@ function setSensorStatus(id, text, online) {
 
 // Live signal measurements are displayed only while the full data path is fresh.
 let lastFreshTelemetryAt = 0;
+let telemetryConnectionStartedAt = 0;
 function setSignalStatus(id, percent, available) {
   const el = getEl(id);
   if (!el) return;
@@ -385,12 +386,15 @@ function updateSignalIndicators(data, feedFresh) {
   setText("cellularNetworkType", networkType);
   setText("signalFreshness", !feedFresh ? "FEED STALE" : pixhawk ? "LIVE" : "PIXHAWK OFFLINE");
   setSignalStatus("rcTelemetryState", rc, rcValid);
-  if (rcConnected && !rcValid) {
+  const rcInputUnverified = pixhawk && data.rc_signal?.input_present === true &&
+    Number.isFinite(data.rc_signal.age) && data.rc_signal.age >= 0 && data.rc_signal.age < 3 &&
+    Number.isFinite(data.rc_signal.health_age) && data.rc_signal.health_age >= 0 && data.rc_signal.health_age < 3 && !rcValid;
+  if (rcInputUnverified) {
     const state = getEl("rcTelemetryState");
     if (state) {
-      state.textContent = "RC CONNECTED";
+      state.textContent = "RC UNVERIFIED";
       state.classList.remove("signal-none");
-      state.classList.add("signal-good");
+      state.classList.add("signal-weak");
     }
   }
   setSignalStatus("networkSignalState", linkValid ? link.percent : null, linkValid);
@@ -763,38 +767,49 @@ function connectTelemetry() {
   // never connect directly to the Jetson for telemetry (the Jetson is behind
   // NAT). The Jetson pushes into port 9001 and the relay re-serves to browsers
   // on port 9101, which nginx exposes securely as wss://console.airsent.tech/telem.
-  socket = new WebSocket(window.airsentApiUrl("/telem", true));
-
-  socket.onopen = () => {
-    console.log("✅ WebSocket connected to VPS relay");
+  const ws = new WebSocket(window.airsentApiUrl("/telem", true));
+  socket = ws;
+  telemetryConnectionStartedAt = Date.now();
+  lastFreshTelemetryAt = 0;
+  ws.onopen = () => {
+    if (socket !== ws) return;
     isConnecting = false;
     mapHasZoomed = false;
   };
-
-  socket.onclose = () => {
-    console.log("WebSocket disconnected. Retrying in 3s...");
-    isConnecting = false;
-    socket = null;
-    setDisconnectedState();
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connectTelemetry, 3000);
+  ws.onclose = () => {
+    if (socket !== ws) return;
+    resetTelemetryConnection(ws);
   };
-
-  socket.onerror = () => { isConnecting = false; };
-
-  socket.onmessage = (event) => {
+  ws.onerror = () => {
+    if (socket === ws) resetTelemetryConnection(ws);
+  };
+  ws.onmessage = (event) => {
+    if (socket !== ws) return;
     try { applyTelemetry(JSON.parse(event.data)); }
     catch (e) { console.error("Bad telemetry data:", e); }
   };
 }
 
-// A connected WebSocket is not proof that live telemetry is still arriving.
-setInterval(() => {
-  if (isRealMode && lastFreshTelemetryAt && Date.now() - lastFreshTelemetryAt > 2500) {
-    lastFreshTelemetryAt = 0;
-    setDisconnectedState();
-  }
-}, 500);
+function resetTelemetryConnection(ws) {
+  if (socket !== ws) return;
+  socket = null;
+  isConnecting = false;
+  telemetryConnectionStartedAt = 0;
+  lastFreshTelemetryAt = 0;
+  ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+  try { ws.close(); } catch (_) {}
+  setDisconnectedState();
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connectTelemetry, 1000);
+}
+
+function checkTelemetryFreshness() {
+  if (!isRealMode || !socket) return;
+  const reference = lastFreshTelemetryAt || telemetryConnectionStartedAt;
+  const timeout = lastFreshTelemetryAt ? 2500 : 5000;
+  if (reference && Date.now() - reference > timeout) resetTelemetryConnection(socket);
+}
+setInterval(checkTelemetryFreshness, 500);
 
 // ─── DEMO MODE ────────────────────────────────────────────────────────────────
 function rnd(min, max) { return Math.random() * (max - min) + min; }

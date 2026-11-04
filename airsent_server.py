@@ -122,10 +122,12 @@ class RCSignalMonitor:
     def snapshot(self, now, pixhawk_connected):
         age = now - self.sample_at if self.sample_at is not None else None
         health_age = now - self.health_at if self.health_at is not None else None
-        connected = bool(pixhawk_connected and self.healthy and health_age is not None
+        input_present = bool(pixhawk_connected and self.healthy and health_age is not None
                          and 0 <= health_age < 3 and age is not None and 0 <= age < 3
                          and self.has_channels)
-        return {'percent': self.percent if connected else None, 'connected': connected,
+        connected = input_present and self.percent is not None and self.percent > 0
+        return {'percent': self.percent if input_present else None, 'connected': connected,
+                'input_present': input_present,
                 'age': age, 'health_age': health_age, 'source': 'RC_CHANNELS'}
 
 

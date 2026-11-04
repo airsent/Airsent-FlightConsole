@@ -21,9 +21,9 @@ for (const overrides of [
   assert.equal(elements.get('rssiVal').innerText,'--',JSON.stringify(overrides));
   assert.equal(elements.get('rcTelemetryState').textContent,'NO SIGNAL');
 }
-context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,percent:null}},true);
+context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,percent:null,input_present:true}},true);
 assert.equal(elements.get('rssiVal').innerText,'--');
-assert.equal(elements.get('rcTelemetryState').textContent,'RC CONNECTED');
+assert.equal(elements.get('rcTelemetryState').textContent,'RC UNVERIFIED');
 context.updateSignalIndicators({...valid,rc_signal:{...valid.rc_signal,percent:null,connected:false}},true);
 assert.equal(elements.get('rcTelemetryState').textContent,'NO SIGNAL');
 context.updateSignalIndicators(valid,false);

@@ -43,7 +43,8 @@ class RCChecks(unittest.TestCase):
     def test_unknown_rssi_keeps_connection_without_inventing_strength(self):
         self.health(); self.sample(); self.sample(255)
         result = self.monitor.snapshot(11, True)
-        self.assertTrue(result['connected'])
+        self.assertFalse(result['connected'])
+        self.assertTrue(result['input_present'])
         self.assertIsNone(result['percent'])
 
     def test_measured_zero_is_not_replaced_with_full_strength(self):
