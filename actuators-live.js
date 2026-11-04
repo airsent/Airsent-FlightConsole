@@ -32,6 +32,7 @@
   const warning=document.querySelector('.tests-warning');
   if(warning) warning.textContent='LIVE MONITORING — Run motor tests in QGroundControl with propellers removed. These buttons do not control motors.';
   ['statusSelect','flightModeSelect'].forEach(id=>{if(el(id)) el(id).disabled=true;});
+  ['failsafeStateTop','summaryFailsafe'].forEach(id=>{const node=el(id);if(node) node.parentElement.childNodes.forEach(child=>{if(child.nodeType===3)child.textContent=child.textContent.replace(/FAILSAFE:/g,'ESC STATUS:');});});
   const summary=document.querySelector('.summary-chip.ok');
   if(summary) { summary.classList.remove('ok');summary.textContent='WAITING FOR TELEMETRY';summary.id='actuatorLiveState'; }
   document.querySelectorAll('.motor-card').forEach((card,i)=>{
@@ -54,6 +55,12 @@
     const view=model(data,fresh);
     text('actuatorLiveState',!view.feed ? 'TELEMETRY OFFLINE' : !view.fc ? 'PIXHAWK OFFLINE' : data.armed ? 'ARMED' : 'DISARMED');
     text('summaryMode',view.fc ? data.flight_mode||'--' : '--');
+    text('gpsFixTop',view.fc ? data.fix_type||'NO FIX' : 'OFFLINE');
+    text('satCountTop',view.fc && finite(data.sats) ? String(data.sats) : '--');
+    text('ekfTop',view.fc ? data.ekf_healthy ? 'HEALTHY' : 'DEGRADED' : 'OFFLINE');
+    text('linkTop',view.feed ? 'LIVE' : 'OFFLINE');
+    for (const [id,ok] of [['gpsFixTop',view.fc && data.sats>0],['ekfTop',view.fc && data.ekf_healthy],['linkTop',view.feed]]) if(el(id))el(id).style.color=ok ? '#18c78f' : '#ff506a';
+
     if(el('flightModeSelect') && view.feed) el('flightModeSelect').value=data.flight_mode;
     if(el('statusSelect')) { if(!el('statusSelect').querySelector('option[value="unknown"]')) { const option=document.createElement('option');option.value='unknown';option.textContent='NO FC DATA';el('statusSelect').appendChild(option); } el('statusSelect').value=!view.fc ? 'unknown' : data.armed ? 'armed' : 'disarmed'; }
     text('topVoltage',format(view.fc ? data.voltage : null,'V',1));text('topCurrent',format(view.fc ? data.current : null,'A',1));text('topBattery',format(view.fc&&data.battery>=0 ? data.battery : null,'%'));
