@@ -1,4 +1,5 @@
 import os
+from datalink_telemetry import start_monitor
 import asyncio
 import websockets
 import depthai as dai
@@ -824,6 +825,7 @@ def build_telemetry_payload():
         log = list(mavlink_log)
     payload = dict(telem)
     payload['mavlink_log'] = log
+    payload['esc_telemetry'] = esc_monitor.snapshot()
     payload['telemetry_age'] = 0.0  # Local link; VPS relay overwrites with its measured age
     with mav_lock:
         px_ok = mav_conn is not None
@@ -1551,6 +1553,7 @@ async def main():
     )
 
 if __name__ == "__main__":
+    esc_monitor = start_monitor()
     threading.Thread(target=mavlink_reader,         daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()

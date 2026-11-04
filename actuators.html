@@ -139,11 +139,11 @@
 
         <div class="top-item">
           BATTERY:
-          <span id="topVoltage">15.8V</span>
+          <span id="topVoltage">--</span>
           <small>|</small>
-          <span id="topCurrent">10.2A</span>
+          <span id="topCurrent">--</span>
           <small>|</small>
-          <span id="topBattery">71%</span>
+          <span id="topBattery">--</span>
         </div>
 
         <div class="top-item link-box">
@@ -156,28 +156,28 @@
       <div class="subbar-item">
         <div class="subbar-mainline">
           <span class="subbar-label">MISSION TIME:</span>
-          <span id="missionTime">00:25:38</span>
+          <span id="missionTime">--</span>
         </div>
       </div>
 
       <div class="subbar-item">
         <div class="subbar-mainline">
           <span class="subbar-label">THROTTLE:</span>
-          <span id="throttlePercent">35%</span>
+          <span id="throttlePercent">--</span>
         </div>
       </div>
 
       <div class="subbar-item">
         <div class="subbar-mainline">
           <span class="subbar-label">AVG OUTPUT:</span>
-          <span id="avgMotorOutput">33%</span>
+          <span id="avgMotorOutput">--</span>
         </div>
       </div>
 
       <div class="subbar-item">
         <div class="subbar-mainline">
           <span class="subbar-label">OUTPUT SPREAD:</span>
-          <span id="motorSpread">6%</span>
+          <span id="motorSpread">--</span>
         </div>
       </div>
 
@@ -196,19 +196,19 @@
         <div class="actuator-summary-strip">
           <div class="summary-chip ok">
             <span class="chip-dot"></span>
-            <span>ARMED</span>
+            <span>WAITING FOR TELEMETRY</span>
           </div>
           <div class="summary-chip">
             FLIGHT MODE: <b id="summaryMode">POSHOLD</b>
           </div>
           <div class="summary-chip">
-            THROTTLE: <b id="summaryThrottle">35%</b>
+            THROTTLE: <b id="summaryThrottle">--</b>
           </div>
           <div class="summary-chip">
-            AVG MOTOR OUTPUT: <b id="summaryAverage">33%</b>
+            AVG MOTOR OUTPUT: <b id="summaryAverage">--</b>
           </div>
           <div class="summary-chip">
-            OUTPUT SPREAD: <b id="summarySpread">6%</b>
+            OUTPUT SPREAD: <b id="summarySpread">--</b>
           </div>
           <div class="summary-chip">
             FAILSAFE: <b id="summaryFailsafe">NORMAL</b>
@@ -224,26 +224,26 @@
 
           <div class="motor-node motor-node-1" id="nodeM1">
             <div class="motor-node-title">M1</div>
-            <div class="motor-node-pwm"><span id="quadM1Pwm">1325</span> μs</div>
-            <div class="motor-node-out">OUTPUT <b id="quadM1Out">32%</b></div>
+            <div class="motor-node-pwm"><span id="quadM1Pwm">--</span> μs</div>
+            <div class="motor-node-out">OUTPUT <b id="quadM1Out">--</b></div>
           </div>
 
           <div class="motor-node motor-node-2" id="nodeM2">
             <div class="motor-node-title">M2</div>
-            <div class="motor-node-pwm"><span id="quadM2Pwm">1305</span> μs</div>
-            <div class="motor-node-out">OUTPUT <b id="quadM2Out">31%</b></div>
+            <div class="motor-node-pwm"><span id="quadM2Pwm">--</span> μs</div>
+            <div class="motor-node-out">OUTPUT <b id="quadM2Out">--</b></div>
           </div>
 
           <div class="motor-node motor-node-3" id="nodeM3">
             <div class="motor-node-title">M3</div>
-            <div class="motor-node-pwm"><span id="quadM3Pwm">1340</span> μs</div>
-            <div class="motor-node-out">OUTPUT <b id="quadM3Out">34%</b></div>
+            <div class="motor-node-pwm"><span id="quadM3Pwm">--</span> μs</div>
+            <div class="motor-node-out">OUTPUT <b id="quadM3Out">--</b></div>
           </div>
 
           <div class="motor-node motor-node-4" id="nodeM4">
             <div class="motor-node-title">M4</div>
-            <div class="motor-node-pwm"><span id="quadM4Pwm">1335</span> μs</div>
-            <div class="motor-node-out">OUTPUT <b id="quadM4Out">33%</b></div>
+            <div class="motor-node-pwm"><span id="quadM4Pwm">--</span> μs</div>
+            <div class="motor-node-out">OUTPUT <b id="quadM4Out">--</b></div>
           </div>
         </div>
       </section>
@@ -255,13 +255,13 @@
           <div class="motor-card" id="motorCard1">
             <div class="motor-card-top">
               <div class="motor-card-title">M1</div>
-              <div class="motor-card-value"><span id="m1pwm">1325</span> μs</div>
+              <div class="motor-card-value"><span id="m1pwm">--</span> μs</div>
             </div>
             <div class="motor-card-sub">
-              OUTPUT <b id="m1out">32%</b>
+              OUTPUT <b id="m1out">--</b>
             </div>
             <div class="motor-bar-wrap">
-              <div class="motor-bar"><div class="motor-bar-fill" id="m1bar" style="width:32%;"></div></div>
+              <div class="motor-bar"><div class="motor-bar-fill" id="m1bar" style="width:0%;"></div></div>
             </div>
             <canvas id="motorSpark1"></canvas>
           </div>
@@ -269,13 +269,13 @@
           <div class="motor-card" id="motorCard2">
             <div class="motor-card-top">
               <div class="motor-card-title">M2</div>
-              <div class="motor-card-value"><span id="m2pwm">1305</span> μs</div>
+              <div class="motor-card-value"><span id="m2pwm">--</span> μs</div>
             </div>
             <div class="motor-card-sub">
-              OUTPUT <b id="m2out">31%</b>
+              OUTPUT <b id="m2out">--</b>
             </div>
             <div class="motor-bar-wrap">
-              <div class="motor-bar"><div class="motor-bar-fill" id="m2bar" style="width:31%;"></div></div>
+              <div class="motor-bar"><div class="motor-bar-fill" id="m2bar" style="width:0%;"></div></div>
             </div>
             <canvas id="motorSpark2"></canvas>
           </div>
@@ -283,13 +283,13 @@
           <div class="motor-card" id="motorCard3">
             <div class="motor-card-top">
               <div class="motor-card-title">M3</div>
-              <div class="motor-card-value"><span id="m3pwm">1340</span> μs</div>
+              <div class="motor-card-value"><span id="m3pwm">--</span> μs</div>
             </div>
             <div class="motor-card-sub">
-              OUTPUT <b id="m3out">34%</b>
+              OUTPUT <b id="m3out">--</b>
             </div>
             <div class="motor-bar-wrap">
-              <div class="motor-bar"><div class="motor-bar-fill" id="m3bar" style="width:34%;"></div></div>
+              <div class="motor-bar"><div class="motor-bar-fill" id="m3bar" style="width:0%;"></div></div>
             </div>
             <canvas id="motorSpark3"></canvas>
           </div>
@@ -297,13 +297,13 @@
           <div class="motor-card" id="motorCard4">
             <div class="motor-card-top">
               <div class="motor-card-title">M4</div>
-              <div class="motor-card-value"><span id="m4pwm">1335</span> μs</div>
+              <div class="motor-card-value"><span id="m4pwm">--</span> μs</div>
             </div>
             <div class="motor-card-sub">
-              OUTPUT <b id="m4out">33%</b>
+              OUTPUT <b id="m4out">--</b>
             </div>
             <div class="motor-bar-wrap">
-              <div class="motor-bar"><div class="motor-bar-fill" id="m4bar" style="width:33%;"></div></div>
+              <div class="motor-bar"><div class="motor-bar-fill" id="m4bar" style="width:0%;"></div></div>
             </div>
             <canvas id="motorSpark4"></canvas>
           </div>
@@ -344,19 +344,19 @@
         <div class="diagnostics-grid">
           <div class="diag-row">
             <span>AVERAGE OUTPUT</span>
-            <b id="diagAverage">33%</b>
+            <b id="diagAverage">--</b>
           </div>
           <div class="diag-row">
             <span>HIGHEST MOTOR</span>
-            <b id="diagHighest">M3 @ 1340 μs</b>
+            <b id="diagHighest">--</b>
           </div>
           <div class="diag-row">
             <span>LOWEST MOTOR</span>
-            <b id="diagLowest">M2 @ 1305 μs</b>
+            <b id="diagLowest">--</b>
           </div>
           <div class="diag-row">
             <span>OUTPUT SPREAD</span>
-            <b id="diagSpread">6%</b>
+            <b id="diagSpread">--</b>
           </div>
           <div class="diag-row">
             <span>OSCILLATION</span>
@@ -389,6 +389,7 @@
   </div>
 
   <script>
+  if ((new URLSearchParams(location.search).get("trial") === "demo" ? "demo" : localStorage.getItem("airsentMode") || "real").toLowerCase() === "demo") {
     const missionTimeEl = document.getElementById("missionTime");
     const topVoltage = document.getElementById("topVoltage");
     const topCurrent = document.getElementById("topCurrent");
@@ -735,6 +736,9 @@
 
     setInterval(updateActuatorPage, 1000);
     updateActuatorPage();
+
+  }
   </script>
+<script src="actuators-live.js?v=datalink-1"></script>
 </body>
 </html>

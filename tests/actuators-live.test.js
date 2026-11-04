@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),path=require('path');
+const c={};vm.createContext(c);vm.runInContext(fs.readFileSync(path.join(__dirname,'../actuators-live.js'),'utf8'),c);
+const model=c.AirsentActuatorView.model;
+const data={telemetry_age:0,pixhawk_connected:true,m1:1400,esc_telemetry:{connected:true,age:0,channels:[{channel:1,connected:true,age:0,input_percent:40,output_percent:35,rpm:3500,voltage:24,current:3.2,status:0}]}};
+let s=model(data,true);assert.equal(s.motors[0].pwm,1400);assert.equal(s.motors[0].output,35);assert.equal(s.motors[0].rpm,3500);
+assert.equal(s.motors[1].rpm,null);assert.equal(s.average,null,'missing motors must not be counted as zero');
+assert.equal(model(data,false).motors[0].rpm,null);assert.equal(model({...data,telemetry_age:3},true).motors[0].rpm,null);
+const stale=structuredClone(data);stale.esc_telemetry.channels[0].age=2;assert.equal(model(stale,true).motors[0].rpm,null);
+const fcOff=structuredClone(data);fcOff.pixhawk_connected=false;assert.equal(model(fcOff,true).motors[0].pwm,null);assert.equal(model(fcOff,true).motors[0].rpm,3500,'ESC measurements independent of flight controller');
+const zero=structuredClone(data);zero.esc_telemetry.channels[0].rpm=0;assert.equal(model(zero,true).motors[0].rpm,0);
+console.log('Passed live actuator model: command vs measured output, missing/stale ESCs, feed loss, Pixhawk loss, real zero RPM');
