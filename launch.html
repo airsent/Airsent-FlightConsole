@@ -675,6 +675,7 @@ function r2d(r) { return r * 180 / Math.PI; }
  
 // ── Broadcast state to localStorage so dashboard mirrors it ─
 function broadcastState(extra) {
+  if (isActual) return;
   try {
     localStorage.setItem(LS_STATE, JSON.stringify({
       state: seqState,
@@ -906,6 +907,7 @@ function setSeqState(s) {
 }
  
 function abortSequence(reason) {
+  if (isActual) return;
   clearInterval(countdownTimer); clearTimeout(seqTimer);
   setSeqState('abort');
   el('abortReason').textContent = `ABORT: ${reason}`;
@@ -917,6 +919,7 @@ function abortSequence(reason) {
 }
  
 function triggerLaunch() {
+  if (isActual) return;
   clearInterval(countdownTimer);
   setSeqState('launch');
   el('mainClock').textContent = '00:00';
@@ -949,6 +952,7 @@ function runStepAt(t) {
 }
  
 function _runTick() {
+  if (isActual) return;
   if (seqState !== 'counting') return;
   remainingSeconds--;
   if (remainingSeconds < 0) { triggerLaunch(); return; }
@@ -978,6 +982,7 @@ function _runTick() {
 }
  
 function startCountdown() {
+  if (isActual) return;
   totalSeconds = parseInt(el('handoffInput').value) || 180;
   remainingSeconds = totalSeconds;
   buildSequence(); // compute triggerAt values relative to current handoverSeconds
@@ -989,6 +994,7 @@ function startCountdown() {
 }
  
 function holdSequencer() {
+  if (isActual) return;
   heldAt = remainingSeconds;
   clearInterval(countdownTimer); clearTimeout(seqTimer);
   setSeqState('hold');
@@ -997,12 +1003,14 @@ function holdSequencer() {
 }
  
 function resumeSequencer() {
+  if (isActual) return;
   remainingSeconds = heldAt;
   setSeqState('counting');
   countdownTimer = setInterval(_runTick, 1000);
 }
  
 function resetSequencer() {
+  if (isActual) return;
   clearInterval(countdownTimer); clearTimeout(seqTimer);
   totalSeconds = parseInt(el('handoffInput').value) || 180;
   remainingSeconds = totalSeconds;
@@ -1061,6 +1069,7 @@ function updateHandoverMarker() {
 }
  
 function syncHandoff() {
+  if (isActual) return;
   const m = parseInt(el('cfgMins')?.value) || 0;
   const s = parseInt(el('cfgSecs')?.value) || 0;
   const total = Math.max(10, m*60 + s);
@@ -1077,6 +1086,7 @@ function syncHandoff() {
 }
  
 function syncHandover() {
+  if (isActual) return;
   const m = parseInt(el('cfgHandoverMins')?.value) || 0;
   const s = parseInt(el('cfgHandoverSecs')?.value) || 0;
   handoverSeconds = Math.max(5, m*60 + s);
@@ -1090,6 +1100,7 @@ el('cfgSecs').addEventListener('change', syncHandoff);
 el('cfgHandoverMins').addEventListener('change', syncHandover);
 el('cfgHandoverSecs').addEventListener('change', syncHandover);
 el('handoffInput').addEventListener('change', () => {
+  if (isActual) return;
   try { localStorage.setItem(LS_HANDOFF, el('handoffInput').value); } catch(e) {}
   if (seqState === 'standby') resetSequencer();
 });
@@ -1101,6 +1112,7 @@ el('btnAbort').addEventListener('click', () => { if(isViewerMode) return; if(seq
  
 // ── Command polling (handles same-tab dashboard buttons) ──
 function processCmd() {
+  if (isActual) return;
   if (isViewerMode) return;
   try {
     const raw = localStorage.getItem(LS_CMD); if (!raw) return;
@@ -1119,6 +1131,7 @@ setInterval(processCmd, 300); // poll every 300ms — catches same-tab commands
  
 var RESET_PASSWORD = 'airsent';
 function showResetModal() {
+  if (isActual) return;
   if (isViewerMode) return;
   var m = document.getElementById('resetModal');
   if (m) { m.style.display = 'flex'; }
@@ -1150,7 +1163,7 @@ document.getElementById('resetPwdInput').addEventListener('keydown', function(e)
  
 // ── WebSocket ─────────────────────────────────────────────
 function connectWs() {
-  ws = new WebSocket('ws://localhost:8765');
+  ws = new WebSocket(window.airsentApiUrl('/telem', true));
   ws.onopen = () => { el('hLink').textContent='LINKED'; el('hLink').className='tb-val g'; };
   ws.onmessage = e => { try{telemetry=JSON.parse(e.data);updateTelemetry(telemetry);}catch(err){} };
   ws.onclose = () => { el('hLink').textContent='OFFLINE'; el('hLink').className='tb-val r'; setTimeout(connectWs,3000); };
@@ -1188,6 +1201,7 @@ try {
  
 // Restore active state from localStorage if it exists, else fresh start
 (function() {
+  if (isActual) return;
   try {
     const raw = localStorage.getItem(LS_STATE);
     if (raw) {
@@ -1233,6 +1247,13 @@ buildSequence(); // initial build so sidebar shows correct T-minus labels
 renderGoNogo();
 buildTimeline();
  
+window.airsentRenderSharedCountdown = function(d) {
+  if (totalSeconds !== d.total || handoverSeconds !== d.handoverAt) {
+    totalSeconds = d.total; handoverSeconds = d.handoverAt; buildSequence(); renderSeq(); updateHandoverMarker();
+  }
+  updateTimelineProgress(100 * (d.total - d.remaining) / d.total);
+};
+renderSeq();
 // Rebuild timeline when mission changes in another tab
 window.addEventListener('storage', e => {
   if (e.key === 'airsent_mission_v1') buildTimeline();
@@ -1241,5 +1262,6 @@ window.addEventListener('storage', e => {
  
 if(isActual) connectWs(); else runDemo();
 </script>
+<script src="shared-countdown.js?v=1"></script>
 </body>
 </html>

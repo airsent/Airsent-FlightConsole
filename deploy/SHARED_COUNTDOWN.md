@@ -1,0 +1,9 @@
+The dashboard and Launch Sequencer use /sequence over WSS in live operator/viewer modes. Demo stays local. launch_sequence_server.py owns the deadline, persisted at /var/lib/airsent-sequence/state.json. No browser needs to remain open. T+ means the countdown elapsed; it does not confirm liftoff or send vehicle commands. The Launch Sequencer's existing simulated checks are not executed by the shared display timer.
+
+Install the service in /opt/airsent, install deploy/airsent-sequence.service under /etc/systemd/system, and set AIRSENT_OPERATOR_PASSWORD in root-owned /etc/airsent-sequence.env (mode 0600) to the existing operator login password. Configure nginx /sequence to proxy WebSocket connections to 127.0.0.1:9202. The Python websockets dependency is required. StateDirectory creates a writable state directory for the airsent service user.
+
+Commands require password authentication on the socket; viewers only subscribe. The existing site's publicly embedded login credentials remain its authentication limitation. Changing localStorage role alone cannot authorize countdown commands. Passwords are sent only over WSS in production and never included in snapshots, URLs, state files or logs. Existing operator tabs request the operator login password once per browser tab; new logins retain it in sessionStorage for the countdown connection.
+
+All commands include the last state revision so simultaneous conflicting commands are rejected. Lost/silent connections disable controls and show SYNC OFFLINE after 3.5 seconds. Reconnect fetches authoritative state and does not replay commands. Restarting the service retains the deadline, holds and aborts.
+
+Validate against an isolated instance and temporary state file: operator Start, viewer sees same remaining time; hold/resume on either operator page; refresh/join late; abort/reset; reject unauthenticated writes; drop connection and reconnect. Do not start the production countdown merely to test deployment.

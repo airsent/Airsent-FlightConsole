@@ -698,6 +698,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 <script>
 // ── LAUNCH MINI ───────────────────────────────────────────
 (function() {
+  if ((localStorage.getItem('airsentMode') || 'demo').toLowerCase() !== 'demo') return;
   const LS_KEY     = 'airsent_launch_state_v2';
   const LS_HANDOFF = 'airsent_launch_handoff';
   const CMD_KEY    = 'airsent_launch_cmd_v1';
@@ -1131,5 +1132,6 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   connectDownCam();
 })();
 </script>
+<script src="shared-countdown.js?v=1"></script>
 </body>
 </html>

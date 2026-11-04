@@ -134,6 +134,8 @@
 
     function runBootSequence(){
       localStorage.setItem("airsentMode", selectedMode);
+      if (selectedMode === "operator") sessionStorage.setItem("airsentSequencePassword", passwordEl.value.trim());
+      else sessionStorage.removeItem("airsentSequencePassword");
 
       bootOverlay.classList.remove("hidden");
 

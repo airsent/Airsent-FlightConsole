@@ -1,0 +1,17 @@
+[Unit]
+Description=Airsent shared display countdown
+After=network.target
+[Service]
+User=airsent
+WorkingDirectory=/opt/airsent
+EnvironmentFile=/etc/airsent-sequence.env
+ExecStart=/usr/bin/python3 /opt/airsent/launch_sequence_server.py
+StateDirectory=airsent-sequence
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
