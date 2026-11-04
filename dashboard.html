@@ -645,13 +645,15 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
 
 body.dashboard-fixed .motor-panel .motor-header,
 body.dashboard-fixed .motor-panel .motor-row {
-  grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
   gap:6px;
   font-variant-numeric:tabular-nums;
 }
 body.dashboard-fixed .motor-panel .motor-header { font-size:12px !important;white-space:nowrap; }
-body.dashboard-fixed .motor-panel .motor-header > span:nth-child(n+2),
-body.dashboard-fixed .motor-panel .motor-row > span:nth-child(n+2) { text-align:right; }
+body.dashboard-fixed .motor-panel .motor-header > span:nth-child(2),
+body.dashboard-fixed .motor-panel .motor-row > span:nth-child(2) { text-align:center; }
+body.dashboard-fixed .motor-panel .motor-header > span:nth-child(3),
+body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:right; }
 
 /* Compact, independent RC / network readouts with no decorative signal bars. */
 .signal-split-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); padding:0 !important; overflow:hidden; }
