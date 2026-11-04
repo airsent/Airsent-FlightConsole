@@ -25,3 +25,7 @@ The browser closes and reconnects stalled WebSockets after 2.5 seconds without f
 ## RC panel display
 
 CONNECTED (green) means fresh autopilot-reported receiver input is present; DISCONNECTED (red) means receiver input is absent/unhealthy or its data path is stale. This uses input_present independently of RSSI. It does not claim the handheld transmitter is powered on. Receiver unplug/reconnect has been tested on this installation with radio failsafe enabled. Real RSSI is displayed as WEAK (0–39%), MODERATE (40–79%), or STRONG (80–100%). Unknown RSSI displays -- and never changes the connection label.
+
+## Active network/data link
+
+The panel follows the Jetson interface routing to the VPS. NetworkManager reports Wi-Fi connection/SSID/quality independently of Pixhawk. Green WIFI indicates active Wi-Fi (including TheChair). A routed modem connection displays green 5G only when ModemManager reports NR/5G; LTE displays 4G and unreported technology displays CELLULAR. Lack of signal-quality data does not mark a connected interface offline. Ethernet is labeled ETHERNET. Samples expire after six seconds and the browser feed watchdog clears indicators when telemetry stalls. This monitors an existing network connection; it does not configure or activate Wi-Fi/cellular failover. ModemManager/NM control-device vs IP-interface aliases are supported. Hardware cellular handover still requires a connected, configured modem for verification.

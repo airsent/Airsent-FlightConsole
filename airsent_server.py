@@ -139,36 +139,97 @@ cellular_lock = threading.Lock()
 last_mav_heartbeat = 0.0
 
 
-def cellular_signal_reader():
-    """Read modem-reported signal quality, not guessed bandwidth/latency.
+def signal_percent(value):
+    try:
+        if isinstance(value, bool):
+            return None
+        number = float(value)
+        return round(number) if math.isfinite(number) and 0 <= number <= 100 else None
+    except (TypeError, ValueError):
+        return None
 
-    Requires ModemManager/mmcli on the Jetson and an attached supported modem.
-    A cellular data connection does not imply that the negotiated RAT is 5G.
-    """
-    while True:
-        result = {"percent": None, "last_seen": 0.0, "technology": None,
-                  "connected": False, "source": "ModemManager"}
+
+def read_network_link(run=subprocess.run):
+    """Inspect the interface routing to the VPS, not an arbitrary connected adapter."""
+    result = {'connected': False, 'type': None, 'interface': None,
+              'ssid': None, 'percent': None, 'technology': None, 'source': 'NetworkManager'}
+    def command(args):
+        return run(args, capture_output=True, text=True, timeout=3, check=True).stdout.strip()
+    try:
+        import urllib.parse
+        host = urllib.parse.urlparse(VPS_TELEM_URL).hostname
+        address = socket.gethostbyname(host)
+        routes = json.loads(command(['ip', '-j', 'route', 'get', address]))
+        interface = routes[0].get('dev') if routes else None
+        if not interface:
+            return result
+        result['interface'] = interface
+        nm_device = interface
         try:
-            proc = subprocess.run(["mmcli", "-m", "any", "--output-json"],
-                                  capture_output=True, text=True, timeout=3, check=True)
-            modem = json.loads(proc.stdout).get("modem", {})
-            generic = modem.get("generic", {})
-            quality = generic.get("signal-quality", {})
-            quality_value = quality.get("value") if isinstance(quality, dict) else quality
-            state = str(generic.get("state", "")).lower()
-            tech = generic.get("access-technologies") or generic.get("access-technology")
-            if isinstance(tech, list):
-                tech = ", ".join(map(str, tech))
-            if isinstance(quality_value, (int, float)) and 0 <= quality_value <= 100:
-                result["percent"] = round(quality_value)
-                result["last_seen"] = time.time()
-            result["technology"] = str(tech) if tech else None
-            result["connected"] = state == "connected"
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
-            # Missing mmcli, inaccessible modem, or query failure: data unavailable.
-            pass
+            kind = command(['nmcli', '-g', 'GENERAL.TYPE', 'device', 'show', nm_device])
+        except subprocess.CalledProcessError:
+            # Modems may be named cdc-wdm0 in NM while their IP route uses wwan0.
+            devices = command(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device', 'status'])
+            kind = None
+            for row in devices.splitlines():
+                candidate, _, candidate_kind = row.partition(':')
+                if candidate_kind not in ('gsm', 'cdma', 'wwan'):
+                    continue
+                ip_interface = command(['nmcli', '-g', 'GENERAL.IP-IFACE', 'device', 'show', candidate])
+                if ip_interface == interface:
+                    nm_device, kind = candidate, candidate_kind
+                    break
+            if kind is None:
+                return result
+        state = command(['nmcli', '-g', 'GENERAL.STATE', 'device', 'show', nm_device])
+        if not state.startswith('100'):
+            return result
+        if kind in ('wifi', '802-11-wireless'):
+            result.update(connected=True, type='wifi')
+            profile = command(['nmcli', '-g', 'GENERAL.CONNECTION', 'device', 'show', interface])
+            result['ssid'] = command(['nmcli', '-g', '802-11-wireless.ssid', 'connection', 'show', profile]) or None
+            rows = command(['nmcli', '-t', '-f', 'IN-USE,SIGNAL', 'device', 'wifi', 'list', 'ifname', interface, '--rescan', 'no'])
+            for row in rows.splitlines():
+                if row.startswith('*:'):
+                    result['percent'] = signal_percent(row.split(':', 1)[1])
+                    break
+        elif kind in ('gsm', 'cdma', 'wwan'):
+            result.update(connected=True, type='cellular')
+            try:
+                modem = json.loads(command(['mmcli', '-m', 'any', '--output-json'])).get('modem', {})
+                generic = modem.get('generic', {})
+                # Only use measurements from the modem carrying this route.
+                ports = generic.get('ports', [])
+                if isinstance(ports, str):
+                    ports = [ports]
+                matches = generic.get('primary-port') in (interface, nm_device) or any(str(port).split()[0] == interface for port in ports)
+                if matches:
+                    quality = generic.get('signal-quality', {})
+                    result['percent'] = signal_percent(quality.get('value') if isinstance(quality, dict) else quality)
+                    technology = generic.get('access-technologies') or generic.get('access-technology')
+                    result['technology'] = ', '.join(map(str, technology)) if isinstance(technology, list) else technology
+                    result['source'] = 'NetworkManager/ModemManager'
+            except (OSError, ValueError, subprocess.SubprocessError):
+                pass
+        elif kind in ('ethernet', '802-3-ethernet'):
+            result.update(connected=True, type='ethernet')
+    except (OSError, ValueError, IndexError, KeyError, subprocess.SubprocessError):
+        # Missing/failed queries are not evidence of a connection.
+        result['connected'] = False
+    return result
+
+
+network_link = {'connected': False, 'last_seen': 0.0}
+
+
+def cellular_signal_reader():
+    """Refresh active network state independently of MAVLink/RC status."""
+    while True:
+        result = read_network_link()
+        result['last_seen'] = time.time()
         with cellular_lock:
-            cellular_signal.update(result)
+            network_link.clear()
+            network_link.update(result)
         time.sleep(2)
 
 
@@ -774,15 +835,18 @@ def build_telemetry_payload():
     # Keep legacy consumers from receiving a stale/default RSSI.
     payload['rssi'] = payload['rc_signal']['percent']
     with cellular_lock:
-        cellular = dict(cellular_signal)
-    cell_age = now - cellular['last_seen'] if cellular['last_seen'] else None
-    payload['cellular_signal'] = {
-        'percent': cellular['percent'] if cell_age is not None and cell_age < 6 else None,
-        'age': round(cell_age, 2) if cell_age is not None else None,
-        'technology': cellular['technology'],
-        'connected': cellular['connected'] and cell_age is not None and cell_age < 6,
-        'source': cellular['source'],
-    }
+        network = dict(network_link)
+    sampled_at = network.pop('last_seen', 0.0)
+    network_age = now - sampled_at if sampled_at else None
+    network['age'] = round(network_age, 2) if network_age is not None else None
+    network['connected'] = bool(network.get('connected') and network_age is not None and 0 <= network_age < 6)
+    if not network['connected']:
+        network['percent'] = None
+    payload['network_link'] = network
+    # Compatibility for existing consumers expecting cellular-only measurements.
+    payload['cellular_signal'] = dict(network) if network.get('type') == 'cellular' else {
+        'connected': False, 'percent': None, 'age': network['age'], 'technology': None,
+        'source': 'ModemManager'}
     payload['cam_temp'] = cam_temp['jetson_c']
     payload['cam_hot']  = cam_temp['hot']
     payload['jetson_temp'] = cam_temp['jetson_c']

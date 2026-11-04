@@ -370,31 +370,44 @@ function setRCConnectionStatus(connected) {
   el.classList.remove("signal-none", "signal-weak", "signal-good", "signal-strong", "green-text", "status-online", "status-offline");
   el.classList.add(connected ? "signal-good" : "signal-none");
 }
+function updateNetworkIndicator(data, feedFresh) {
+  const link = data.network_link;
+  const connected = !!(feedFresh && link?.connected === true && Number.isFinite(link.age) && link.age >= 0 && link.age < 6);
+  let label = "DISCONNECTED";
+  if (connected) {
+    const tech = String(link.technology || "").toLowerCase();
+    label = link.type === "wifi" ? "WIFI" : link.type === "ethernet" ? "ETHERNET" :
+      link.type === "cellular" ? (/5g|5gnr|\bnr\b/.test(tech) ? "5G" : /lte/.test(tech) ? "4G" : "CELLULAR") : "NETWORK";
+  }
+  const state = getEl("networkSignalState");
+  if (state) {
+    state.textContent = label;
+    state.classList.remove("signal-none", "signal-weak", "signal-good", "signal-strong");
+    state.classList.add(connected ? "signal-good" : "signal-none");
+    state.title = connected && link.ssid ? link.ssid : connected ? String(link.technology || link.type) : "No fresh active network connection";
+  }
+  const percent = connected && typeof link.percent === "number" && Number.isFinite(link.percent) && link.percent >= 0 && link.percent <= 100 ? link.percent : null;
+  setText("cellularSignalVal", percent === null ? "--" : `${Math.round(percent)}%`);
+  return connected;
+}
 function resetSignalIndicators() {
   setText("rssiVal", "--");
   setText("cellularSignalVal", "--");
   setText("cellularNetworkType", "UNKNOWN");
   setText("signalFreshness", "OFFLINE");
   setRCConnectionStatus(false);
-  setSignalStatus("networkSignalState", null, false);
+  updateNetworkIndicator({}, false);
 }
 function updateSignalIndicators(data, feedFresh) {
   const pixhawk = feedFresh && data.pixhawk_connected === true;
   const rcConnected = !!(pixhawk && data.rc_signal && data.rc_signal.input_present === true && data.rc_signal.source === "RC_CHANNELS" && Number.isFinite(data.rc_signal.health_age) && data.rc_signal.health_age >= 0 && data.rc_signal.health_age < 3 && Number.isFinite(data.rc_signal.age) && data.rc_signal.age >= 0 && data.rc_signal.age < 3);
   const rc = rcConnected ? data.rc_signal.percent : null;
-  const link = feedFresh && data.cellular_signal && data.cellular_signal.age != null && data.cellular_signal.age < 6
-    ? data.cellular_signal : null;
   const rcValid = typeof rc === "number" && Number.isFinite(rc) && rc >= 0 && rc <= 100;
-  const linkValid = !!(link && link.connected === true && typeof link.percent === "number" && Number.isFinite(link.percent) && link.percent >= 0 && link.percent <= 100);
   setText("rssiVal", rcValid ? (rc < 40 ? "WEAK" : rc < 80 ? "MODERATE" : "STRONG") : "--");
-  setText("cellularSignalVal", linkValid ? `${Math.round(link.percent)}%` : "--");
-  // Reflect the reported technology; never label a connection Wi-Fi/5G without hardware data.
-  const networkType = link && link.technology ? String(link.technology).toUpperCase() : "UNKNOWN";
-  setText("cellularNetworkType", networkType);
+  const networkConnected = updateNetworkIndicator(data, feedFresh);
   setText("signalFreshness", !feedFresh ? "FEED STALE" : pixhawk ? "LIVE" : "PIXHAWK OFFLINE");
   setRCConnectionStatus(rcConnected);
-  setSignalStatus("networkSignalState", linkValid ? link.percent : null, linkValid);
-  const ok = pixhawk && rcConnected && (!rcValid || rc >= 40) && linkValid && link.percent >= 40;
+  const ok = pixhawk && rcConnected && (!rcValid || rc >= 40) && networkConnected;
   setOnlineStatus(getEl("linkTop"), ok ? "REPORTED" : "CHECK LINK", ok);
 }
 
@@ -856,7 +869,7 @@ function updateDemoTelemetry() {
   setText("cellularNetworkType", "DEMO");
   setText("signalFreshness", "DEMO");
   setRCConnectionStatus(false);
-  setSignalStatus("networkSignalState", null, false);
+  updateNetworkIndicator({}, false);
 
   const arrow = getEl("miniCompassArrow");
   if (arrow) arrow.style.transform = `translate(-50%, -50%) rotate(${hdg}deg)`;
