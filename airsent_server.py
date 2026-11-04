@@ -379,7 +379,7 @@ def mavlink_reader():
                     continue
                 t = msg.get_type()
                 if t == 'BAD_DATA': continue
-                if msg.get_srcSystem() != mav.target_system or msg.get_srcComponent() != mav.target_component:
+                if msg.get_srcSystem() != hb.get_srcSystem() or msg.get_srcComponent() != hb.get_srcComponent():
                     continue
                 _now = time.time()
                 with rc_lock:
