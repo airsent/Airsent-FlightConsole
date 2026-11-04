@@ -67,7 +67,7 @@ async def presence_handler(ws, *args):
 
             role = token_role(str(data.get("token", "")), AUTH_SECRET)
             if not role:
-                await ws.send(json.dumps({"type": "presence_login_required"}))
+                await ws.send(json.dumps({"type": "presence_login_required", "requestId": data.get("requestId")}))
                 clients[ws]["role"] = "unknown"
                 await broadcast_counts()
                 continue
@@ -82,7 +82,7 @@ async def presence_handler(ws, *args):
                 tag = hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10]
                 print(f"[PRESENCE] registered {role} device={tag} sockets={len(clients)}", flush=True)
             await ws.send(json.dumps({"type": "presence_registered", "role": clients[ws]["role"],
-                                      "device": hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10]}))
+                                      "device": hashlib.sha256(clients[ws]["clientId"].encode()).hexdigest()[:10], "requestId": data.get("requestId")}))
             await broadcast_counts()
     finally:
         clients.pop(ws, None)

@@ -131,6 +131,7 @@
           ws.onerror = () => { clearTimeout(timeout); ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); };
         });
         selectedMode = result.role;
+        localStorage.setItem("airsentMode", result.role);
         localStorage.setItem('airsentPresenceToken', result.token);
         return true;
       } catch (error) { showError(error.message); return false; }
@@ -167,7 +168,7 @@
         } else {
           bootMessage.textContent = "System ready. Redirecting...";
           setTimeout(() => {
-            window.location.href = "dashboard.html";
+            window.location.href = "dashboard.html?login=current";
           }, 700);
         }
       }

@@ -14,12 +14,19 @@ function browser(savedRole) {
 const mismatched=browser('operator');
 assert.equal(mismatched.socket.sent[0].token,'signed-session');
 assert.equal(mismatched.socket.sent[0].role,undefined);
-mismatched.socket.onmessage({data:JSON.stringify({type:'presence_registered',role:'viewer',device:'a'})});
+mismatched.socket.onmessage({data:JSON.stringify({type:'presence_registered',requestId:1,role:'viewer',device:'a'})});
 assert.equal(mismatched.storage.get('airsentMode'),'operator');
 assert.equal(mismatched.storage.has('airsentPresenceToken'),false);
-assert.equal(mismatched.redirected(),'index.html?reason=role-mismatch');
+assert.equal(mismatched.redirected(),'index.html?login=current&reason=role-mismatch');
 const correct=browser('operator');
-correct.socket.onmessage({data:JSON.stringify({type:'presence_registered',role:'operator',device:'b'})});
+correct.socket.onmessage({data:JSON.stringify({type:'presence_registered',requestId:1,role:'operator',device:'b'})});
 assert.equal(correct.redirected(),undefined);
 assert.equal(correct.storage.get('airsentPresenceToken'),'signed-session');
 console.log('PASS: stale viewer token after operator login forces verified sign-in; correct operator session retained');
+
+const changed=browser('operator');
+changed.storage.set('airsentPresenceToken','new-operator-session');
+changed.socket.onmessage({data:JSON.stringify({type:'presence_registered',requestId:1,role:'viewer',device:'a'})});
+assert.equal(changed.storage.get('airsentPresenceToken'),'new-operator-session');
+assert.equal(changed.redirected(),undefined);
+console.log('PASS: a delayed viewer acknowledgement cannot erase a new operator session');

@@ -28,9 +28,12 @@
   function render(data) {
     nodes.forEach((node,i) => { if (node) { node.textContent = data ? data[['total','operators','viewers'][i]] : '--'; node.title = data ? 'Live connected browser sessions' : 'Presence connection offline'; } });
   }
-  let ws, heartbeat, reconnect, stopped = false, lastSeen = 0;
+  let ws, heartbeat, reconnect, stopped = false, lastSeen = 0, requestId = 0, sentToken = null;
   function send() {
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'presence', token:localStorage.getItem('airsentPresenceToken') || '', clientId, page:location.pathname.split('/').pop()}));
+    if (ws?.readyState === WebSocket.OPEN) {
+      sentToken = localStorage.getItem('airsentPresenceToken') || '';
+      ws.send(JSON.stringify({type:'presence', token:sentToken, requestId:++requestId, clientId, page:location.pathname.split('/').pop()}));
+    }
   }
   function connect() {
     if (stopped) return;
@@ -48,12 +51,15 @@
     };
     current.onmessage = event => {
       if (current !== ws) return;
-      try { const data = JSON.parse(event.data); if (data.type === 'presence_login_required') {
+      try { const data = JSON.parse(event.data);
+      if (['presence_registered','presence_login_required'].includes(data.type) &&
+          (data.requestId !== requestId || sentToken !== (localStorage.getItem('airsentPresenceToken') || ''))) return;
+      if (data.type === 'presence_login_required') {
         render(null);
         nodes.forEach(node => { if (node) node.title = 'Sign in again to verify this device role'; });
         window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:{role:'SIGN IN REQUIRED', device:'--'}}));
         if (!document.getElementById('presenceSignIn')) {
-          const link = document.createElement('a'); link.id='presenceSignIn'; link.href='index.html'; link.textContent='VERIFY LOGIN';
+          const link = document.createElement('a'); link.id='presenceSignIn'; link.href='index.html?login=current'; link.target='_top'; link.textContent='VERIFY LOGIN';
           link.style.cssText='color:#ffbd59;margin-left:6px;font-size:10px'; nodes[0]?.parentElement.append(link);
         }
       }
@@ -62,7 +68,7 @@
         if (role() !== data.role) {
           localStorage.removeItem('airsentPresenceToken');
           stopped = true; clearInterval(heartbeat); current.close();
-          location.replace('index.html?reason=role-mismatch');
+          location.replace('index.html?login=current&reason=role-mismatch');
           return;
         }
         window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:data}));
