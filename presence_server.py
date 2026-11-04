@@ -2,11 +2,15 @@ import asyncio
 import json
 import hashlib
 import time
+import os
+from presence_auth import authenticate, issue_token, token_role
 
 
 
 PRESENCE_PORT = 9201
 clients = {}
+AUTH_SECRET = ""
+AUTH_PASSWORDS = {}
 
 
 def counts():
@@ -52,10 +56,21 @@ async def presence_handler(ws, *args):
 
             if not isinstance(data, dict):
                 continue
+            if data.get("type") == "presence_login":
+                role = authenticate(str(data.get("username", "")).lower(), str(data.get("password", "")), AUTH_PASSWORDS)
+                await ws.send(json.dumps({"type": "presence_login", "role": role,
+                                          "token": issue_token(role, AUTH_SECRET) if role else None}))
+                if not role: await ws.close(code=1008, reason="Invalid login")
+                continue
             if data.get("type") != "presence":
                 continue
 
-            role = str(data.get("role", "")).lower()
+            role = token_role(str(data.get("token", "")), AUTH_SECRET)
+            if not role:
+                await ws.send(json.dumps({"type": "presence_login_required"}))
+                clients[ws]["role"] = "unknown"
+                await broadcast_counts()
+                continue
             previous = clients.get(ws, {})
             clients[ws] = {
                 "role": role if role in ("operator", "viewer") else "unknown",
@@ -83,6 +98,9 @@ async def cleanup_loop():
 
 async def main():
     import websockets
+    global AUTH_SECRET, AUTH_PASSWORDS
+    AUTH_SECRET = os.environ["AIRSENT_PRESENCE_SECRET"]
+    AUTH_PASSWORDS = {"operator": os.environ["AIRSENT_OPERATOR_PASSWORD"], "viewer": os.environ["AIRSENT_VIEWER_PASSWORD"]}
     server = await websockets.serve(
         presence_handler,
         "127.0.0.1",

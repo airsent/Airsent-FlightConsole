@@ -107,29 +107,34 @@
       errorMsg.classList.remove("visible");
     }
 
-    function validateLogin(){
+    async function validateLogin(){
       const username = usernameEl.value.trim().toLowerCase();
       const password = passwordEl.value.trim();
-
       hideError();
-
-      if(username === "demo" && password === "123456"){
-        selectedMode = "demo";
-        return true;
+      if (username === "demo" && password === "123456") {
+        selectedMode = "demo"; localStorage.removeItem('airsentPresenceToken'); return true;
       }
-
-      if(username === "viewer" && password === "2468"){
-        selectedMode = "viewer";
+      if (loginBtn.disabled) return false;
+      loginBtn.disabled = true;
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const ws = new WebSocket(window.airsentApiUrl('/presence', true));
+          const timeout = setTimeout(() => { ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); }, 10000);
+          ws.onopen = () => ws.send(JSON.stringify({type:'presence_login', username, password}));
+          ws.onmessage = event => {
+            let msg; try { msg = JSON.parse(event.data); } catch (_) { return; }
+            if (msg.type !== 'presence_login') return;
+            clearTimeout(timeout); ws.close();
+            if (!msg.token || !['operator','viewer'].includes(msg.role)) reject(new Error('INVALID USERNAME OR PASSWORD'));
+            else resolve(msg);
+          };
+          ws.onerror = () => { clearTimeout(timeout); ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); };
+        });
+        selectedMode = result.role;
+        localStorage.setItem('airsentPresenceToken', result.token);
         return true;
-      }
-
-      if(username === "operator" && password === "13579"){
-        selectedMode = "operator";
-        return true;
-      }
-
-      showError("INVALID USERNAME OR PASSWORD");
-      return false;
+      } catch (error) { showError(error.message); return false; }
+      finally { loginBtn.disabled = false; }
     }
 
     function runBootSequence(){
@@ -170,15 +175,15 @@
       setTimeout(next, 300);
     }
 
-    loginBtn.addEventListener("click", () => {
-      if(validateLogin()){
+    loginBtn.addEventListener("click", async () => {
+      if(await validateLogin()){
         runBootSequence();
       }
     });
 
-    passwordEl.addEventListener("keydown", (e)=>{
+    passwordEl.addEventListener("keydown", async (e)=>{
       if(e.key === "Enter"){
-        if(validateLogin()){
+        if(await validateLogin()){
           runBootSequence();
         }
       }

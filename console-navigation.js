@@ -10,7 +10,7 @@ addEventListener('DOMContentLoaded',schedule);addEventListener('load',schedule);
     if (window.airsentPresenceStarted || /(?:^|\/)index\.html$/.test(location.pathname) || location.pathname === '/') return;
     if (document.querySelector('script[src*="presence.js"]')) return;
     const script = document.createElement('script');
-    script.src = 'presence.js?v=4';
+    script.src = 'presence.js?v=6';
     document.body.append(script);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

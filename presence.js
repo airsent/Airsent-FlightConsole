@@ -30,7 +30,7 @@
   }
   let ws, heartbeat, reconnect, stopped = false, lastSeen = 0;
   function send() {
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'presence', role:role(), clientId, page:location.pathname.split('/').pop()}));
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'presence', token:localStorage.getItem('airsentPresenceToken') || '', clientId, page:location.pathname.split('/').pop()}));
   }
   function connect() {
     if (stopped) return;
@@ -48,7 +48,20 @@
     };
     current.onmessage = event => {
       if (current !== ws) return;
-      try { const data = JSON.parse(event.data); if (data.type === 'presence_registered') window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:data})); if (data.type === 'presence_counts') { lastSeen = Date.now(); render(data); } } catch (_) {}
+      try { const data = JSON.parse(event.data); if (data.type === 'presence_login_required') {
+        render(null);
+        nodes.forEach(node => { if (node) node.title = 'Sign in again to verify this device role'; });
+        window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:{role:'SIGN IN REQUIRED', device:'--'}}));
+        if (!document.getElementById('presenceSignIn')) {
+          const link = document.createElement('a'); link.id='presenceSignIn'; link.href='index.html'; link.textContent='VERIFY LOGIN';
+          link.style.cssText='color:#ffbd59;margin-left:6px;font-size:10px'; nodes[0]?.parentElement.append(link);
+        }
+      }
+      if (data.type === 'presence_registered') {
+        document.getElementById('presenceSignIn')?.remove();
+        if (localStorage.getItem('airsentMode') !== data.role) localStorage.setItem('airsentMode', data.role);
+        window.dispatchEvent(new CustomEvent('airsent-presence-registration', {detail:data}));
+      } if (data.type === 'presence_counts') { lastSeen = Date.now(); render(data); } } catch (_) {}
     };
     current.onclose = () => {
       if (current !== ws) return;
@@ -58,7 +71,7 @@
     current.onerror = () => current.close();
     setTimeout(() => { if (current === ws && current.readyState === WebSocket.CONNECTING) current.close(); }, 8000);
   }
-  window.addEventListener('storage', e => { if (e.key === 'airsentMode') { if (role() === 'demo') { stopped=true; ws?.close(); render(null); } else send(); } });
+  window.addEventListener('storage', e => { if (e.key === 'airsentMode' || e.key === 'airsentPresenceToken') { if (role() === 'demo') { stopped=true; ws?.close(); render(null); } else send(); } });
   window.addEventListener('pagehide', () => { stopped=true; clearInterval(heartbeat); clearTimeout(reconnect); ws?.close(); });
   window.addEventListener('pageshow', e => { if (e.persisted) { stopped=false; connect(); } });
   document.addEventListener('visibilitychange', () => {
