@@ -2,7 +2,6 @@ import asyncio
 import json
 import time
 
-import websockets
 
 
 PRESENCE_PORT = 9201
@@ -11,15 +10,15 @@ clients = {}
 
 def counts():
     now = time.time()
-    active = {
-        ws: meta for ws, meta in clients.items()
-        if now - meta.get("seen", 0) <= 20
-    }
-    clients.clear()
-    clients.update(active)
-
-    operators = sum(1 for meta in clients.values() if meta.get("role") == "operator")
-    viewers = sum(1 for meta in clients.values() if meta.get("role") == "viewer")
+    active = {}
+    for ws, meta in clients.items():
+        if now - meta.get("seen", 0) > 30 or meta.get("role") not in ("operator", "viewer"):
+            continue
+        key = meta.get("clientId") or str(id(ws))
+        if key not in active or meta["seen"] > active[key]["seen"]:
+            active[key] = meta
+    operators = sum(meta["role"] == "operator" for meta in active.values())
+    viewers = sum(meta["role"] == "viewer" for meta in active.values())
     return {
         "type": "presence_counts",
         "total": operators + viewers,
@@ -40,7 +39,7 @@ async def broadcast_counts():
         clients.pop(ws, None)
 
 
-async def presence_handler(ws):
+async def presence_handler(ws, *args):
     clients[ws] = {"role": "unknown", "page": "unknown", "seen": time.time()}
     print(f"[PRESENCE] connected {ws.remote_address} ({len(clients)} sockets)")
     await broadcast_counts()
@@ -60,6 +59,7 @@ async def presence_handler(ws):
             clients[ws] = {
                 "role": role if role in ("operator", "viewer") else "unknown",
                 "page": str(data.get("page", "unknown"))[:80],
+                "clientId": str(data.get("clientId", ""))[:80],
                 "seen": time.time(),
             }
             await broadcast_counts()
@@ -76,11 +76,12 @@ async def cleanup_loop():
 
 
 async def main():
+    import websockets
     server = await websockets.serve(
         presence_handler,
         "127.0.0.1",
         PRESENCE_PORT,
-        max_size=100_000,
+        max_size=4096,
         ping_interval=20,
         ping_timeout=20,
     )
