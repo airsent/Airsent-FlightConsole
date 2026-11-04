@@ -21,3 +21,7 @@ Run `python3 -m unittest discover -s tests -v` and `node tests/rc-display.test.j
 The tests use simulated MAVLink messages and DOM elements. They verify decision logic, not physical receiver behavior or the deployed data path. A healthy SYS_STATUS report does not independently prove a transmitter is powered on if the receiver/autopilot misreports failsafe state.
 
 The browser closes and reconnects stalled WebSockets after 2.5 seconds without fresh telemetry, or 5 seconds without the first fresh frame. Old socket callbacks cannot overwrite a newer connection.
+
+## RC panel display
+
+CONNECTED (green) means fresh autopilot-reported receiver input is present; DISCONNECTED (red) means receiver input is absent/unhealthy or its data path is stale. This uses input_present independently of RSSI. It does not claim the handheld transmitter is powered on. Receiver unplug/reconnect has been tested on this installation with radio failsafe enabled. Real RSSI is displayed as WEAK (0–39%), MODERATE (40–79%), or STRONG (80–100%). Unknown RSSI displays -- and never changes the connection label.
