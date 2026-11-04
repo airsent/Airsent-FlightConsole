@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent Flight Console</title>
 <link rel="stylesheet" href="styles.css?v=countdown-2">
+<link rel="stylesheet" href="countdown-card.css?v=1">
 <style>
 .lbtn-reset { border-color:rgba(127,220,255,.4); color:#7fdcff; background:rgba(127,220,255,.06); }
 .lbtn-reset:hover { background:rgba(127,220,255,.15); }
@@ -277,8 +278,10 @@ REC: <span>185MB</span>
     <a href="launch.html" style="font-size:9px;color:#7fdcff;text-decoration:none;letter-spacing:.5px;opacity:.55;margin-left:auto;flex-shrink:0">FULL →</a>
   </div>
  
+  <div class="launch-mini-notice" aria-live="polite">
   <div class="launch-fault-bar" id="lmFaultBar"></div>
   <div id="lmHandoverBadge" style="display:none;font-size:9px;font-weight:700;letter-spacing:1.5px;color:#ffb800;font-family:monospace;padding:1px 2px;">⚡ VEHICLE HANDOVER</div>
+  </div>
  
   <div class="launch-btn-row">
     <button class="launch-mini-btn lbtn-start" id="lmBtnStart">▶ GO</button>

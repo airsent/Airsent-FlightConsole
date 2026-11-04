@@ -1,0 +1,56 @@
+/* Reserve the notice row even when its children are hidden. */
+body.dashboard-fixed .launch-mini-body {
+  grid-template-rows: auto minmax(12px, 1fr) 34px !important;
+  gap: 6px !important;
+  padding: 10px 12px !important;
+}
+body.dashboard-fixed .launch-clock-row {
+  grid-row: 1 !important;
+  align-self: start !important;
+  align-items: center !important;
+  row-gap: 5px !important;
+  overflow: visible !important;
+}
+body.dashboard-fixed .launch-clock {
+  font-size: 30px !important;
+  line-height: 1.05 !important;
+}
+body.dashboard-fixed .launch-status-badge {
+  grid-column: 1 / -1 !important;
+  padding: 2px 7px !important;
+  font-size: 9px !important;
+  line-height: 1.2 !important;
+  max-width: 70%;
+}
+body.dashboard-fixed .launch-clock-row a {
+  z-index: 1;
+  align-self: center !important;
+}
+body.dashboard-fixed .launch-mini-notice {
+  grid-row: 2;
+  min-height: 12px;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+body.dashboard-fixed .launch-fault-bar {
+  margin: 0 !important;
+  min-height: 0 !important;
+  font-size: 9px !important;
+  line-height: 1.3 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.dashboard-fixed .launch-btn-row {
+  grid-row: 3 !important;
+  align-self: end !important;
+  height: 34px !important;
+}
+body.dashboard-fixed .launch-btn-row .launch-mini-btn {
+  min-height: 0 !important;
+  height: 34px !important;
+  font-size: 9px !important;
+  letter-spacing: .35px !important;
+}
