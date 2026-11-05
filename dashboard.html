@@ -550,7 +550,7 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
   <div class="signal-half" aria-label="Network data link">
     <div class="signal-half-heading">NETWORK / DATA LINK</div>
     <div id="networkSignalState" class="signal-state signal-none" role="status">DISCONNECTED</div>
-    <div class="signal-reading"><span>SIGNAL QUALITY</span><b id="cellularSignalVal">--</b></div>
+    <div class="signal-reading"><span>STRENGTH</span><b id="cellularSignalVal">--</b></div>
   </div>
   <span id="signalFreshness" class="signal-visually-hidden">OFFLINE</span>
 </section>
@@ -668,13 +668,17 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 .signal-reading { display:flex; align-items:center; justify-content:space-between; gap:4px; color:#91a8ba; font-size:clamp(9px,.76vw,12px); white-space:nowrap; }
 .signal-reading b { color:#ddeaf4; font-size:clamp(11px,.9vw,15px); }
 .signal-none { color:#ff506a !important; }
+#cellularSignalVal.network-strength-strong { color:#18c78f; }
+#cellularSignalVal.network-strength-moderate { color:#f5c542; }
+#cellularSignalVal.network-strength-weak { color:#ff3b61; }
+#cellularSignalVal.network-strength-unknown { color:#8fa8b7; }
 .signal-weak { color:#f5c542 !important; }
 .signal-good { color:#18c78f !important; }
 .signal-strong { color:#00c9a7 !important; }
 .signal-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 @media (max-width:720px) { .signal-half {padding:7px 6px;} .signal-half-heading {font-size:9px;letter-spacing:0;} .signal-state {font-size:11px;} .signal-reading {font-size:9px;} }
 </style>
-<script src="telemetry.js?v=cellular-strength-1"></script>
+<script src="telemetry.js?v=cellular-strength-2"></script>
 <script>
 (function(){
   const REF_W = 2048;

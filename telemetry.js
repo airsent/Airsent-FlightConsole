@@ -387,7 +387,14 @@ function updateNetworkIndicator(data, feedFresh) {
     state.title = connected && link.ssid ? link.ssid : connected ? String(link.technology || link.type) : "No fresh active network connection";
   }
   const percent = connected && typeof link.percent === "number" && Number.isFinite(link.percent) && link.percent >= 0 && link.percent <= 100 ? link.percent : null;
-  setText("cellularSignalVal", percent === null ? "--" : percent < 40 ? "WEAK" : percent < 80 ? "MODERATE" : "STRONG");
+  const strength = percent === null ? "unknown" : percent < 40 ? "weak" : percent < 80 ? "moderate" : "strong";
+  setText("cellularSignalVal", strength === "unknown" ? "--" : strength.toUpperCase());
+  const strengthEl = getEl("cellularSignalVal");
+  if (strengthEl) {
+    strengthEl.classList.remove("network-strength-strong", "network-strength-moderate", "network-strength-weak", "network-strength-unknown");
+    strengthEl.classList.add(`network-strength-${strength}`);
+    strengthEl.title = percent === null ? "Signal strength unavailable" : `${Math.round(percent)}%`;
+  }
   return connected;
 }
 function resetSignalIndicators() {

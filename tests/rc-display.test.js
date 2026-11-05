@@ -57,4 +57,5 @@ console.log('Passed Wi-Fi/5G/4G/unknown technology, unknown quality, stale feed 
 for (const [percent,label] of [[0,'WEAK'],[39,'WEAK'],[40,'MODERATE'],[79,'MODERATE'],[80,'STRONG'],[100,'STRONG'],[255,'--']]) {
  context.updateNetworkIndicator({network_link:{type:'cellular',connected:true,age:0,percent}},true);
  assert.equal(elements.get('cellularSignalVal').innerText,label);
+ assert.ok(elements.get('cellularSignalVal').classList.contains('network-strength-'+(label==='--'?'unknown':label.toLowerCase())));
 }
