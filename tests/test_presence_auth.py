@@ -13,3 +13,9 @@ class PresenceAuthTests(unittest.TestCase):
         self.assertIsNone(token_role(token+'x','test-secret',now=200))
         self.assertIsNone(token_role(token,'test-secret',now=3000000))
         self.assertIsNone(token_role('','test-secret'))
+
+    def test_simulation_credentials_are_a_distinct_role(self):
+        passwords={'operator':'op-test','viewer':'view-test','simulation':'sim-test'}
+        self.assertEqual(authenticate('simulation','sim-test',passwords),'simulation')
+        self.assertIsNone(authenticate('operator','sim-test',passwords))
+        self.assertEqual(token_role(issue_token('simulation','test-secret',now=100),'test-secret',now=200),'simulation')

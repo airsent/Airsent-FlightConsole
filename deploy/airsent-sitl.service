@@ -1,0 +1,21 @@
+[Unit]
+Description=Airsent isolated simulated ArduCopter
+After=network.target
+[Service]
+User=airsent
+Group=airsent
+WorkingDirectory=/var/lib/airsent-simulation
+StateDirectory=airsent-simulation
+ExecStart=/opt/airsent-simulation-venv/bin/python /opt/airsent-simulation/simulation_process.py /opt/airsent-simulation/arducopter --base-port 15760 -S -I 0 --home 33.4213,-111.9327,360,0 -w --model + --defaults /opt/airsent-simulation/copter.parm
+Restart=on-failure
+RestartSec=3
+MemoryMax=180M
+CPUWeight=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+IPAddressDeny=any
+IPAddressAllow=localhost
+[Install]
+WantedBy=multi-user.target

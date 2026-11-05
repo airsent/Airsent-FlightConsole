@@ -1,0 +1,21 @@
+[Unit]
+Description=Airsent authenticated simulation gateway
+After=airsent-simulation-backend.service
+Wants=airsent-simulation-backend.service
+[Service]
+User=airsent
+WorkingDirectory=/opt/airsent-simulation
+EnvironmentFile=/etc/airsent-presence.env
+ExecStart=/opt/airsent-simulation-venv/bin/python -u /opt/airsent-simulation/simulation_gateway.py
+Restart=on-failure
+RestartSec=3
+MemoryMax=64M
+CPUWeight=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+IPAddressDeny=any
+IPAddressAllow=localhost
+[Install]
+WantedBy=multi-user.target

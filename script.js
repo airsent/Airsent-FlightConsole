@@ -94,7 +94,7 @@ const telemetryEls = {
 const appMode = (new URLSearchParams(location.search).get("trial") === "demo" ? "demo" : (localStorage.getItem("airsentMode") || "demo")).toLowerCase();
 const isDemoMode = appMode === "demo";
 const isViewerMode = appMode === "viewer";
-const canSendCommands = appMode === "operator" || appMode === "actual" || appMode === "real";
+const canSendCommands = appMode === "operator" || appMode === "actual" || appMode === "real" || (appMode === "simulation" && window.airsentSimulation === true);
 const isRealMode = !isDemoMode;
 window.airsentMode = appMode;
 window.airsentCanCommand = canSendCommands;

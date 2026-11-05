@@ -2,8 +2,12 @@ import os
 from datalink_telemetry import start_monitor
 import asyncio
 import websockets
-import depthai as dai
-import cv2
+import sys
+
+SIM_MODE = "--sim" in sys.argv
+if not SIM_MODE:
+    import depthai as dai
+    import cv2
 import base64
 import json
 import math
@@ -26,12 +30,12 @@ except Exception as _e:
           f"Run: pip install pupil-apriltags")
 
 # ── Config ──────────────────────────────────────
-PIXHAWK_PORT  = '/dev/ttyTHS1'
-PIXHAWK_BAUD  = 57600
-CAM_PORT      = 8766
-TELEM_PORT    = 8765
-CMD_PORT      = 8767
-DOWNCAM_PORT  = 8768
+PIXHAWK_PORT = os.environ.get('MAV_URL', 'tcp:127.0.0.1:5760') if SIM_MODE else '/dev/ttyTHS1'
+PIXHAWK_BAUD = 115200 if SIM_MODE else 57600
+CAM_PORT = int(os.environ.get("SIM_CAM_PORT", "8766")) if SIM_MODE else 8766
+TELEM_PORT = int(os.environ.get("SIM_TELEM_PORT", "8765")) if SIM_MODE else 8765
+CMD_PORT = int(os.environ.get("SIM_CMD_PORT", "8767")) if SIM_MODE else 8767
+DOWNCAM_PORT = int(os.environ.get("SIM_DOWNCAM_PORT", "8768")) if SIM_MODE else 8768
 
 DOWNCAM_W     = 1280          # 4:3 output to match the full-FOV sensor mode
 DOWNCAM_H     = 960           # below (1640x1232). Was 1280x720 (16:9), but the
@@ -825,7 +829,8 @@ def build_telemetry_payload():
         log = list(mavlink_log)
     payload = dict(telem)
     payload['mavlink_log'] = log
-    payload['esc_telemetry'] = esc_monitor.snapshot()
+    payload['esc_telemetry'] = esc_monitor.snapshot() if esc_monitor else None
+    payload['simulation'] = SIM_MODE
     payload['telemetry_age'] = 0.0  # Local link; VPS relay overwrites with its measured age
     with mav_lock:
         px_ok = mav_conn is not None
@@ -1529,6 +1534,7 @@ async def vps_cmd_relay():
 
 # ── Main ─────────────────────────────────────────
 async def main():
+    bind_host = "127.0.0.1" if SIM_MODE else "0.0.0.0"
     print("="*50)
     print("  Airsent Server — Full MAVLink Control")
     print(f"  Camera  -> ws://0.0.0.0:{CAM_PORT}")
@@ -1536,30 +1542,26 @@ async def main():
     print(f"  Command -> ws://0.0.0.0:{CMD_PORT}")
     print(f"  DownCam -> ws://0.0.0.0:{DOWNCAM_PORT}")
     print("="*50)
-    cam_srv      = await websockets.serve(cam_handler,      "0.0.0.0", CAM_PORT,      max_size=15_000_000, ping_interval=None)
-    telem_srv    = await websockets.serve(telem_handler,    "0.0.0.0", TELEM_PORT,    max_size=1_000_000,  ping_interval=None)
-    cmd_srv      = await websockets.serve(cmd_handler,      "0.0.0.0", CMD_PORT,      max_size=1_000_000,  ping_interval=None)
-    downcam_srv  = await websockets.serve(downcam_handler,  "0.0.0.0", DOWNCAM_PORT,  max_size=15_000_000, ping_interval=None)
-    relay_task = asyncio.create_task(vps_telem_relay())
-    cmd_relay_task = asyncio.create_task(vps_cmd_relay())
-
-    await asyncio.gather(
-        cam_srv.wait_closed(),
-        telem_srv.wait_closed(),
-        cmd_srv.wait_closed(),
-        downcam_srv.wait_closed(),
-        relay_task,
-        cmd_relay_task,
-    )
+    cam_srv      = await websockets.serve(cam_handler,      bind_host, CAM_PORT,      max_size=15_000_000, ping_interval=None)
+    telem_srv    = await websockets.serve(telem_handler,    bind_host, TELEM_PORT,    max_size=1_000_000,  ping_interval=None)
+    cmd_srv      = await websockets.serve(cmd_handler,      bind_host, CMD_PORT,      max_size=1_000_000,  ping_interval=None)
+    downcam_srv  = await websockets.serve(downcam_handler,  bind_host, DOWNCAM_PORT,  max_size=15_000_000, ping_interval=None)
+    tasks = [cam_srv.wait_closed(), telem_srv.wait_closed(), cmd_srv.wait_closed(), downcam_srv.wait_closed()]
+    if not SIM_MODE:
+        tasks.extend([asyncio.create_task(vps_telem_relay()), asyncio.create_task(vps_cmd_relay())])
+    else:
+        print("[SITL] Local simulation: cameras, hardware ESCs and VPS relays disabled")
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    esc_monitor = start_monitor()
+    esc_monitor = None if SIM_MODE else start_monitor()
     threading.Thread(target=mavlink_reader,         daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
-    threading.Thread(target=thermal_monitor,        daemon=True).start()
-    threading.Thread(target=downcam_capture_thread, daemon=True).start()
-    threading.Thread(target=cam_capture_thread,     daemon=True).start()
-    threading.Thread(target=cam_rtmp_thread,        daemon=True).start()
-    threading.Thread(target=downcam_rtmp_thread,    daemon=True).start()  # ← NEW
+    if not SIM_MODE:
+        threading.Thread(target=thermal_monitor,        daemon=True).start()
+        threading.Thread(target=downcam_capture_thread, daemon=True).start()
+        threading.Thread(target=cam_capture_thread,     daemon=True).start()
+        threading.Thread(target=cam_rtmp_thread,        daemon=True).start()
+        threading.Thread(target=downcam_rtmp_thread,    daemon=True).start()  # ← NEW
     asyncio.run(main())

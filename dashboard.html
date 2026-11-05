@@ -2,7 +2,7 @@
 <html lang="en">
  
 <head>
-<script src="console-config.js?v=4"></script>
+<script src="console-config.js?v=sitl-1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent Flight Console</title>
@@ -1005,6 +1005,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   /* ── FRONT CAMERA — WebRTC via MediaMTX (path: frontcam) ──── */
   let frontPc = null;
   function connectFrontCam(){
+    if (window.airsentSimulation) return;
     if(frontPc){ try{frontPc.close();}catch(_){} frontPc=null; }
 
     const pc = new RTCPeerConnection({
@@ -1060,6 +1061,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   /* ── DOWN CAMERA — WebRTC via MediaMTX (path: downcam) ─────── */
   let downPc = null;
   function connectDownCam(){
+    if (window.airsentSimulation) return;
     if(downPc){ try{downPc.close();}catch(_){} downPc=null; }
 
     const pc = new RTCPeerConnection({
@@ -1138,7 +1140,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   connectDownCam();
 })();
 </script>
-<script src="shared-countdown.js?v=2"></script>
-<script src="presence.js?v=8"></script>
+<script src="shared-countdown.js?v=sitl-1"></script>
+<script src="presence.js?v=sitl-1"></script>
 </body>
 </html>

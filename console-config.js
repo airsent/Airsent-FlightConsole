@@ -7,8 +7,28 @@ window.AIRSENT_CONFIG = {
   mapAttribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>",
   mapMaxZoom: 20,
 };
+window.airsentSimulation = localStorage.getItem('airsentMode') === 'simulation' || (['localhost','127.0.0.1'].includes(location.hostname) && localStorage.getItem('airsentSITL') === '1');
+if (window.airsentSimulation) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const badge = document.createElement('div');
+    badge.textContent = 'SITL · SIMULATED AIRCRAFT';
+    badge.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;padding:6px 10px;border:1px solid #f4b942;background:#111c26;color:#f4b942;font:11px monospace;pointer-events:none';
+    document.body.append(badge);
+  });
+  window.AIRSENT_CONFIG.mapTileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  window.AIRSENT_CONFIG.mapAttribution = 'Tiles &copy; Esri';
+  window.AIRSENT_CONFIG.mapMaxZoom = 19;
+}
 window.airsentApiUrl = function(path, websocket = false) {
   const url = new URL(path, window.AIRSENT_CONFIG.apiBase);
+  if (window.airsentSimulation && websocket && ['/telem','/cmd'].includes(path)) {
+    if (['localhost','127.0.0.1'].includes(location.hostname)) {
+      url.hostname = location.hostname; url.port = path === '/telem' ? '8765' : '8767'; url.pathname = '/';
+    } else {
+      url.pathname = '/simulation' + path;
+      url.searchParams.set('session', localStorage.getItem('airsentPresenceToken') || '');
+    }
+  }
   if (websocket) url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.href;
 };

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="console-config.js?v=4"></script>
+<script src="console-config.js?v=sitl-1"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Airsent Flight Console</title>
@@ -111,6 +111,7 @@
       const username = usernameEl.value.trim().toLowerCase();
       const password = passwordEl.value.trim();
       hideError();
+      localStorage.removeItem('airsentSITL');
       if (username === "demo" && password === "123456") {
         selectedMode = "demo"; localStorage.removeItem('airsentPresenceToken'); return true;
       }
@@ -125,7 +126,7 @@
             let msg; try { msg = JSON.parse(event.data); } catch (_) { return; }
             if (msg.type !== 'presence_login') return;
             clearTimeout(timeout); ws.close();
-            if (!msg.token || !['operator','viewer'].includes(msg.role)) reject(new Error('INVALID USERNAME OR PASSWORD'));
+            if (!msg.token || !['operator','viewer','simulation'].includes(msg.role)) reject(new Error('INVALID USERNAME OR PASSWORD'));
             else resolve(msg);
           };
           ws.onerror = () => { clearTimeout(timeout); ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); };
@@ -168,7 +169,7 @@
         } else {
           bootMessage.textContent = "System ready. Redirecting...";
           setTimeout(() => {
-            window.location.href = "dashboard.html?login=current";
+            window.location.href = selectedMode === "simulation" ? "dashboard.html?simulation=1" : "dashboard.html?login=current";
           }, 700);
         }
       }

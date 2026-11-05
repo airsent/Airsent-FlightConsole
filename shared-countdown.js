@@ -1,6 +1,12 @@
 /* Server-owned countdown; independent of telemetry and vehicle command sockets. */
 (() => {
   'use strict';
+  if (window.airsentSimulation) {
+    ['lmBtnStart','lmBtnHold','lmBtnAbort','lmBtnReset','btnStart','btnHold','btnAbort','btnReset'].forEach(id=>{const e=document.getElementById(id);if(e)e.disabled=true;});
+    const badge=document.getElementById('lmStatus') || document.getElementById('statusBadge');
+    if(badge)badge.textContent='SITL · TIMER OFF';
+    return;
+  }
   const mode = (localStorage.getItem('airsentMode') || 'demo').toLowerCase();
   if (mode === 'demo') return;
   const operator = ['operator', 'actual', 'real'].includes(mode);

@@ -1,5 +1,6 @@
 /* One live user per browser, even with several console tabs open. */
 (() => {
+  if (window.airsentSimulation) return;
   let mode = () => (localStorage.getItem('airsentMode') || 'demo').toLowerCase();
   const role = () => ['operator','actual','real'].includes(mode()) ? 'operator' : mode() === 'viewer' ? 'viewer' : 'demo';
   if (role() === 'demo' || window.airsentPresenceStarted) return;

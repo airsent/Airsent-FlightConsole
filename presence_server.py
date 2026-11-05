@@ -100,7 +100,7 @@ async def main():
     import websockets
     global AUTH_SECRET, AUTH_PASSWORDS
     AUTH_SECRET = os.environ["AIRSENT_PRESENCE_SECRET"]
-    AUTH_PASSWORDS = {"operator": os.environ["AIRSENT_OPERATOR_PASSWORD"], "viewer": os.environ["AIRSENT_VIEWER_PASSWORD"]}
+    AUTH_PASSWORDS = {"operator": os.environ["AIRSENT_OPERATOR_PASSWORD"], "viewer": os.environ["AIRSENT_VIEWER_PASSWORD"], "simulation": os.environ.get("AIRSENT_SIMULATION_PASSWORD")}
     server = await websockets.serve(
         presence_handler,
         "127.0.0.1",

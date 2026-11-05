@@ -20,12 +20,12 @@ def token_role(token, secret, now=None):
         if not hmac.compare_digest(signature, expected): return None
         payload = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
         if payload['expires'] <= (time.time() if now is None else now): return None
-        return payload['role'] if payload['role'] in ('operator', 'viewer') else None
+        return payload['role'] if payload['role'] in ('operator', 'viewer', 'simulation') else None
     except (ValueError, KeyError, TypeError):
         return None
 
 
 def authenticate(username, password, passwords):
-    if username not in ('operator', 'viewer'): return None
+    if username not in ('operator', 'viewer', 'simulation'): return None
     expected = passwords.get(username)
     return username if expected and hmac.compare_digest(password, expected) else None

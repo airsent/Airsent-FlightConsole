@@ -1,0 +1,26 @@
+[Unit]
+Description=Airsent simulation telemetry and commands
+After=airsent-sitl.service
+Wants=airsent-sitl.service
+[Service]
+User=airsent
+WorkingDirectory=/opt/airsent-simulation
+Environment=MAV_URL=tcp:127.0.0.1:15760
+Environment=SIM_TELEM_PORT=18765
+Environment=SIM_CMD_PORT=18767
+Environment=SIM_CAM_PORT=18766
+Environment=SIM_DOWNCAM_PORT=18768
+Environment=DATALINK_PORT=
+ExecStart=/opt/airsent-simulation-venv/bin/python -u /opt/airsent-simulation/airsent_server.py --sim
+Restart=on-failure
+RestartSec=3
+MemoryMax=180M
+CPUWeight=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+IPAddressDeny=any
+IPAddressAllow=localhost
+[Install]
+WantedBy=multi-user.target
