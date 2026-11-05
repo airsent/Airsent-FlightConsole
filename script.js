@@ -180,7 +180,7 @@ const initialEventLog = [
 ];
  
 const realModeEventLog = [
-  { time: "00:00:00", text: "REAL MODE ACTIVE" },
+  { time: "00:00:00", text: window.airsentSimulation ? "SIMULATION MODE ACTIVE" : "REAL MODE ACTIVE" },
   { time: "00:00:00", text: "WAITING FOR VEHICLE CONNECTION" }
 ];
  
