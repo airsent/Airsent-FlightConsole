@@ -34,10 +34,10 @@ const legacy=fs.readFileSync(path.join(__dirname,'../script.js'),'utf8');
 assert.ok(!/telemetryEls\.(rcTelemetryState|rssiVal)\./.test(legacy));
 console.log('Passed RC connection colors, unplug/reconnect, stale data, quality thresholds, unknown RSSI, and single writer checks');
 for (const [link,label,quality] of [
- [{type:'wifi',ssid:'TheChair',percent:84},'WIFI','84%'],
- [{type:'cellular',technology:'5gnr',percent:75},'5G','75%'],
- [{type:'cellular',technology:'lte, 5gnr',percent:75},'5G','75%'],
- [{type:'cellular',technology:'lte',percent:60},'4G','60%'],
+ [{type:'wifi',ssid:'TheChair',percent:84},'WIFI','STRONG'],
+ [{type:'cellular',technology:'5gnr',percent:75},'5G','MODERATE'],
+ [{type:'cellular',technology:'lte, 5gnr',percent:75},'5G','MODERATE'],
+ [{type:'cellular',technology:'lte',percent:60},'4G','MODERATE'],
  [{type:'cellular',technology:null,percent:null},'CELLULAR','--'],
  [{type:'ethernet',percent:null},'ETHERNET','--']
 ]) {
@@ -53,3 +53,8 @@ for (const patch of [{age:6},{age:-1},{connected:false}]) {
 context.updateNetworkIndicator({network_link:{type:'wifi',connected:true,age:0}},false);
 assert.equal(elements.get('networkSignalState').textContent,'DISCONNECTED');
 console.log('Passed Wi-Fi/5G/4G/unknown technology, unknown quality, stale feed and independent Pixhawk network checks');
+
+for (const [percent,label] of [[0,'WEAK'],[39,'WEAK'],[40,'MODERATE'],[79,'MODERATE'],[80,'STRONG'],[100,'STRONG'],[255,'--']]) {
+ context.updateNetworkIndicator({network_link:{type:'cellular',connected:true,age:0,percent}},true);
+ assert.equal(elements.get('cellularSignalVal').innerText,label);
+}

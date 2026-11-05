@@ -185,8 +185,19 @@ def read_network_link(run=subprocess.run):
                     nm_device, kind = candidate, candidate_kind
                     break
             if kind is None:
-                return result
-        state = command(['nmcli', '-g', 'GENERAL.STATE', 'device', 'show', nm_device])
+                # Some USB modems manage their own Ethernet bearer outside NM.
+                listing = json.loads(command(['mmcli', '-L', '--output-json']))
+                for modem_path in listing.get('modem-list', []):
+                    generic = json.loads(command(['mmcli', '-m', modem_path, '--output-json'])).get('modem', {}).get('generic', {})
+                    ports = generic.get('ports', [])
+                    if isinstance(ports, str):
+                        ports = [ports]
+                    if any(str(port).split()[0] == interface for port in ports):
+                        kind = 'modem-ethernet'
+                        break
+                if kind is None:
+                    return result
+        state = '100' if kind == 'modem-ethernet' else command(['nmcli', '-g', 'GENERAL.STATE', 'device', 'show', nm_device])
         if not state.startswith('100'):
             return result
         if kind in ('wifi', '802-11-wireless'):
@@ -198,26 +209,30 @@ def read_network_link(run=subprocess.run):
                 if row.startswith('*:'):
                     result['percent'] = signal_percent(row.split(':', 1)[1])
                     break
-        elif kind in ('gsm', 'cdma', 'wwan'):
-            result.update(connected=True, type='cellular')
+        elif kind in ('gsm', 'cdma', 'wwan', 'ethernet', '802-3-ethernet', 'modem-ethernet'):
+            # USB cellular adapters can expose an Ethernet interface instead of
+            # an NM gsm device. Identify the modem owning the actual route.
+            result.update(connected=True, type='cellular' if kind in ('gsm', 'cdma', 'wwan') else 'ethernet')
             try:
-                modem = json.loads(command(['mmcli', '-m', 'any', '--output-json'])).get('modem', {})
-                generic = modem.get('generic', {})
-                # Only use measurements from the modem carrying this route.
-                ports = generic.get('ports', [])
-                if isinstance(ports, str):
-                    ports = [ports]
-                matches = generic.get('primary-port') in (interface, nm_device) or any(str(port).split()[0] == interface for port in ports)
-                if matches:
+                listing = json.loads(command(['mmcli', '-L', '--output-json']))
+                for modem_path in listing.get('modem-list', []):
+                    generic = json.loads(command(['mmcli', '-m', modem_path, '--output-json'])).get('modem', {}).get('generic', {})
+                    ports = generic.get('ports', [])
+                    if isinstance(ports, str):
+                        ports = [ports]
+                    matches = generic.get('primary-port') in (interface, nm_device) or any(str(port).split()[0] == interface for port in ports)
+                    if not matches:
+                        continue
+                    result.update(type='cellular', source='NetworkManager/ModemManager')
                     quality = generic.get('signal-quality', {})
-                    result['percent'] = signal_percent(quality.get('value') if isinstance(quality, dict) else quality)
+                    if not isinstance(quality, dict) or str(quality.get('recent', 'yes')).lower() in ('yes', 'true'):
+                        result['percent'] = signal_percent(quality.get('value') if isinstance(quality, dict) else quality)
                     technology = generic.get('access-technologies') or generic.get('access-technology')
                     result['technology'] = ', '.join(map(str, technology)) if isinstance(technology, list) else technology
-                    result['source'] = 'NetworkManager/ModemManager'
+                    break
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
-        elif kind in ('ethernet', '802-3-ethernet'):
-            result.update(connected=True, type='ethernet')
+
     except (OSError, ValueError, IndexError, KeyError, subprocess.SubprocessError):
         # Missing/failed queries are not evidence of a connection.
         result['connected'] = False

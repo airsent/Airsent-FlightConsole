@@ -11,6 +11,7 @@ class NetworkChecks(unittest.TestCase):
   def run(args,**kwargs):
    if fail:raise FileNotFoundError()
    if args[:2]==['ip','-j']:out=json.dumps([{'dev':'wl0' if kind=='wifi' else 'wwan0'}])
+   elif args[:2]==['mmcli','-L']:out='{"modem-list":["/modem/2"]}'
    elif args[0]=='mmcli':out=json.dumps({'modem':{'generic':{'state':'connected','ports':['wwan0 (net)'] if match else ['wwan9 (net)'],'signal-quality':{'value':quality},'access-technologies':tech}}})
    elif 'GENERAL.TYPE' in args:out=kind
    elif 'GENERAL.STATE' in args:out=state
@@ -29,7 +30,7 @@ class NetworkChecks(unittest.TestCase):
  def test_unrelated_modem_does_not_supply_strength(self):self.assertIsNone(self.sample('gsm',['5gnr'],match=False)['technology'])
  def test_missing_tools_and_disconnected_interface(self):
   self.assertFalse(self.sample(fail=True)['connected']);self.assertFalse(self.sample(state='30 (disconnected)')['connected'])
- def test_ethernet_not_cellular(self):self.assertEqual(self.sample('ethernet')['type'],'ethernet')
+ def test_ethernet_not_cellular(self):self.assertEqual(self.sample('ethernet',match=False)['type'],'ethernet')
  def test_modem_control_device_mapped_to_ip_interface(self):
   def run(args,**kw):
    if args[0]=='ip':out='[{"dev":"wwan0"}]'
@@ -37,11 +38,14 @@ class NetworkChecks(unittest.TestCase):
    elif 'DEVICE,TYPE' in args:out='wl0:wifi\ncdc-wdm0:gsm'
    elif 'GENERAL.IP-IFACE' in args:out='wwan0'
    elif 'GENERAL.STATE' in args:out='100 (connected)'
+   elif args[:2]==['mmcli','-L']:out='{"modem-list":["/modem/2"]}'
    elif args[0]=='mmcli':out=json.dumps({'modem':{'generic':{'primary-port':'cdc-wdm0','access-technologies':['5gnr'],'signal-quality':{'value':'80'}}}})
    else:raise AssertionError(args)
    return SimpleNamespace(stdout=out)
   d=ns['read_network_link'](run)
   self.assertTrue(d['connected']);self.assertEqual(d['technology'],'5gnr')
+ def test_usb_ethernet_modem_detected(self):
+  d=self.sample('ethernet',['5gnr'],'88');self.assertEqual((d['type'],d['percent']),('cellular',88))
  def test_invalid_percent(self):
   for v in [None,True,'nan','inf','255',-1]:self.assertIsNone(ns['signal_percent'](v))
 if __name__=='__main__':unittest.main()

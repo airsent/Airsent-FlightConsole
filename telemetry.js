@@ -387,7 +387,7 @@ function updateNetworkIndicator(data, feedFresh) {
     state.title = connected && link.ssid ? link.ssid : connected ? String(link.technology || link.type) : "No fresh active network connection";
   }
   const percent = connected && typeof link.percent === "number" && Number.isFinite(link.percent) && link.percent >= 0 && link.percent <= 100 ? link.percent : null;
-  setText("cellularSignalVal", percent === null ? "--" : `${Math.round(percent)}%`);
+  setText("cellularSignalVal", percent === null ? "--" : percent < 40 ? "WEAK" : percent < 80 ? "MODERATE" : "STRONG");
   return connected;
 }
 function resetSignalIndicators() {
@@ -608,7 +608,7 @@ function updateMotors(data) {
     const percent = valid ? row.output_percent : null;
     setText(`m${id}pwm`, pwm === null ? "--" : pwm);
     setText(`m${id}rpm`, sampleFresh && finite(row.rpm) && row.rpm >= 0 ? Math.round(row.rpm).toLocaleString("en-US") : "--");
-    setText(`m${id}out`, percent === null ? "--" : `${Math.round(percent)}%`);
+    setText(`m${id}out`, percent === null ? "--" : percent < 40 ? "WEAK" : percent < 80 ? "MODERATE" : "STRONG");
     const bar = getEl(`m${id}bar`);
     if (bar) bar.style.width = `${percent === null ? 0 : percent}%`;
     if (percent !== null) outputs.push(percent);
