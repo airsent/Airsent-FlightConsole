@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="console-config.js?v=sitl-1"></script>
+<script src="console-config.js?v=simulation-map-2"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Airsent Flight Console</title>
@@ -78,125 +78,7 @@
     </section>
   </main>
 
-  <script>
-    const loginBtn = document.getElementById("loginBtn");
-    const usernameEl = document.getElementById("username");
-    const passwordEl = document.getElementById("password");
-    const errorMsg = document.getElementById("errorMsg");
-
-    const bootOverlay = document.getElementById("bootOverlay");
-    const bootProgressFill = document.getElementById("bootProgressFill");
-    const bootMessage = document.getElementById("bootMessage");
-
-    const bootSteps = [
-      document.getElementById("bootStep1"),
-      document.getElementById("bootStep2"),
-      document.getElementById("bootStep3"),
-      document.getElementById("bootStep4"),
-      document.getElementById("bootStep5")
-    ];
-
-    let selectedMode = null;
-
-    function showError(msg){
-      errorMsg.textContent = msg;
-      errorMsg.classList.add("visible");
-    }
-
-    function hideError(){
-      errorMsg.classList.remove("visible");
-    }
-
-    async function validateLogin(){
-      const username = usernameEl.value.trim().toLowerCase();
-      const password = passwordEl.value.trim();
-      hideError();
-      localStorage.removeItem('airsentSITL');
-      if (username === "demo" && password === "123456") {
-        selectedMode = "demo"; localStorage.removeItem('airsentPresenceToken'); return true;
-      }
-      if (loginBtn.disabled) return false;
-      loginBtn.disabled = true;
-      try {
-        const result = await new Promise((resolve, reject) => {
-          const ws = new WebSocket(window.airsentApiUrl('/presence', true));
-          const timeout = setTimeout(() => { ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); }, 10000);
-          ws.onopen = () => ws.send(JSON.stringify({type:'presence_login', username, password}));
-          ws.onmessage = event => {
-            let msg; try { msg = JSON.parse(event.data); } catch (_) { return; }
-            if (msg.type !== 'presence_login') return;
-            clearTimeout(timeout); ws.close();
-            if (!msg.token || !['operator','viewer','simulation'].includes(msg.role)) reject(new Error('INVALID USERNAME OR PASSWORD'));
-            else resolve(msg);
-          };
-          ws.onerror = () => { clearTimeout(timeout); ws.close(); reject(new Error('Sign-in service unavailable. Try again.')); };
-        });
-        selectedMode = result.role;
-        localStorage.setItem("airsentMode", result.role);
-        localStorage.setItem('airsentPresenceToken', result.token);
-        return true;
-      } catch (error) { showError(error.message); return false; }
-      finally { loginBtn.disabled = false; }
-    }
-
-    function runBootSequence(){
-      localStorage.setItem("airsentMode", selectedMode);
-      if (selectedMode === "operator") sessionStorage.setItem("airsentSequencePassword", passwordEl.value.trim());
-      else sessionStorage.removeItem("airsentSequencePassword");
-
-      bootOverlay.classList.remove("hidden");
-
-      const messages = [
-        "Verifying operator credentials...",
-        `Loading ${selectedMode} environment...`,
-        "Starting UI systems...",
-        "Initializing telemetry...",
-        "Launching console..."
-      ];
-
-      let step = 0;
-
-      function next(){
-        if(step < bootSteps.length){
-          bootSteps[step].textContent = "ONLINE";
-          bootSteps[step].classList.add("ok");
-
-          bootMessage.textContent = messages[step];
-          bootProgressFill.style.width = ((step+1)/bootSteps.length)*100 + "%";
-
-          step++;
-          setTimeout(next, 450);
-        } else {
-          bootMessage.textContent = "System ready. Redirecting...";
-          setTimeout(() => {
-            window.location.href = selectedMode === "simulation" ? "dashboard.html?simulation=1" : "dashboard.html?login=current";
-          }, 700);
-        }
-      }
-
-      setTimeout(next, 300);
-    }
-
-    loginBtn.addEventListener("click", async () => {
-      if(await validateLogin()){
-        runBootSequence();
-      }
-    });
-
-    passwordEl.addEventListener("keydown", async (e)=>{
-      if(e.key === "Enter"){
-        if(await validateLogin()){
-          runBootSequence();
-        }
-      }
-    });
-
-    usernameEl.addEventListener("keydown", (e)=>{
-      if(e.key === "Enter"){
-        passwordEl.focus();
-      }
-    });
-  </script>
+  <script src="login.js?v=simulation-map-2"></script>
 
 </body>
 </html>

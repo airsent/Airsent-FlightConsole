@@ -915,6 +915,9 @@ if (leafletMapEl && typeof L !== "undefined") {
  
   // Expose on window so telemetry.js can access them
   window.map = map;
+  window.airsentMapFollow = true;
+  map.on("dragstart",()=>{window.airsentMapFollow=false;});
+  window.airsentObserveMap(map);
   window.droneMarker = droneMarker;
   window.homeMarker = homeMarker;
   window.trailLine = trailLine;

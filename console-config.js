@@ -50,3 +50,31 @@ window.airsentMapLayer = function(map) {
   layer.on("tileload", () => { notice.message.style.display = "none"; });
   return layer;
 };
+
+// Refresh legacy cached login forms without replacing their visual layout.
+if (['/','/index.html','/signin.html'].includes(location.pathname)) {
+  const loadLogin = () => {
+    if (window.airsentLoginController || document.querySelector('script[src*="login.js"]')) return;
+    const script=document.createElement('script');script.src='login.js?v=simulation-map-2';document.body.append(script);
+  };
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',loadLogin);
+  else loadLogin();
+}
+window.airsentObserveMap = function(map) {
+  const container=map.getContainer(); let pending=false;
+  const fit=()=>{
+    if(pending)return;pending=true;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      pending=false;
+      if(container.clientWidth>0 && container.clientHeight>0) map.invalidateSize({pan:true,animate:false,debounceMoveend:true});
+    }));
+  };
+  const observer=typeof ResizeObserver==='function'?new ResizeObserver(fit):null;
+  observer?.observe(container);
+  window.addEventListener('resize',fit);
+  window.visualViewport?.addEventListener('resize',fit);
+  document.fonts?.ready.then(fit);
+  map.on('unload',()=>{observer?.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);});
+  fit();
+  return fit;
+};

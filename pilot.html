@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="console-config.js?v=sitl-1"></script>
+<script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Pilot</title>
@@ -702,12 +702,8 @@ function makeWpIcon(){
 function initMap(lat,lon){
   if(mapInitialized)return; mapInitialized=true;
   pilotMap=L.map('pilotMap',{zoomControl:true}).setView([lat,lon],18);
-  if (window.airsentSimulation) { window.airsentMapLayer(pilotMap); } else {
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-    maxZoom:20,subdomains:'abcd',
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  }).addTo(pilotMap);
-  }
+  window.airsentMapLayer(pilotMap);
+  window.airsentObserveMap(pilotMap);
   droneMarker=L.marker([lat,lon],{icon:makeDroneIcon(0),zIndexOffset:1000}).addTo(pilotMap);
   homeMarker=L.circleMarker([lat,lon],{radius:7,color:'#22c55e',weight:2,fillColor:'#22c55e',fillOpacity:0.85})
     .addTo(pilotMap).bindTooltip('HOME',{permanent:false,direction:'top'});

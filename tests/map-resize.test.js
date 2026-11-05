@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+let resized,disconnected=false;const callbacks=[],invalidations=[],container={clientWidth:600,clientHeight:400},events={};
+const ctx={window:{addEventListener(){},removeEventListener(){}},document:{},location:{hostname:'console.airsent.tech',origin:'https://console.airsent.tech',pathname:'/pilot.html'},localStorage:{getItem:()=>null},URL,ResizeObserver:class{constructor(fn){resized=fn;}observe(e){assert.equal(e,container);}disconnect(){disconnected=true;}},requestAnimationFrame:fn=>callbacks.push(fn)};
+vm.runInNewContext(fs.readFileSync('console-config.js','utf8'),ctx);
+ctx.window.airsentObserveMap({getContainer:()=>container,invalidateSize:opts=>invalidations.push({width:container.clientWidth,height:container.clientHeight,pan:opts.pan}),on:(name,fn)=>events[name]=fn});
+while(callbacks.length)callbacks.shift()();assert.equal(invalidations.length,1);
+container.clientHeight=700;resized();resized();while(callbacks.length)callbacks.shift()();assert.equal(invalidations.length,2);assert.equal(invalidations[1].height,700);assert.equal(invalidations[1].pan,true);
+container.clientHeight=0;resized();while(callbacks.length)callbacks.shift()();assert.equal(invalidations.length,2);
+events.unload();assert.equal(disconnected,true);
+const pilot=fs.readFileSync('pilot.html','utf8');assert.ok(pilot.includes('window.airsentMapLayer(pilotMap)'));assert.ok(!pilot.includes('basemaps.cartocdn.com/dark_all'));
+console.log('PASS: map invalidates after container resize, preserves center, skips hidden containers, and pilot reuses configured tile credentials');

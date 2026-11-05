@@ -544,7 +544,13 @@ function updateMapFromTelemetry(lat, lon) {
   if (window.map && !mapHasZoomed) {
     window.map.setView([lat, lon], 17);
     mapHasZoomed = true;
+    window.airsentMapFollow = true;
     if (window.trailLine) window.trailLine.setLatLngs([[lat, lon]]);
+  }
+
+  if (window.map && mapHasZoomed && window.airsentMapFollow &&
+      !window.map.getBounds().pad(-0.2).contains([lat,lon])) {
+    window.map.panTo([lat,lon],{animate:false});
   }
 
   if (window.trailLine) {
