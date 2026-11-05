@@ -268,6 +268,7 @@ mavlink_log_lock = threading.Lock()
 MAX_LOG = 20
 
 vel_setpoint = {'vx': 0.0, 'vy': 0.0, 'vz': 0.0, 'yaw_rate': 0.0}
+vel_last_cmd_ts = 0.0
 vel_lock = threading.Lock()
 
 obstacle_blocked = False
@@ -556,7 +557,8 @@ def velocity_sender():
         try:
             with mav_lock:
                 mav = mav_conn
-            if mav and telem['flight_mode'] == 'GUIDED' and telem['armed']:
+            if (mav and telem['flight_mode'] == 'GUIDED' and telem['armed']
+                    and (not SIM_MODE or (vel_last_cmd_ts > 0 and time.time() - vel_last_cmd_ts < 1.0))):
                 with vel_lock:
                     vx = vel_setpoint['vx']
                     vy = vel_setpoint['vy']
@@ -655,7 +657,7 @@ def process_command(raw):
     Shared by BOTH the local cmd_handler (port 8767) and vps_cmd_relay
     (VPS:9004) so remote commands run the exact same code as local ones.
     Never raises — always returns a dict ready to json.dumps and send back."""
-    global obstacle_blocked, stop_dist_global, detection_active
+    global obstacle_blocked, stop_dist_global, detection_active, vel_last_cmd_ts
     try:
         cmd = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -697,6 +699,7 @@ def process_command(raw):
             return {'ok': True, 'msg': 'DISARM command sent'}
 
         elif action == 'takeoff':
+            if SIM_MODE: vel_last_cmd_ts = 0.0
             alt = float(cmd.get('alt', 2.0))
             send_takeoff(mav, alt)
             return {'ok': True, 'msg': f'TAKEOFF to {alt}m'}
@@ -715,6 +718,7 @@ def process_command(raw):
 
             with vel_lock:
                 vel_setpoint.update({'vx':vx,'vy':vy,'vz':vz,'yaw_rate':yr})
+                vel_last_cmd_ts = time.time()
 
             return {
                 'ok': True,
