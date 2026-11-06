@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <script src="demo-isolation.js?v=viewer-1"></script>
-<script src="viewer-access.js?v=1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -693,6 +694,7 @@ function makeHomeMarker() {
     homeLon = pos.lng;
     updateStats();
     redrawPath();
+    saveMissionToStorage();
   });
 }
 makeHomeMarker();
@@ -718,6 +720,7 @@ map.on('click', e => {
 
 // ── Waypoint management ───────────────────────────────────
 function addWaypoint(lat, lon, alt, cmd) {
+  if(window.AirsentShared&&!window.AirsentShared.editable())return;
   if(window.airsentViewerReadOnly?.()) return;
   const id = ++wpIdCounter;
   const wp = { id, lat, lon, alt: alt || DEFAULT_ALT, cmd: cmd || 'WAYPOINT', speed: CRUISE_SPEED, radius: 5, marker: null, selected: false };
@@ -979,6 +982,20 @@ function saveMissionToStorage() {
   } catch(e) {}
 })();
 
+// Apply authoritative plans from other operators without publishing a second edit.
+window.addEventListener('airsent-shared-change', e => {
+ if(e.detail.key!=='airsent_mission_v1')return;
+ const plan=e.detail.value;selectedWpId=null;document.getElementById('wpDetail').classList.remove('visible');
+ waypoints.forEach(w=>{if(w.marker)map.removeLayer(w.marker)});waypoints.length=0;
+ if(plan.home){homeLat=plan.home.lat;homeLon=plan.home.lon;if(homeMarker)homeMarker.setLatLng([homeLat,homeLon]);}
+ (plan.waypoints||[]).forEach(w=>{const wp={...w,id:++wpIdCounter,marker:null,selected:false};waypoints.push(wp);wp.marker=createMarker(wp)});
+ renderWpList();redrawPath();updateStats();
+});
+
+window.addEventListener('airsent-shared-status',()=>{
+ const enabled=window.AirsentShared.editable();
+ [homeMarker,...waypoints.map(w=>w.marker)].forEach(marker=>{if(marker?.dragging){if(enabled)marker.dragging.enable();else marker.dragging.disable();}});
+});
 // ── Top bar buttons ───────────────────────────────────────
 document.getElementById('btnClearAll').addEventListener('click', () => {
   if (waypoints.length === 0) return;
@@ -991,16 +1008,19 @@ document.getElementById('btnClearAll').addEventListener('click', () => {
   document.getElementById('wpDetail').classList.remove('visible');
   renderWpList();
   updateStats();
+  saveMissionToStorage();
 });
 
 document.getElementById('btnReverse').addEventListener('click', () => {
   waypoints.reverse();
   renderWpList();
   redrawPath();
+  saveMissionToStorage();
 });
 
 document.getElementById('btnAutoAlt').addEventListener('click', () => {
   waypoints.forEach(w => { w.alt = DEFAULT_ALT; });
+  saveMissionToStorage();
   renderWpList();
   updateStats();
   if (selectedWpId) {
@@ -1049,6 +1069,7 @@ document.getElementById('btnLoad').addEventListener('click', () => {
         renderWpList();
         redrawPath();
         updateStats();
+        saveMissionToStorage();
       } catch(err) { alert('Invalid mission file'); }
     };
     reader.readAsText(file);

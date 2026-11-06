@@ -10,7 +10,8 @@ function draw(){
  summary.textContent=cards.length+' SYSTEM CHECKS · '+(!enabled?'OFF':faults?faults+' FAULT'+(faults===1?'':'S')+' · '+(cards.length-known)+' UNKNOWN':!fresh?'WAITING FOR TELEMETRY':known+' REPORTED · '+(cards.length-known)+' UNKNOWN')+(enabled&&frame?.source==='demo'?' · DEMO':'');
  const count=document.getElementById('fsFaultCount');count.textContent=String(faults);count.parentElement.classList.toggle('fs-multiple-faults',faults>1);count.title=fresh?'Reported system faults':'No fresh fault evidence — status unknown';summary.dataset.fault=String(faults>0);const bar=document.querySelector('.fs-auto-bar');bar.classList.toggle('fs-asc-on',enabled);bar.classList.toggle('fs-asc-emergency',enabled&&faults>0);
 }
-button.addEventListener('click',()=>window.AirsentASCLock?.request(()=>setEnabled(!enabled)));
-addEventListener('airsent-review-frame',event=>{frame=event.detail;const nowFlying=frame.source==='telemetry'&&frame.values.in_air===true;if(nowFlying&&!flight)setEnabled(true);flight=nowFlying;draw()});
+button.addEventListener('click',()=>window.AirsentASCLock?.request(()=>{if(window.AirsentShared){try{window.AirsentShared.set('airsent-asc-enabled-v1',!enabled)}catch(e){alert(e.message)}}else setEnabled(!enabled)}));
+addEventListener('airsent-shared-change',e=>{if(e.detail.key==='airsent-asc-enabled-v1')setEnabled(e.detail.value===true)});
+addEventListener('airsent-review-frame',event=>{frame=event.detail;const nowFlying=frame.source==='telemetry'&&frame.values.in_air===true;if(nowFlying&&!flight&&!window.AirsentShared)setEnabled(true);flight=nowFlying;draw()});
 setInterval(draw,1000);draw();
 })();

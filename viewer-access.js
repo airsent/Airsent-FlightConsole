@@ -6,14 +6,15 @@
     'dashboard.html': '#statusSelect,#flightModeSelect,.failsafe-row select,.flight-controls-grid button,#missionPauseBtn,#missionResetBtn,#lmBtnStart,#lmBtnHold,#lmBtnAbort,#lmBtnReset,#confirmOk',
     'pilot.html': '#btnAuto,#btnMan,#qa-takeoff,#qa-rth,#qa-land,#obstBadge,#wpBtn,.obstBadge,[onclick*="toggleObstDetection"],#qsPanel input,#qsPanel select,#slideConfirm',
     'mission.html': '#btnUpload,#btnDownload,#btnLoad,#btnClearAll,#btnReverse,#btnAutoAlt,#toolAddWp,#toolAddLoiter,#toolAddRTL,#toolAddLand,.wp-del-btn,#detailPanel input,#detailPanel select,#detailAlt,#detailCmd,#detailSpeed,#detailRadius',
-    'parameters.html': '#btnWriteAll,#btnLoadFile,#btnResetMod,#dInput,#dBtnSet,#dBtnReset',
+    'parameters.html': '#btnWriteAll,#btnLoadFile,#btnResetMod,#dInput,.d-option,#dBtnSet,#dBtnReset',
     'preflight.html': '#btnClearFail,#btnReset,#btnResetHard,.check-item:not(.auto)',
-    'failsafe.html': 'input,select,textarea,.fs-card-activation,#fsAutoToggle,#fsEditDraft,#fsTestDraft,#fsAck,button[type="submit"],[data-policy-system]',
+    'failsafe.html': 'input,select,textarea,.fs-card-activation,#fsAutoToggle,#fsEditDraft,#fsTestDraft,#fsDiscardDraft,#fsAck,button[type="submit"],[data-policy-system]',
     'launch.html': '#btnStart,#btnHold,#btnAbort,#btnReset,#cfgMins,#cfgSecs,#cfgHandoverMins,#cfgHandoverSecs,#handoffInput',
     'actuators.html': '.test-btn,#statusSelect,#flightModeSelect'
   };
   const selector = rules[page] || '';
   window.airsentViewerReadOnly = viewer;
+  window.airsentMutationSelector = selector;
   function lock() {
     if (!viewer() || !selector) return;
     document.querySelectorAll(selector).forEach(el => {

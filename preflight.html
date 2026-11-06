@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <script src="demo-isolation.js?v=viewer-1"></script>
-<script src="viewer-access.js?v=1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -365,7 +366,9 @@ function renderColumn(colId, items) {
 function cycleManual(id) {
   const current = states[id];
   const cycle = { pending:'pass', pass:'warn', warn:'fail', fail:'skip', skip:'pending' };
+  if(window.AirsentShared&&!window.AirsentShared.editable())return;
   states[id] = cycle[current] || 'pending';
+  shareManualChecklist();
   updateCounts();
   const item = Object.values(CHECKS).flat().find(c => c.id === id);
   const colId = Object.keys(CHECKS).find(k => CHECKS[k].some(c => c.id === id));
@@ -439,27 +442,43 @@ function updateStatusBar(d) {
   set('sb-vib', vm!=null?(vm<15?'Low':vm<30?'Medium':'High'):'--', vm<15?'var(--green)':vm<30?'var(--amber)':'var(--red)');
 }
 
+function shareManualChecklist(){
+ if(!window.AirsentShared)return;
+ const manual={};Object.values(CHECKS).flat().filter(c=>c.type==='manual').forEach(c=>manual[c.id]=states[c.id]);
+ try{window.AirsentShared.set('airsent-preflight-manual-v1',manual)}catch(e){alert(e.message)}
+}
+window.addEventListener('airsent-shared-change',e=>{
+ if(e.detail.key!=='airsent-preflight-manual-v1')return;
+ Object.values(CHECKS).flat().filter(c=>c.type==='manual').forEach(c=>states[c.id]=e.detail.value[c.id]||'pending');
+ Object.keys(CHECKS).forEach(k=>renderColumn(k,CHECKS[k]));updateCounts();
+});
 // ── Buttons ───────────────────────────────────────────────
 el('btnClearFail').addEventListener('click', () => {
+  if(window.AirsentShared&&!window.AirsentShared.editable())return;
   Object.values(CHECKS).flat().forEach(item => {
     if (states[item.id]==='fail') states[item.id]='pending';
   });
   Object.keys(CHECKS).forEach(k => renderColumn(k, CHECKS[k]));
   updateCounts();
+  shareManualChecklist();
 });
 
 el('btnReset').addEventListener('click', () => {
+  if(window.AirsentShared&&!window.AirsentShared.editable())return;
   Object.values(CHECKS).flat().forEach(item => {
     if (item.type==='manual') states[item.id]='pending';
   });
   Object.keys(CHECKS).forEach(k => renderColumn(k, CHECKS[k]));
   updateCounts();
+  shareManualChecklist();
 });
 
 el('btnResetHard').addEventListener('click', () => {
+  if(window.AirsentShared&&!window.AirsentShared.editable())return;
   Object.values(CHECKS).flat().forEach(c => { states[c.id]='pending'; });
   Object.keys(CHECKS).forEach(k => renderColumn(k, CHECKS[k]));
   updateCounts();
+  shareManualChecklist();
 });
 
 // ── WebSocket ─────────────────────────────────────────────

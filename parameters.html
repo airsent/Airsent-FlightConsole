@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <script src="demo-isolation.js?v=viewer-1"></script>
-<script src="viewer-access.js?v=1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -455,6 +456,7 @@ function renderDetail() {
   body.querySelectorAll('.d-option').forEach(opt => {
     opt.addEventListener('click', () => {
       paramValues[param.name] = parseFloat(opt.dataset.val);
+      shareParameterDrafts();
       renderDetail(); renderParams(); renderSidebar();
     });
   });
@@ -473,6 +475,7 @@ function renderDetail() {
     const v = parseFloat(el('dInput')?.value);
     if (!isNaN(v) && v >= param.range[0] && v <= param.range[1]) {
       paramValues[param.name] = v;
+      shareParameterDrafts();
       renderDetail(); renderParams(); renderSidebar();
     } else {
       el('dInput').style.borderColor = 'var(--red)';
@@ -484,6 +487,7 @@ function renderDetail() {
   const rstBt = el('dBtnReset');
   if (rstBt) rstBt.addEventListener('click', () => {
     paramValues[param.name] = param.def;
+    shareParameterDrafts();
     renderDetail(); renderParams(); renderSidebar();
   });
 }
@@ -510,6 +514,7 @@ el('btnModified').addEventListener('click', () => {
 el('btnResetMod').addEventListener('click', () => {
   if (!confirm('Reset all modified parameters to defaults?')) return;
   PARAMS.forEach(p => { paramValues[p.name] = p.def; });
+  shareParameterDrafts();
   selectedParam = null;
   renderSidebar(); renderParams(); renderDetail();
 });
@@ -528,6 +533,7 @@ el('btnLoadFile').addEventListener('click', () => {
         const [name, val] = line.trim().split(/\s+/);
         if (name && val && paramValues[name] !== undefined) paramValues[name] = parseFloat(val);
       });
+      shareParameterDrafts();
       renderSidebar(); renderParams(); renderDetail();
     };
     reader.readAsText(file);
@@ -540,6 +546,15 @@ el('btnWriteAll').addEventListener('click', () => {
   alert(`Write ${mc} modified parameter(s) to vehicle.\n\nNote: In actual mode this would send MAVLink PARAM_SET messages.\nRestart the vehicle after writing critical parameters.`);
 });
 
+function shareParameterDrafts(){
+ if(!window.AirsentShared)return;
+ try{window.AirsentShared.set('airsent-parameter-drafts-v1',{...paramValues})}catch(e){alert(e.message)}
+}
+window.addEventListener('airsent-shared-change',e=>{
+ if(e.detail.key!=='airsent-parameter-drafts-v1')return;
+ PARAMS.forEach(p=>paramValues[p.name]=e.detail.value[p.name]??p.def);
+ renderSidebar();renderParams();renderDetail();
+});
 // ── Init ──────────────────────────────────────────────────
 setInterval(() => el('hClock').textContent = now(), 1000);
 renderSidebar();
