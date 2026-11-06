@@ -106,7 +106,7 @@ let cmdSocket = null;
 let cmdReconnectTimer = null;
 
 function connectCmd() {
-  if (!canSendCommands) return;
+  if (!canSendCommands || window.airsentDemoIsolation?.isDemo()) return;
   if (cmdSocket && (cmdSocket.readyState === WebSocket.OPEN ||
                     cmdSocket.readyState === WebSocket.CONNECTING)) return;
   cmdSocket = new WebSocket(window.airsentApiUrl("/cmd", true));
@@ -126,7 +126,7 @@ function connectCmd() {
 }
 
 function sendCmd(obj) {
-  if (!canSendCommands) {
+  if (!canSendCommands || window.airsentDemoIsolation?.isDemo()) {
     if (!isViewerMode) console.log("[demo] would send:", obj);
     return false;
   }

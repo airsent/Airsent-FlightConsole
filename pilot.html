@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="demo-isolation.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -811,7 +812,7 @@ function clearLinkLost(){
 let camPc = null;
 
 function connectCam() {
-  if (window.airsentSimulation) return;
+  if (window.airsentSimulation || appMode === 'demo') return;
   if (camPc) { try { camPc.close(); } catch(_){} camPc = null; }
 
   const pc = new RTCPeerConnection({
@@ -869,7 +870,7 @@ function connectCam() {
 
 /* ── DOWNWARD CAMERA — WebRTC via MediaMTX on VPS ── */
 function connectDowncam(){
-  if (window.airsentSimulation) return;
+  if (window.airsentSimulation || appMode === 'demo') return;
   if(downcamPc){try{downcamPc.close();}catch(_){} downcamPc=null;}
   if(downcamFrameReq){cancelAnimationFrame(downcamFrameReq); downcamFrameReq=null;}
 
@@ -986,6 +987,7 @@ function updateDowncamZoomLabel(){
 
 /* ── TELEMETRY — via VPS relay ── */
 function connectTelem(){
+  if(appMode==='demo') return;
   try{
     const ws=new WebSocket(window.airsentApiUrl("/telem", true));
     ws.onopen=()=>{telemConnected=true;clearLinkLost();
@@ -1108,7 +1110,7 @@ function applyDetectionState(on){
 
 /* ── COMMAND WEBSOCKET ── */
 function connectCmd(){
-  if(!canSendCommands) return;
+  if(!canSendCommands || window.airsentDemoIsolation?.isDemo()) return;
   try{
     cmdWs=new WebSocket(window.airsentApiUrl("/cmd", true));
     cmdWs.onopen=()=>console.log('[CMD] Connected');
@@ -1125,7 +1127,7 @@ function connectCmd(){
 }
 
 function sendCmd(obj){
-  if(!canSendCommands) return false;
+  if(!canSendCommands || window.airsentDemoIsolation?.isDemo()) return false;
   if(!cmdWs||cmdWs.readyState!==1){console.warn('[CMD] Not connected');return;}
   cmdWs.send(JSON.stringify(obj));
   return true;

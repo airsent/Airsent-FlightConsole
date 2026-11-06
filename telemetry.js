@@ -615,7 +615,7 @@ function updateMotors(data) {
     const percent = valid ? row.output_percent : null;
     setText(`m${id}pwm`, pwm === null ? "--" : pwm);
     setText(`m${id}rpm`, sampleFresh && finite(row.rpm) && row.rpm >= 0 ? Math.round(row.rpm).toLocaleString("en-US") : "--");
-    setText(`m${id}out`, percent === null ? "--" : percent < 40 ? "WEAK" : percent < 80 ? "MODERATE" : "STRONG");
+    setText(`m${id}out`, percent === null ? "--" : `${Math.round(percent)}%`);
     const bar = getEl(`m${id}bar`);
     if (bar) bar.style.width = `${percent === null ? 0 : percent}%`;
     if (percent !== null) outputs.push(percent);
