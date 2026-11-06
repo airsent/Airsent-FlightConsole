@@ -823,7 +823,7 @@ function connectCam() {
 
   pc.addTransceiver('video', { direction: 'recvonly' });
 
-  pc.ontrack = (ev) => {
+  pc.ontrack = (ev) => { try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
     if (ev.track.kind !== 'video') return;
     const video = E('liveFeed');
     video.srcObject = ev.streams[0];
@@ -891,7 +891,7 @@ function connectDowncam(){
     downcamTransceiver.setCodecPreferences(h264Codecs);
   }
 
-  pc.ontrack=ev=>{
+  pc.ontrack=ev=>{ try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
     if(ev.track.kind!=='video')return;
     downcamVideo.srcObject=ev.streams[0];
     downcamVideo.play().catch(()=>{});

@@ -1021,7 +1021,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 
     pc.addTransceiver('video', { direction:'recvonly' });
 
-    pc.ontrack = ev => {
+    pc.ontrack = ev => { try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
       if(ev.track.kind !== 'video') return;
       const video = D('frontCamVideo');
       video.srcObject = ev.streams[0];
@@ -1081,7 +1081,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
     const h264 = caps ? caps.codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264') : [];
     if(h264.length && tr.setCodecPreferences) tr.setCodecPreferences(h264);
 
-    pc.ontrack = ev => {
+    pc.ontrack = ev => { try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
       if(ev.track.kind !== 'video') return;
       const video = D('downCamVideo');
       video.srcObject = ev.streams[0];

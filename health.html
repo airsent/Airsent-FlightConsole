@@ -888,7 +888,7 @@ function connectCameraProbe(id,path,preferH264){
     if(h264.length)tr.setCodecPreferences(h264);
   }
 
-  pc.ontrack=ev=>{
+  pc.ontrack=ev=>{ try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
     if(ev.track.kind!=='video')return;
     setCameraStatus(id,true);
     ev.track.onended=()=>setCameraStatus(id,false);

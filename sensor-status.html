@@ -980,7 +980,7 @@ function connectCameraProbe(id, path, preferH264) {
     const h264 = caps ? caps.codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264') : [];
     if (h264.length) tr.setCodecPreferences(h264);
   }
-  pc.ontrack = ev => {
+  pc.ontrack = ev => { try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
     if (ev.track.kind !== 'video') return;
     setCameraCard(id, true, {fps:30});
     ev.track.onended = () => setCameraCard(id, false, {});
