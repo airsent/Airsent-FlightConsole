@@ -10,6 +10,7 @@ window.AIRSENT_CONFIG = {
 window.airsentSimulation = localStorage.getItem('airsentMode') === 'simulation' || (['localhost','127.0.0.1'].includes(location.hostname) && localStorage.getItem('airsentSITL') === '1');
 if (window.airsentSimulation) {
   document.addEventListener('DOMContentLoaded', () => {
+    if (['/', '/index.html', '/signin.html'].includes(location.pathname)) return;
     const badge = document.createElement('div');
     badge.textContent = 'SITL · SIMULATED AIRCRAFT';
     badge.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;padding:6px 10px;border:1px solid #f4b942;background:#111c26;color:#f4b942;font:11px monospace;pointer-events:none';
