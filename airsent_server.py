@@ -19,7 +19,7 @@ import socket
 import numpy as np
 from pymavlink import mavutil
 from pymavlink.dialects.v20 import ardupilotmega as mavlink2
-VPS_TELEM_URL = os.environ.get("VPS_TELEM_URL", "ws://127.0.0.1:9001")
+VPS_TELEM_URL = os.environ.get("VPS_TELEM_URL", "ws://146.190.50.189:9001")
 
 try:
     from pupil_apriltags import Detector as _AprilDetector
@@ -49,13 +49,13 @@ STREAM_H      = 480           # 4:3 to match (was 360); preview path is idle.
 # is encoded on the CPU. Lower framerate = less CPU spent encoding AND sharper
 # frames at the same bitrate (more bits per frame). These are the main levers
 # to trade motion smoothness for CPU headroom / picture quality on this board.
-FRONTCAM_FPS  = 20           # pilot-view (OAK-D) RTMP framerate. Was 30.
+FRONTCAM_FPS  = 30           # pilot-view (OAK-D) RTMP framerate. Was 30.
 DOWNCAM_FPS   = 15           # down-cam capture + RTMP + WS preview. Was 30.
                              # NOTE: AprilTag precision-landing detection runs
                              # separately at 5 fps and is NOT affected by this.
 
 APRILTAG_FAMILY = "tag36h11"
-RTMP_HOST = os.environ.get("RTMP_HOST", "127.0.0.1")
+RTMP_HOST = os.environ.get("RTMP_HOST", "146.190.50.189")
 RTMP_PORT = 1935
 
 BLOB_PATH     = '/home/airsent/.cache/blobconverter/yolov8n_coco_640x352_openvino_2022.1_6shave.blob'
@@ -1030,9 +1030,8 @@ def cam_capture_thread():
 
                 colorCam = pipeline.create(dai.node.Camera)
                 colorCam.build(dai.CameraBoardSocket.CAM_A)
-                colorOut = colorCam.requestOutput((1280,720), dai.ImgFrame.Type.BGR888p)
+                colorOut = colorCam.requestOutput((1280,720), dai.ImgFrame.Type.NV12, fps=30)
                 colorQueue = colorOut.createOutputQueue(maxSize=1, blocking=False)
-                colorNN = colorCam.requestOutput((NN_WIDTH,NN_HEIGHT), dai.ImgFrame.Type.BGR888p)
 
                 leftCam = pipeline.create(dai.node.Camera)
                 leftCam.build(dai.CameraBoardSocket.CAM_B)
@@ -1054,19 +1053,56 @@ def cam_capture_thread():
                 nn = pipeline.create(dai.node.NeuralNetwork)
                 nn.setBlobPath(BLOB_PATH)
                 nn.setNumInferenceThreads(2)
-                colorNN.link(nn.input)
+                # YOLO is fed from the host (see _color_reader) so the NN can never
+                # throttle the camera. Camera stays at 30 fps; YOLO gets ~10 fps.
+                try:
+                    nnIn = nn.input.createInputQueue(maxSize=1, blocking=False)
+                except TypeError:
+                    nnIn = nn.input.createInputQueue()
                 nnQueue = nn.out.createOutputQueue(maxSize=1, blocking=False)
 
                 pipeline.start()
                 print("[CAM] Pipeline started — color + stereo depth + YOLOv8n")
 
+                # Color frames -> cam_color_buf on their own thread so the
+                # video stream never waits on depth / proximity / YOLO.
+                color_stop = threading.Event()
+                _cc = [0, time.time()]
+                _nn_t = [0.0]
+                NN_FEED_INTERVAL = 0.1   # ~10 fps to YOLO
+                def _color_reader(q=colorQueue, stop=color_stop, nnq=nnIn):
+                    while not stop.is_set():
+                        try:
+                            fd = q.tryGet()
+                        except Exception:
+                            break
+                        if fd is None:
+                            time.sleep(0.002)
+                            continue
+                        f = fd.getCvFrame()
+                        _cc[0] += 1
+                        if time.time() - _cc[1] >= 5:
+                            print(f"[CAM-FPS] color from OAK: {_cc[0]/(time.time()-_cc[1]):.1f} fps")
+                            _cc[0], _cc[1] = 0, time.time()
+                        with cam_buf_lock:
+                            cam_color_buf['frame'] = f
+                        _now = time.time()
+                        if _now - _nn_t[0] >= NN_FEED_INTERVAL:
+                            _nn_t[0] = _now
+                            try:
+                                hh, ww = f.shape[:2]
+                                ch = int(round(ww * NN_HEIGHT / NN_WIDTH))
+                                y0 = max(0, (hh - ch) // 2)
+                                small = cv2.resize(f[y0:y0+ch], (NN_WIDTH, NN_HEIGHT), interpolation=cv2.INTER_AREA)
+                                img = dai.ImgFrame()
+                                img.setCvFrame(small, dai.ImgFrame.Type.BGR888p)
+                                nnq.send(img)
+                            except Exception as _e:
+                                print(f"[NN-FEED] {_e}")
+                threading.Thread(target=_color_reader, daemon=True).start()
+
                 frame_counter = 0
                 while True:
-                    frame_data = colorQueue.get()
-                    if frame_data is None:
-                        time.sleep(0.01)
-                        continue
-                    frame = frame_data.getCvFrame()
                     frame_counter += 1
 
                     depth_frame = None
@@ -1125,13 +1161,15 @@ def cam_capture_thread():
                             )
                         obstacle_blocked = detection_active and (yolo_blocked or prox_obstacle)
 
-                    with cam_buf_lock:
-                        cam_color_buf['frame'] = frame
 
         except Exception as e:
             print(f"[CAM] Pipeline error: {e}")
             traceback.print_exc()
 
+        try:
+            color_stop.set()
+        except NameError:
+            pass
         with cam_buf_lock:
             cam_color_buf['frame'] = None
         time.sleep(2)
@@ -1160,10 +1198,58 @@ async def cam_handler(websocket):
         traceback.print_exc()
 
 
-# ── Front camera RTMP → VPS ─────────────────────────────────────────────────
+# ── Front camera → VPS: GStreamer x264 → SRT, adaptive bitrate ──────────────
+frontcam_bitrate_kbps = 0
+
 def cam_rtmp_thread():
-    W, H, FPS  = 1280, 720, FRONTCAM_FPS
-    VPS_RTMP   = f"rtmp://{RTMP_HOST}:{RTMP_PORT}/frontcam"
+    """OAK-D color frames → x264enc (bitrate changed live) → MPEG-TS → SRT → VPS MediaMTX 'frontcam'.
+    Controller reads SRT stats every 1s: cuts 30% on loss/RTT spike, +500 kbps after 3 clean seconds."""
+    import gi
+    gi.require_version('Gst', '1.0')
+    from gi.repository import Gst
+    Gst.init(None)
+    global frontcam_bitrate_kbps
+
+    W, H, FPS      = 1280, 720, FRONTCAM_FPS
+    SRT_LATENCY_MS = 150            # lower to ~150 once you trust the link (≈3-4x ping)
+    BR_MIN, BR_MAX = 1500, 10000    # kbps floor / ceiling
+    BR_START       = 4000           # kbps at (re)connect
+    STEP_UP        = 500            # kbps added after a clean window
+    DOWN_FACTOR    = 0.7            # multiply on congestion
+    CLEAN_SECS     = 3              # clean seconds before stepping up
+    LOSS_LIMIT     = 0.02           # (retransmits + drops) / sent that counts as congestion
+    uri            = f"srt://{RTMP_HOST}:8890"
+    STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms', 'bandwidth-mbps')
+
+    def build():
+        desc = (
+            f'appsrc name=src is-live=true format=time do-timestamp=true block=false '
+            f'caps=video/x-raw,format=BGR,width={W},height={H},framerate={FPS}/1 ! '
+            f'queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! '
+            f'videoconvert ! video/x-raw,format=I420 ! '
+            f'x264enc name=enc tune=zerolatency speed-preset=ultrafast bitrate={BR_START} '
+            f'key-int-max={FPS} vbv-buf-capacity=1000 threads=4 ! '
+            f'h264parse config-interval=-1 ! mpegtsmux alignment=7 ! '
+            f'srtsink name=sink uri="{uri}" streamid="publish:frontcam" latency={SRT_LATENCY_MS} '
+            f'wait-for-connection=false sync=false async=false'
+        )
+        return Gst.parse_launch(desc)
+
+    def read_stats(sink):
+        out = {}
+        try:
+            s = sink.get_property('stats')
+        except Exception:
+            return out
+        if s is None:
+            return out
+        for k in STAT_KEYS:
+            try:
+                if s.has_field(k):
+                    out[k] = float(s.get_value(k))
+            except Exception:
+                pass
+        return out
 
     while True:
         with cam_buf_lock:
@@ -1172,83 +1258,95 @@ def cam_rtmp_thread():
             time.sleep(2)
             continue
         if not rtmp_port_reachable():
-            print("[RTMP] VPS RTMP port unreachable — retrying in 3s")
+            print("[SRT] VPS unreachable — retrying in 3s")
             time.sleep(3)
             continue
 
-        proc = None
+        pipe = None
         try:
-            cmd = [
-                'ffmpeg', '-y', '-loglevel', 'error',
-                '-f', 'rawvideo', '-pix_fmt', 'bgr24',
-                '-s', f'{W}x{H}', '-r', str(FPS),
-                '-i', 'pipe:0',
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                # 720p20 FRONT cam — bitrate raised to 8 Mbps for a sharper
-                # pilot view. This costs ~no extra CPU (bitrate != CPU on this
-                # board) — only uplink bandwidth (~8 Mbps just for this cam).
-                # bufsize kept ~1.5x bitrate so rate control can hold detail
-                # through motion. RETUNE FOR 5G: if the pilot view stutters on
-                # cellular, drop -b:v/-maxrate first (e.g. 5000k/6000k), keeping
-                # bufsize ~1.5x whatever -b:v you pick.
-                '-b:v', '8000k', '-maxrate', '9000k', '-bufsize', '12000k',
-                '-g', str(FPS),
-                '-f', 'flv', VPS_RTMP
-            ]
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                bufsize=0
-            )
-            print(f"[RTMP] Streaming front cam → {VPS_RTMP}")
+            pipe = build()
+            src  = pipe.get_by_name('src')
+            enc  = pipe.get_by_name('enc')
+            sink = pipe.get_by_name('sink')
+            bus  = pipe.get_bus()
+            pipe.set_state(Gst.State.PLAYING)
+            print(f"[SRT] Streaming front cam → {uri} streamid=publish:frontcam | ABR {BR_MIN}-{BR_MAX} kbps, start {BR_START}")
 
-            interval   = 1.0 / FPS
-            last_sent  = 0.0
-            last_frame = None
+            br, clean, rtt_base, prev = BR_START, 0, None, None
+            pushed, ctl_n = 0, 0
+            frontcam_bitrate_kbps = br
+            interval, last_sent, last_frame, last_ctl = 1.0 / FPS, 0.0, None, time.time()
 
             while True:
-                if proc.poll() is not None:
-                    print("[RTMP] ffmpeg exited — reconnecting in 3s")
+                msg = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
+                if msg:
+                    if msg.type == Gst.MessageType.ERROR:
+                        err, _dbg = msg.parse_error()
+                        print(f"[SRT] Pipeline error: {err.message} — reconnecting in 3s")
+                    else:
+                        print("[SRT] EOS — reconnecting in 3s")
                     break
 
                 now = time.time()
-                if now - last_sent < interval:
-                    time.sleep(0.005)
-                    continue
 
+                # ── ABR controller (1 Hz) ──
+                if now - last_ctl >= 1.0:
+                    last_ctl = now
+                    ctl_n += 1
+                    if ctl_n % 5 == 0:
+                        print(f"[SRT-FPS] pushing {pushed/5:.1f} fps @ {br} kbps")
+                        pushed = 0
+                    st = read_stats(sink)
+                    if prev is not None and 'packets-sent' in st:
+                        d_sent = st['packets-sent'] - prev.get('packets-sent', 0)
+                        d_bad  = sum(st.get(k, 0) - prev.get(k, 0) for k in ('packets-retransmitted', 'packets-sent-dropped'))
+                        loss   = (d_bad / d_sent) if d_sent > 0 else 0.0
+                        rtt    = st.get('rtt-ms', 0.0)
+                        if rtt > 0:
+                            rtt_base = rtt if rtt_base is None else min(rtt, rtt_base + 0.5)
+                        rtt_spike = bool(rtt_base) and rtt > max(rtt_base * 2, rtt_base + 80)
+                        new = br
+                        if loss > LOSS_LIMIT or rtt_spike:
+                            new, clean = max(BR_MIN, int(br * DOWN_FACTOR)), 0
+                        else:
+                            clean += 1
+                            if clean >= CLEAN_SECS:
+                                new, clean = min(BR_MAX, br + STEP_UP), 0
+                        if new != br:
+                            enc.set_property('bitrate', new)
+                            print(f"[SRT-ABR] {br} → {new} kbps | rtt {rtt:.0f}ms (base {rtt_base or 0:.0f}) loss {loss*100:.1f}% bw-est {st.get('bandwidth-mbps', 0):.1f}Mbps")
+                            br = new
+                            frontcam_bitrate_kbps = br
+                    prev = st
+
+                # ── push newest frame at FPS, never queue stale ones ──
+                if now - last_sent < interval:
+                    time.sleep(0.003)
+                    continue
                 with cam_buf_lock:
                     frame = cam_color_buf['frame']
-
-                if frame is None:
-                    time.sleep(0.05)
+                if frame is None or frame is last_frame:
+                    time.sleep(0.003)
                     continue
-
-                if frame is last_frame:
-                    time.sleep(0.005)
+                if frame.shape[0] != H or frame.shape[1] != W:
+                    time.sleep(0.01)
                     continue
-
-                try:
-                    proc.stdin.write(frame.tobytes())
-                    last_frame = frame
-                    last_sent  = now
-                except BrokenPipeError:
-                    print("[RTMP] Pipe broken — reconnecting")
+                ret = src.emit('push-buffer', Gst.Buffer.new_wrapped(frame.tobytes()))
+                if ret != Gst.FlowReturn.OK:
+                    print(f"[SRT] push-buffer returned {ret} — reconnecting in 3s")
                     break
+                last_frame, last_sent = frame, now
+                pushed += 1
 
         except Exception as e:
-            print(f"[RTMP] Error: {e}")
+            print(f"[SRT] Error: {e}")
+            traceback.print_exc()
         finally:
-            if proc:
+            if pipe is not None:
                 try:
-                    proc.terminate()
-                    proc.wait(timeout=2)
+                    pipe.set_state(Gst.State.NULL)
                 except Exception:
-                    try: proc.kill()
-                    except: pass
+                    pass
         time.sleep(3)
 
 
@@ -1503,7 +1601,7 @@ async def vps_telem_relay():
 
             remote = await websockets.connect(
                 VPS_TELEM_URL,
-                ping_interval=None
+                ping_interval=5, ping_timeout=10
             )
 
             print("[VPS] Telemetry relay connected")
@@ -1524,7 +1622,7 @@ async def vps_telem_relay():
 # through the SAME process_command() the local handler uses, and the reply is
 # sent back up so the GCS gets acks / MAVLink log remotely too. Reconnects on
 # failure. This is what makes ARM/DISARM/velocity work over 5G.
-VPS_CMD_URL = os.environ.get("VPS_CMD_URL", "ws://127.0.0.1:9004")
+VPS_CMD_URL = os.environ.get("VPS_CMD_URL", "ws://146.190.50.189:9004")
 
 async def vps_cmd_relay():
     while True:
@@ -1532,7 +1630,7 @@ async def vps_cmd_relay():
             print("[VPS] Connecting command relay...")
             remote = await websockets.connect(
                 VPS_CMD_URL,
-                ping_interval=None
+                ping_interval=5, ping_timeout=10
             )
             print("[VPS] Command relay connected")
 
@@ -1573,6 +1671,8 @@ async def main():
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
+    os.environ.setdefault("DATALINK_PORT", '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0')
+    os.environ.setdefault("DATALINK_MOTOR_POLES", "22")
     esc_monitor = None if SIM_MODE else start_monitor()
     threading.Thread(target=mavlink_reader,         daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
