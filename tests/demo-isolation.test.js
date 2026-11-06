@@ -10,6 +10,7 @@ vm.runInNewContext(source,{window,URL,URLSearchParams,document:{addEventListener
  await assert.rejects(window.fetch('/video/frontcam/whep'));assert.throws(()=>new window.RTCPeerConnection());assert.equal(network,0);
  await window.fetch('https://tile.example/1/2/3.png');assert.equal(network,1);
  new window.WebSocket('wss://console.airsent.tech/presence'); // Login remains accessible.
+ role='viewer';assert.throws(()=>new window.WebSocket('wss://console.airsent.tech/cmd'));new window.WebSocket('wss://console.airsent.tech/telem');await window.fetch('/video/frontcam/whep');
  role='operator';const command=new window.WebSocket('wss://console.airsent.tech/cmd');const peer=new window.RTCPeerConnection();command.send('{}');
  role='demo';const before=network;command.send('{}');assert.equal(network,before);assert.ok(command.closed);
  // Simulate a role change in a tab originally opened as operator.

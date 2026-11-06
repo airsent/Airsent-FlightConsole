@@ -8,7 +8,8 @@
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, location.href);
     return /^(\/simulation)?\/(telem|cmd)(\/|$)/.test(url.pathname) || /^\/video(\/|$)/.test(url.pathname) || ['8765','8766','8767','8768'].includes(url.port);
   };
-  const allowed = input => role() !== 'demo' || !aircraft(input);
+  const command = input => { const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, location.href); return /^(\/simulation)?\/cmd(\/|$)/.test(url.pathname) || url.port === '8767'; };
+  const allowed = input => role() === 'demo' ? !aircraft(input) : role() === 'viewer' ? !command(input) : true;
   window.airsentDemoIsolation = {isDemo:() => role() === 'demo', allowed};
   if (window.WebSocket) {
     const Native = window.WebSocket;
@@ -16,6 +17,12 @@
       constructor(url, protocols) {
         if (!allowed(url)) throw new Error('Demo mode blocks aircraft connections');
         super(url, protocols); sockets.add(this);
+        // Authenticate real-aircraft command sockets before any command frame.
+        const target = new URL(url, location.href);
+        if (target.pathname === '/cmd' && !['localhost','127.0.0.1'].includes(target.hostname)) this.addEventListener('open', () => {
+          if (!allowed(this.url)) { this.close(); return; }
+          Native.prototype.send.call(this, JSON.stringify({type:'command_auth',token:localStorage.getItem('airsentPresenceToken') || ''}));
+        });
         this.addEventListener('close', () => sockets.delete(this));
       }
       send(data) {

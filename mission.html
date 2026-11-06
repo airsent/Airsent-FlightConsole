@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="demo-isolation.js?v=1"></script>
+<script src="demo-isolation.js?v=viewer-1"></script>
+<script src="viewer-access.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -683,7 +684,7 @@ function makeHomeMarker() {
     iconSize: [20, 20],
     iconAnchor: [10, 10],
   });
-  homeMarker = L.marker([homeLat, homeLon], { icon, draggable: true, zIndexOffset: 1000 })
+  homeMarker = L.marker([homeLat, homeLon], { icon, draggable: !window.airsentViewerReadOnly?.(), zIndexOffset: 1000 })
     .addTo(map)
     .bindTooltip('Home / Launch', { className: 'wp-tooltip', direction: 'top' });
   homeMarker.on('dragend', e => {
@@ -704,6 +705,7 @@ map.on('mousemove', e => {
 
 // Map click — add waypoint
 map.on('click', e => {
+  if(window.airsentViewerReadOnly?.()) return;
   if (activeTool === 'pan') return;
 
   let cmd = 'WAYPOINT';
@@ -716,6 +718,7 @@ map.on('click', e => {
 
 // ── Waypoint management ───────────────────────────────────
 function addWaypoint(lat, lon, alt, cmd) {
+  if(window.airsentViewerReadOnly?.()) return;
   const id = ++wpIdCounter;
   const wp = { id, lat, lon, alt: alt || DEFAULT_ALT, cmd: cmd || 'WAYPOINT', speed: CRUISE_SPEED, radius: 5, marker: null, selected: false };
   waypoints.push(wp);
@@ -735,7 +738,7 @@ function createMarker(wp) {
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
-  const m = L.marker([wp.lat, wp.lon], { icon, draggable: true, zIndexOffset: 500 })
+  const m = L.marker([wp.lat, wp.lon], { icon, draggable: !window.airsentViewerReadOnly?.(), zIndexOffset: 500 })
     .addTo(map)
     .bindTooltip(() => `WP${wp.id} — ${wp.cmd}<br>Alt: ${wp.alt}m`, { direction: 'top' });
 
@@ -947,6 +950,7 @@ document.getElementById('toolCenter').addEventListener('click', () => map.setVie
 
 // ── Mission localStorage autosave ─────────────────────────
 function saveMissionToStorage() {
+  if(window.airsentViewerReadOnly?.()) return;
   try {
     const data = {
       home: { lat: homeLat, lon: homeLon },
