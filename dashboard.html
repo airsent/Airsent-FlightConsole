@@ -131,6 +131,18 @@ body.dashboard-fixed .events-panel .panel-action-group{display:flex;align-items:
 body.dashboard-fixed .events-panel .panel-action-group{display:grid!important;grid-template-columns:minmax(0,1fr) 26px 26px;gap:5px!important;flex-wrap:nowrap!important;width:100%}
 body.dashboard-fixed #eventsDownloadBtn{min-width:0!important;width:100%;font-size:10px;padding:5px 4px;letter-spacing:0}
 body.dashboard-fixed #eventsPauseBtn,body.dashboard-fixed #eventsResetBtn{width:26px;min-width:26px;height:30px;padding:3px}
+/* Events log header: title + clock on one line, three icon buttons under it; the rest of the box is events. */
+body.dashboard-fixed .events-panel .panel-title-with-actions.events-title{display:flex!important;flex-direction:column;align-items:stretch;gap:6px!important;padding:8px 12px!important;
+  position:sticky;top:0;z-index:2;background:linear-gradient(180deg, rgba(8,18,28,.99), rgba(6,14,21,.99));border-bottom:1px solid rgba(127,220,255,.08)}
+.events-head{display:flex;align-items:center;gap:8px;min-width:0}
+.events-head>span{font-size:17px;white-space:nowrap}
+body.dashboard-fixed .events-icons #dashboardUtcClock{margin-left:auto;align-self:center;font-size:11px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;min-width:0}
+#eventsOffline{font:700 9px monospace;letter-spacing:1px;color:#ff4d6a;border:1px solid rgba(255,77,106,.5);padding:1px 5px}
+body.dashboard-fixed .events-panel .panel-action-group.events-icons{display:flex!important;gap:6px!important;width:auto!important}
+body.dashboard-fixed .events-icons .panel-action-btn{width:28px!important;min-width:28px!important;height:22px!important;padding:0!important;font-size:13px!important;line-height:20px;
+  background:#0c1822!important;color:#9be5ff!important;border:1px solid rgba(127,220,255,.25)!important;letter-spacing:0!important}
+body.dashboard-fixed .events-icons .panel-action-btn:hover{border-color:#9be5ff!important;color:#fff!important}
+body.dashboard-fixed .events-icons #eventsPauseBtn.paused{color:#ffb800!important;border-color:rgba(255,184,0,.6)!important}
 body.dashboard-fixed .left-column{grid-template-rows:calc(126px * var(--dashboard-row-scale,1)) calc(238px * var(--dashboard-row-scale,1)) calc(210px * var(--dashboard-row-scale,1)) minmax(0,1fr)!important}
 </style>
 <script src="failsafe-activation.js?v=shared-1" defer></script>
@@ -338,12 +350,13 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
  
 <section class="panel events-panel">
  
-<div class="panel-title panel-title-with-actions">
-  <span>EVENTS LOG</span><time id="dashboardUtcClock" title="UTC clock"></time>
-  <div class="panel-action-group">
-    <button id="eventsDownloadBtn" class="panel-action-btn" title="Download shared event history as CSV" aria-label="Download all events">↓ DOWNLOAD EVENTS</button>
-    <button id="eventsPauseBtn" class="panel-action-btn" data-confirm="Pause event log updates?">⏸</button>
-    <button id="eventsResetBtn" class="panel-action-btn warning" data-confirm="Clear event log?">↺</button>
+<div class="panel-title panel-title-with-actions events-title">
+  <div class="events-head"><span>EVENTS LOG</span><b id="eventsOffline" hidden title="Shared event history disconnected — showing the last records received">OFFLINE</b></div>
+  <div class="panel-action-group events-icons">
+    <button id="eventsDownloadBtn" class="panel-action-btn" title="Download event history (CSV)" aria-label="Download events">⤓</button>
+    <button id="eventsResetBtn" class="panel-action-btn" title="Refresh — reload the shared history" aria-label="Refresh events">⟳</button>
+    <button id="eventsPauseBtn" class="panel-action-btn" title="Pause updates on this screen" aria-label="Pause events">⏸</button>
+    <time id="dashboardUtcClock" title="UTC clock"></time>
   </div>
 </div>
  

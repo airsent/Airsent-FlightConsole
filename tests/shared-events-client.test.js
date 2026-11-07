@@ -15,5 +15,10 @@ for(const role of ['operator','viewer']){
  ws.close();assert.equal(window.AirsentEvents.ready,false);assert.equal(events.at(-1).detail.events.length,1,'disconnect must retain history');assert.equal(window.AirsentEvents.note('offline'),false);
 }
 assert.equal(setup('demo').sockets.length,0);assert.equal(setup('operator',true).sockets.length,0);
-const source=fs.readFileSync('script.js','utf8');assert(source.includes('querySelector(".panel-title > span")'),'status must not replace the toolbar');
-console.log('PASS: shared journal auth, dedup, retained history on disconnect, operator-only notes, demo/SITL isolation and toolbar preservation');
+const source=fs.readFileSync('script.js','utf8');
+assert(source.includes("getElementById('eventsOffline')")&&!source.includes('EVENTS LOG · LIVE'),'connection status is a separate OFFLINE flag that never replaces the toolbar');
+{const {sockets}=setup('actual');assert.equal(sockets.length,1,'actual/real consoles share the same history');}
+{const {window,sockets,events}=setup('operator');const ws=sockets[0];ws.onopen();
+ ws.onmessage({data:JSON.stringify({type:'events',events:[{id:1,time:'1',text:'A'}]})});
+ window.AirsentEvents.refresh();assert.equal(events.at(-1).detail.events.length,0,'refresh reloads the whole history');}
+console.log('PASS: shared journal auth, dedup, retained history on disconnect, operator-only notes, demo/SITL isolation and toolbar preservation, refresh');

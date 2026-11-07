@@ -141,6 +141,7 @@ function sendCmd(obj) {
 let missionSeconds = 25 * 60 + 38;
 let missionTimerPaused = false;
 let eventLogPaused = false;
+const EVENT_ROWS = 60;   // the events box scrolls; older history is in the CSV download
 let currentActiveFlightButton = null;
 let pendingConfirmAction = null;
  
@@ -279,8 +280,8 @@ function prependEvent(text) {
     time: getCurrentClockTime(),
     text: text.toUpperCase()
   });
-  if (eventLogData.length > 8) {
-    eventLogData = eventLogData.slice(0, 8);
+  if (eventLogData.length > EVENT_ROWS) {
+    eventLogData = eventLogData.slice(0, EVENT_ROWS);
   }
   renderEventLog();
 }
@@ -664,29 +665,26 @@ function bindMissionButtons() {
 function bindEventButtons() {
   if (telemetryEls.eventsPauseBtn) {
     telemetryEls.eventsPauseBtn.addEventListener("click", () => {
-      openConfirm(
-        eventLogPaused ? "Resume event log updates?" : "Pause event log updates?",
-        () => {
-          eventLogPaused = !eventLogPaused;
-          telemetryEls.eventsPauseBtn.textContent = eventLogPaused ? "▶" : "⏸";
-          if (!eventLogPaused) window.dispatchEvent(new Event("airsent-events-resume"));
-        }
-      );
+      // Pausing only freezes this screen; the shared history keeps recording.
+      eventLogPaused = !eventLogPaused;
+      telemetryEls.eventsPauseBtn.textContent = eventLogPaused ? "▶" : "⏸";
+      telemetryEls.eventsPauseBtn.classList.toggle("paused", eventLogPaused);
+      telemetryEls.eventsPauseBtn.title = eventLogPaused ? "Paused — click to resume" : "Pause updates on this screen";
+      if (!eventLogPaused) window.dispatchEvent(new Event("airsent-events-resume"));
     });
   }
  
   if (telemetryEls.eventsResetBtn) {
     telemetryEls.eventsResetBtn.addEventListener("click", () => {
+      eventLogPaused = false;
+      telemetryEls.eventsPauseBtn.textContent = "⏸";
+      telemetryEls.eventsPauseBtn.classList.remove("paused");
       if (window.AirsentEvents) {
-        eventLogPaused = false;
-        telemetryEls.eventsPauseBtn.textContent = "⏸";
+        window.AirsentEvents.refresh();
         window.dispatchEvent(new Event('airsent-events-resume'));
         return;
       }
-      openConfirm("Clear event log?", () => {
-        eventLogData = isRealMode ? [...realModeEventLog] : [];
-        renderEventLog();
-      });
+      renderEventLog();
     });
   }
 }
@@ -1225,16 +1223,15 @@ setInterval(updateTelemetry, 1000);
 let sharedEventSnapshot=[];
 function renderSharedEvents(){
   if(eventLogPaused)return;
-  eventLogData=sharedEventSnapshot.slice(-8).reverse();
+  eventLogData=sharedEventSnapshot.slice(-EVENT_ROWS).reverse();
   renderEventLog();
 }
 window.addEventListener('airsent-events', event=>{
   sharedEventSnapshot=event.detail.events;
   sessionEventArchive.splice(0,sessionEventArchive.length,...sharedEventSnapshot);
   const button=document.getElementById('eventsDownloadBtn');
-  const title=eventLogPanel?.querySelector(".panel-title > span");
-  if(title){title.textContent=event.detail.ready?"EVENTS LOG · LIVE":"EVENTS LOG · OFFLINE";}
-  if(telemetryEls.eventsResetBtn)telemetryEls.eventsResetBtn.title="Resume shared history (saved events are retained)";
+  const offline=document.getElementById('eventsOffline');
+  if(offline)offline.hidden=!!event.detail.ready;
   if(button)button.title=event.detail.ready?'Download shared event history':'History offline — showing last received records';
   renderSharedEvents();
 });
