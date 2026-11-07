@@ -150,3 +150,42 @@ class Commands(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ParamsAndModes(unittest.TestCase):
+    def setUp(self):
+        from test_param_store import FakePixhawk as ParamFC, PARAMS
+        srv.param_store.reset()
+        srv.telem['armed'] = False
+        self.fc = ParamFC(srv.param_store, PARAMS)
+        with srv.mav_lock:
+            srv.mav_conn = self.fc
+
+    def tearDown(self):
+        with srv.mav_lock:
+            srv.mav_conn = None
+
+    def test_param_read_and_write(self):
+        r = run('param_read', names=['RTL_ALT', 'THR_MID'])
+        self.assertTrue(r['ok'], r)
+        self.assertEqual(r['values'], {'RTL_ALT': 1500})
+        self.assertEqual(r['missing'], ['THR_MID'])
+        w = run('param_write', params={'RTL_ALT': 2000, 'WPNAV_SPEED': 600})
+        self.assertTrue(w['ok'], w)
+        self.assertEqual(self.fc.params['RTL_ALT'][0], 2000)
+
+    def test_param_write_blocked_when_armed(self):
+        srv.telem['armed'] = True
+        w = run('param_write', params={'RTL_ALT': 2000})
+        self.assertFalse(w['ok'])
+        self.assertEqual(self.fc.sets, [])
+
+    def test_only_console_modes_allowed(self):
+        fc = FakePixhawk()
+        with srv.mav_lock:
+            srv.mav_conn = fc
+        self.assertFalse(run('set_mode', mode='FLIP')['ok'])
+        self.assertFalse(run('set_mode', mode='STABILIZE')['ok'])
+        self.assertEqual(fc.commands, [])
+        self.assertTrue(run('set_mode', mode='LOITER')['ok'])
+        self.assertTrue(run('set_mode', mode='ALTHOLD')['ok'])

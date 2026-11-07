@@ -5,6 +5,7 @@ from datalink_telemetry import start_monitor
 from mission_engine import MissionEngine, default_config, disk_free_gb
 from golden_params import GoldenParams
 from vehicle_mission import VehicleMission, MissionBusy
+from param_store import ParamStore
 from collections import deque
 import asyncio
 import websockets
@@ -511,6 +512,7 @@ ack_cond = threading.Condition()
 ACK_RESULTS = {0: 'ACCEPTED', 1: 'TEMPORARILY REJECTED', 2: 'DENIED', 3: 'UNSUPPORTED', 4: 'FAILED',
                5: 'IN PROGRESS', 6: 'CANCELLED'}
 vehicle_mission = VehicleMission()
+param_store = ParamStore()
 
 
 def wait_ack(command, since, timeout):
@@ -541,6 +543,7 @@ def mavlink_reader():
             last_mav_heartbeat = 0.0
             golden.reset()
             vehicle_mission.reset()
+            param_store.reset()
             home_state.clear(); home_state['set'] = False
             hb = mav.wait_heartbeat(timeout=15)
             if hb is None:
@@ -597,6 +600,7 @@ def mavlink_reader():
                 if t == 'PARAM_VALUE':
                     pilot_settings.observe(msg)
                     golden.observe(msg)
+                    param_store.observe(msg)
                 elif t == 'ATTITUDE':
                     telem['roll']  = round(math.degrees(msg.roll), 1)
                     telem['pitch'] = round(math.degrees(msg.pitch), 1)
@@ -757,6 +761,11 @@ def set_guided_mode(mav):
         0, 0, 0, 0, 0
     )
     log_mavlink("MAV_CMD_DO_SET_MODE → GUIDED (4)")
+
+# Modes an operator may select from the console. Everything else (STABILIZE,
+# ACRO, FLIP, AUTOTUNE ...) stays on the RC transmitter only.
+CONSOLE_MODES = {'LOITER', 'GUIDED', 'AUTO', 'RTL', 'LAND', 'ALTHOLD', 'ALT HOLD'}
+
 
 def set_mode(mav, mode_num, mode_name):
     mav.mav.command_long_send(
@@ -967,7 +976,7 @@ def mission_loop():
 
 
 # ── Command WebSocket handler ─────────────────────
-SLOW_ACTIONS = {'wp_upload', 'wp_download'}
+SLOW_ACTIONS = {'wp_upload', 'wp_download', 'param_read', 'param_write'}
 
 
 def process_command(raw):
@@ -1079,6 +1088,33 @@ def _process_command(raw):
             return {'ok': True, 'msg': f"Uploaded and verified {r['nav_items']} waypoints on the Pixhawk",
                     'warnings': r['warnings'], 'result': r, 'vehicle_mission': vehicle_mission.snapshot()}
 
+        elif action == 'param_read':
+            names = cmd.get('names') or []
+            if not isinstance(names, list) or not names or len(names) > 300:
+                return {'ok': False, 'msg': 'param_read needs 1-300 names'}
+            try:
+                found, missing = param_store.read(mav, names)
+            except ValueError as e:
+                return {'ok': False, 'msg': str(e)}
+            return {'ok': True, 'msg': f'Read {len(found)} parameters from the Pixhawk'
+                    + (f' ({len(missing)} not on this vehicle)' if missing else ''),
+                    'values': found, 'missing': missing}
+
+        elif action == 'param_write':
+            changes = cmd.get('params') or {}
+            if not isinstance(changes, dict) or not changes or len(changes) > 100:
+                return {'ok': False, 'msg': 'param_write needs 1-100 parameters'}
+            if telem.get('armed'):
+                return {'ok': False, 'msg': 'Parameter writes are blocked while the aircraft is armed'}
+            who = cmd.get('operator') or 'Operator'
+            done, err = param_store.write_many(mav, changes)
+            for n, v in done.items():
+                log_mavlink(f"PARAM {n} = {v} (confirmed) by {who}")
+            if err:
+                log_mavlink(f"PARAM WRITE STOPPED — {err}")
+                return {'ok': False, 'msg': f'Wrote {len(done)}/{len(changes)} — stopped: {err}', 'values': done}
+            return {'ok': True, 'msg': f'Wrote and confirmed {len(done)} parameter(s) on the Pixhawk', 'values': done}
+
         elif action == 'wp_download':
             home = (home_state['lat'], home_state['lon']) if home_state.get('set') else None
             try:
@@ -1137,6 +1173,8 @@ def _process_command(raw):
             }
             if mode_name not in MODE_NUMS:
                 return {'ok': False, 'msg': f'Unknown mode: {mode_name}'}
+            if mode_name not in CONSOLE_MODES:
+                return {'ok': False, 'msg': f'{mode_name} is not available from the console — use the RC transmitter'}
             num = MODE_NUMS[mode_name]
             set_mode(mav, num, mode_name)
             # Zero velocity on any non-GUIDED mode for safety.
