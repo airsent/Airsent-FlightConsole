@@ -3239,7 +3239,7 @@ body.dashboard-fixed{
 }
 
 body.dashboard-fixed .app-shell{
-  width:2048px;
+  width:var(--dashboard-virtual-width, 2048px);   /* fills wide windows instead of leaving a strip on the right */
   height:var(--dashboard-virtual-height, 960px);
   padding:8px;
   overflow:hidden;
