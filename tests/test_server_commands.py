@@ -214,3 +214,36 @@ class FailsafeTelemetry(unittest.TestCase):
         for n in ('FS_THR_ENABLE', 'FS_GCS_ENABLE', 'BATT_FS_LOW_ACT', 'FS_EKF_ACTION', 'FENCE_ENABLE'):
             self.assertIn(n, srv.FAILSAFE_PARAMS)
             self.assertIn(n, golden)
+
+
+class ASCWiring(unittest.TestCase):
+    def test_console_commands_feed_asc_and_toggle(self):
+        srv.asc_engine.console_seen_at = None
+        run('mission_ping', console_id='c1')
+        self.assertIsNotNone(srv.asc_engine.console_seen_at)
+        before = srv.asc_engine.console_mode_at
+        with srv.mav_lock:
+            srv.mav_conn = FakePixhawk()
+        try:
+            run('set_mode', mode='LOITER')
+        finally:
+            with srv.mav_lock:
+                srv.mav_conn = None
+        self.assertGreater(srv.asc_engine.console_mode_at, before)
+        srv.ASC_STATE_FILE = os.path.join(os.path.dirname(__file__), '_asc_state_test.json')
+        try:
+            r = run('asc_set', act_enabled=False)
+            self.assertTrue(r['ok'])
+            self.assertFalse(srv.asc_engine.act_enabled)
+            run('asc_set', act_enabled=True)
+            self.assertTrue(srv.asc_engine.act_enabled)
+        finally:
+            if os.path.exists(srv.ASC_STATE_FILE):
+                os.remove(srv.ASC_STATE_FILE)
+
+    def test_payload_carries_asc_snapshot(self):
+        srv.esc_monitor = None
+        p = srv.build_telemetry_payload(include_mission=True)
+        self.assertIn(p['asc']['state'], ('standby', 'watching', 'acting'))
+        self.assertLess(len(json.dumps(p['asc'])), 2500)
+        self.assertNotIn('asc', srv.build_telemetry_payload(include_mission=False))

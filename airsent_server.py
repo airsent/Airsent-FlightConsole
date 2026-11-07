@@ -6,6 +6,7 @@ from mission_engine import MissionEngine, default_config, disk_free_gb
 from golden_params import GoldenParams
 from vehicle_mission import VehicleMission, MissionBusy
 from param_store import ParamStore
+from asc import ASC
 from collections import deque
 import asyncio
 import websockets
@@ -38,7 +39,8 @@ except Exception as _e:
 
 # ── Config ──────────────────────────────────────
 PIXHAWK_PORT = os.environ.get('MAV_URL', 'tcp:127.0.0.1:5760') if SIM_MODE else '/dev/ttyTHS1'
-PIXHAWK_BAUD = 115200 if SIM_MODE else 57600
+# 921600 recommended for ASC (set SERIALx_BAUD on the Pixhawk to match, then AIRSENT_PIXHAWK_BAUD=921600)
+PIXHAWK_BAUD = 115200 if SIM_MODE else int(os.environ.get('AIRSENT_PIXHAWK_BAUD', '57600'))
 CAM_PORT = int(os.environ.get("SIM_CAM_PORT", "8766")) if SIM_MODE else 8766
 TELEM_PORT = int(os.environ.get("SIM_TELEM_PORT", "8765")) if SIM_MODE else 8765
 CMD_PORT = int(os.environ.get("SIM_CMD_PORT", "8767")) if SIM_MODE else 8767
@@ -562,7 +564,19 @@ def mavlink_reader():
                 mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1
             )
             last_mav_msg = time.time()
+            tlog_open = None
             while True:
+                want = asc_engine.tlog_path            # ASC: record every MAVLink message while watching
+                if want != tlog_open:
+                    try:
+                        if mav.logfile:
+                            mav.logfile.close()
+                        mav.logfile = None
+                        if want:
+                            mav.setup_logfile(want, 'ab')
+                    except OSError as e:
+                        print(f"[ASC] tlog: {e}")
+                    tlog_open = want
                 msg = mav.recv_match(blocking=True, timeout=2)
                 if not msg:
                     if time.time() - last_mav_msg > 6:
@@ -681,6 +695,7 @@ def mavlink_reader():
                 elif t == 'STATUSTEXT':
                     text = msg.text.decode('ascii', 'ignore') if isinstance(msg.text, bytes) else str(msg.text)
                     statustext_log.append((_now, int(msg.severity), text.strip('\x00').strip()))
+                    asc_engine.statustext(text.strip('\x00').strip(), _now)
                 elif t == 'EKF_STATUS_REPORT':
                     telem['ekf_healthy'] = bool(msg.flags & 0x1F == 0x1F)
 
@@ -852,6 +867,7 @@ class MavVehicle:
             return False
 
     def set_mode(self, name):
+        asc_engine.console_mode_command()
         return self._run('MODE ' + name, lambda mav: set_mode(mav, self.MODES[name], name))
 
     def arm(self):
@@ -962,6 +978,42 @@ def failsafe_payload(now):
     return out
 
 
+ASC_STATE_FILE = os.path.expanduser('~/.local/share/airsent/asc.json')
+asc_engine = ASC(MISSION_ROOT, real=not SIM_MODE)
+asc_disk = [None]
+try:
+    asc_engine.act_enabled = bool(json.load(open(ASC_STATE_FILE)).get('act_enabled', True))
+except (OSError, ValueError):
+    pass
+CONSOLE_MODE_ACTIONS = {'set_mode', 'set_guided', 'set_loiter', 'set_rtl', 'set_land', 'set_auto', 'takeoff'}
+ASC_MODE_NUMS = {'LOITER': 5, 'RTL': 6}
+
+
+def asc_loop():
+    """ASC: checks + recording at AIRSENT_ASC_HZ (20 Hz). Acts only on console-link loss."""
+    period = 1.0 / asc_engine.cfg['rate_hz']
+    while True:
+        t0 = time.time()
+        try:
+            s = build_telemetry_payload(include_mission=False)
+            fence = param_store.snapshot(['FENCE_ALT_MAX', 'FENCE_RADIUS'])
+            actions = asc_engine.tick(s, t0, mission=mission_cache.get('mission'),
+                                      extras={'vps': vps_relay_state['telem'] or SIM_MODE, 'disk': asc_disk[0],
+                                              'fence_alt': fence.get('FENCE_ALT_MAX'), 'fence_radius': fence.get('FENCE_RADIUS')})
+            for kind, name, reason in actions:
+                with mav_lock:
+                    mav = mav_conn
+                if kind == 'mode' and mav is not None:
+                    set_mode(mav, ASC_MODE_NUMS[name], name)
+                    with vel_lock:
+                        vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+                    log_mavlink(f"ASC → {name} ({reason})")
+        except Exception as e:
+            print(f"[ASC] loop error: {e}")
+            traceback.print_exc()
+        time.sleep(max(0.0, period - (time.time() - t0)))
+
+
 def mission_loop():
     last_golden = last_home = last_disk = last_fs = last_hb = 0.0
     disk = None
@@ -991,12 +1043,13 @@ def mission_loop():
             if now - last_disk > 5:
                 last_disk = now
                 disk = disk_free_gb(MISSION_ROOT)
+                asc_disk[0] = disk
             s = build_telemetry_payload(include_mission=False)
             s['_golden'] = golden.snapshot()
             s['_disk_free_gb'] = disk
             s['_vps_relay_connected'] = vps_relay_state['telem'] or SIM_MODE
             s['_last_prearm'] = last_prearm_text(now)
-            mission_engine.tick(s, system_fault_conditions(s, now))
+            mission_engine.tick(s, {**system_fault_conditions(s, now), **asc_engine.fault_conditions()})
             mission_cache['mission'] = mission_engine.snapshot()
             mission_cache['faults'] = mission_engine.faults.snapshot()
         except Exception as e:
@@ -1012,6 +1065,14 @@ SLOW_ACTIONS = {'wp_upload', 'wp_download', 'param_read', 'param_write'}
 def process_command(raw):
     """Run a command and make sure the reply carries the console's request_id,
     so the console that asked can match it (the relay broadcasts every reply)."""
+    try:
+        cmd0 = json.loads(raw)
+        if isinstance(cmd0, dict) and (cmd0.get('console_id') or cmd0.get('operator')):
+            asc_engine.console_heard()                 # ASC: an operator console is alive
+            if cmd0.get('action') in CONSOLE_MODE_ACTIONS:
+                asc_engine.console_mode_command()
+    except Exception:
+        pass
     reply = _process_command(raw)
     try:
         cmd = json.loads(raw)
@@ -1047,6 +1108,18 @@ def _process_command(raw):
     # including abort/hold when the Pixhawk link is down.
     if isinstance(action, str) and (action.startswith('mission_') or action == 'fault_ack'):
         return mission_engine.handle(cmd)
+
+    if action == 'asc_set':
+        asc_engine.act_enabled = bool(cmd.get('act_enabled'))
+        try:
+            os.makedirs(os.path.dirname(ASC_STATE_FILE), exist_ok=True)
+            json.dump({'act_enabled': asc_engine.act_enabled}, open(ASC_STATE_FILE, 'w'))
+        except OSError:
+            pass
+        who = cmd.get('operator') or 'Operator'
+        log_mavlink(f"ASC console-loss action {'ENABLED' if asc_engine.act_enabled else 'DISABLED'} by {who}")
+        return {'ok': True, 'msg': f"ASC console-link action {'ON' if asc_engine.act_enabled else 'OFF'} — checks and recording always run",
+                'asc': asc_engine.snapshot()}
 
     with mav_lock:
         mav = mav_conn
@@ -1389,6 +1462,7 @@ def build_telemetry_payload(include_mission=True):
     if include_mission:
         payload['vehicle_mission'] = vehicle_mission.snapshot()
         payload.update(failsafe_payload(now))
+        payload['asc'] = asc_engine.snapshot()
         payload['mission'] = mission_cache['mission']
         payload['faults'] = mission_cache['faults']
     return payload
@@ -2235,6 +2309,7 @@ if __name__ == "__main__":
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
     threading.Thread(target=mission_loop,           daemon=True).start()
+    threading.Thread(target=asc_loop,               daemon=True).start()
     if not SIM_MODE:
         threading.Thread(target=thermal_monitor,        daemon=True).start()
         threading.Thread(target=downcam_capture_thread, daemon=True).start()
