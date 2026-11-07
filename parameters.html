@@ -4,6 +4,7 @@
 <script src="demo-isolation.js?v=viewer-1"></script>
 <script src="viewer-access.js?v=shared-2"></script>
 <script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -103,9 +104,12 @@ body { height:100dvh; overflow:hidden; background:var(--bg0); color:var(--text);
 .param-row.selected { background:rgba(96,165,250,.07); }
 .param-row.modified { border-left:2px solid var(--amber); }
 .param-row.modified .pv-current { color:var(--amber); }
+.param-row.missing { opacity:.4; }
+.param-row.missing .pv-default { font-size:8px; letter-spacing:1px; color:var(--red); }
+.tb-btn:disabled { opacity:.5; cursor:wait; }
 
 .pv-name { font-size:10px; font-family:'DM Mono',monospace; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.pv-default { font-size:10px; font-family:'DM Mono',monospace; color:var(--muted); }
+.pv-default { font-size:11px; font-family:'DM Mono',monospace; color:var(--text); }
 .pv-current { font-size:11px; font-family:'DM Mono',monospace; font-weight:700; color:var(--text); }
 .pv-desc { font-size:10px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-left:8px; }
 .pv-unit { font-size:9px; color:var(--muted); font-family:'DM Mono',monospace; text-align:right; }
@@ -191,7 +195,7 @@ body { height:100dvh; overflow:hidden; background:var(--bg0); color:var(--text);
   <div class="t-div"></div>
   <span class="t-lbl">Modified</span>&nbsp;<span class="t-val a" id="hModified">0</span>
   <div class="t-div"></div>
-  <span class="t-lbl">Vehicle</span>&nbsp;<span class="t-val g" id="hVehicle">ArduCopter</span>
+  <span class="t-lbl">Vehicle</span>&nbsp;<span class="t-val g" id="hVehicle">NOT READ</span>
   <div class="t-right">
     <span class="t-val" style="color:var(--muted)" id="hClock">--:--:--</span>
   </div>
@@ -206,6 +210,7 @@ body { height:100dvh; overflow:hidden; background:var(--bg0); color:var(--text);
   <button class="tb-btn active" id="btnAll">All</button>
   <button class="tb-btn" id="btnModified">Modified <span class="modified-count" id="modCount">0</span></button>
   <div class="tb-sep"></div>
+  <button class="tb-btn" id="btnRead">⟳ Read from Drone</button>
   <button class="tb-btn warn-btn" id="btnWriteAll">Write All to Vehicle</button>
   <button class="tb-btn" id="btnSaveFile">Save to File</button>
   <button class="tb-btn" id="btnLoadFile">Load from File</button>
@@ -224,8 +229,8 @@ body { height:100dvh; overflow:hidden; background:var(--bg0); color:var(--text);
   <div class="params-area">
     <div class="params-table-head">
       <span class="th">Parameter</span>
-      <span class="th">Default</span>
-      <span class="th">Current</span>
+      <span class="th">On Drone</span>
+      <span class="th">Pending</span>
       <span class="th" style="padding-left:8px">Description</span>
       <span class="th" style="text-align:right">Unit</span>
     </div>
@@ -264,29 +269,30 @@ const PARAMS = [
   { name:'ATC_ANG_PIT_P',  cat:'PID Tuning',  def:4.5,   unit:'',     range:[1,12],    desc:'Pitch angle controller P gain.' },
   { name:'ATC_ANG_YAW_P',  cat:'PID Tuning',  def:4.5,   unit:'',     range:[1,12],    desc:'Yaw angle controller P gain.' },
   // Throttle
-  { name:'THR_MID',        cat:'Throttle',    def:0.5,   unit:'',     range:[0.2,0.8], desc:'Throttle at hover. Calibrate so copter hovers near midstick.', options:[{val:0.3,label:'Light build'},{val:0.5,label:'Standard'},{val:0.65,label:'Heavy build'}] },
-  { name:'THR_MIN',        cat:'Throttle',    def:130,   unit:'pwm',  range:[0,300],   desc:'Minimum motor throttle PWM value. Keeps motors running.' },
-  { name:'THR_MAX',        cat:'Throttle',    def:1000,  unit:'pwm',  range:[800,1000],desc:'Maximum throttle PWM output.' },
+  { name:'MOT_THST_HOVER', cat:'Throttle',    def:0.35,  unit:'',     range:[0.125,0.6], desc:'Hover throttle. Learned in flight when MOT_HOVER_LEARN=2 — normally leave it to learn.' },
+  { name:'MOT_HOVER_LEARN',cat:'Throttle',    def:2,     unit:'',     range:[0,2],     desc:'Hover throttle learning. 2 = learn and save (recommended).', options:[{val:0,label:'Disabled'},{val:1,label:'Learn'},{val:2,label:'Learn and save'}] },
   { name:'MOT_SPIN_ARM',   cat:'Throttle',    def:0.10,  unit:'',     range:[0,0.3],   desc:'Motor spin speed when armed but not flying.' },
   { name:'MOT_SPIN_MIN',   cat:'Throttle',    def:0.15,  unit:'',     range:[0,0.3],   desc:'Minimum spin speed for motors in flight.' },
   // Failsafe
   { name:'FS_THR_ENABLE',  cat:'Failsafe',    def:1,     unit:'',     range:[0,3],     desc:'Throttle failsafe enable. 1=RTL, 2=Continue, 3=Land.', options:[{val:0,label:'Disabled'},{val:1,label:'RTL on FS'},{val:2,label:'Continue Mission'},{val:3,label:'Land'}] },
   { name:'FS_THR_VALUE',   cat:'Failsafe',    def:975,   unit:'pwm',  range:[910,1100],desc:'PWM threshold below which RC throttle failsafe triggers.' },
-  { name:'FS_BATT_ENABLE', cat:'Failsafe',    def:2,     unit:'',     range:[0,2],     desc:'Battery failsafe. 0=Disabled, 1=Land, 2=RTL.', options:[{val:0,label:'Disabled'},{val:1,label:'Land'},{val:2,label:'RTL'}] },
-  { name:'FS_BATT_VOLTAGE',cat:'Failsafe',    def:10.5,  unit:'V',    range:[6,18],    desc:'Battery voltage at which failsafe triggers.' },
-  { name:'FS_BATT_MAH',    cat:'Failsafe',    def:600,   unit:'mAh',  range:[0,10000], desc:'Battery capacity remaining (mAh) at which failsafe triggers. 0=disabled.' },
+  { name:'BATT_FS_LOW_ACT',cat:'Failsafe',    def:2,     unit:'',     range:[0,5],     desc:'Action at the LOW battery level (BATT_LOW_VOLT / BATT_LOW_MAH).', options:[{val:0,label:'None'},{val:1,label:'Land'},{val:2,label:'RTL'},{val:3,label:'SmartRTL or RTL'},{val:4,label:'SmartRTL or Land'},{val:5,label:'Terminate'}] },
+  { name:'BATT_FS_CRT_ACT',cat:'Failsafe',    def:1,     unit:'',     range:[0,5],     desc:'Action at the CRITICAL battery level (BATT_CRT_VOLT / BATT_CRT_MAH).', options:[{val:0,label:'None'},{val:1,label:'Land'},{val:2,label:'RTL'},{val:3,label:'SmartRTL or RTL'},{val:4,label:'SmartRTL or Land'},{val:5,label:'Terminate'}] },
   { name:'FS_GCS_ENABLE',  cat:'Failsafe',    def:1,     unit:'',     range:[0,2],     desc:'GCS failsafe. Loss of telemetry link action.', options:[{val:0,label:'Disabled'},{val:1,label:'RTL'},{val:2,label:'Land'}] },
   // GPS
   { name:'GPS_TYPE',       cat:'GPS',         def:1,     unit:'',     range:[0,14],    desc:'GPS type. 1=Auto, 2=uBlox, 5=NMEA. Most GPS use Auto.', options:[{val:0,label:'None'},{val:1,label:'Auto'},{val:2,label:'uBlox'},{val:5,label:'NMEA'}] },
+  { name:'GPS1_TYPE',      cat:'GPS',         def:1,     unit:'',     range:[0,14],    desc:'GPS 1 type (name used since ArduPilot 4.6). 1=Auto, 2=uBlox, 5=NMEA. Most GPS use Auto.', options:[{val:0,label:'None'},{val:1,label:'Auto'},{val:2,label:'uBlox'},{val:5,label:'NMEA'}] },
   { name:'GPS_HDOP_GOOD',  cat:'GPS',         def:1.4,   unit:'',     range:[1,10],    desc:'HDOP value below which GPS is considered good.' },
   { name:'GPS_MIN_SATS',   cat:'GPS',         def:6,     unit:'',     range:[4,12],    desc:'Minimum satellites required for GPS to be usable.' },
   { name:'FENCE_ENABLE',   cat:'GPS',         def:0,     unit:'',     range:[0,1],     desc:'Enable geofence. 1=enabled.', options:[{val:0,label:'Disabled'},{val:1,label:'Enabled'}] },
   { name:'FENCE_RADIUS',   cat:'GPS',         def:300,   unit:'m',    range:[10,1000], desc:'Maximum distance from home before geofence triggers.' },
-  { name:'FENCE_ALT_MAX',  cat:'GPS',         def:100,   unit:'m',    range:[10,500],  desc:'Maximum altitude before geofence triggers.' },
+  { name:'FENCE_ALT_MAX',  cat:'GPS',         def:100,   unit:'m',    range:[10,120],  desc:'Maximum altitude before geofence triggers.' },
   // EKF
   { name:'EK3_ENABLE',     cat:'EKF',         def:1,     unit:'',     range:[0,1],     desc:'Enable EKF3. Should always be 1 on modern ArduPilot.', options:[{val:0,label:'Disabled'},{val:1,label:'Enabled'}] },
-  { name:'EK3_GPS_TYPE',   cat:'EKF',         def:0,     unit:'',     range:[0,3],     desc:'EKF GPS aiding mode. 0=3D vel+pos, 3=No GPS.', options:[{val:0,label:'3D Vel + Pos'},{val:2,label:'2D Vel + Pos'},{val:3,label:'No GPS'}] },
-  { name:'EK3_ALT_SOURCE', cat:'EKF',         def:0,     unit:'',     range:[0,4],     desc:'Primary altitude source for EKF.', options:[{val:0,label:'Baro'},{val:1,label:'Rangefinder'},{val:2,label:'GPS'},{val:3,label:'Beacon'}] },
+  { name:'EK3_SRC1_POSXY', cat:'EKF',         def:3,     unit:'',     range:[0,6],     desc:'EKF horizontal position source.', options:[{val:0,label:'None'},{val:3,label:'GPS'},{val:4,label:'Beacon'},{val:6,label:'External nav'}] },
+  { name:'EK3_SRC1_VELXY', cat:'EKF',         def:3,     unit:'',     range:[0,6],     desc:'EKF horizontal velocity source. Optical flow is 5.', options:[{val:0,label:'None'},{val:3,label:'GPS'},{val:4,label:'Beacon'},{val:5,label:'Optical flow'},{val:6,label:'External nav'}] },
+  { name:'EK3_SRC1_POSZ',  cat:'EKF',         def:1,     unit:'',     range:[0,6],     desc:'EKF height source.', options:[{val:1,label:'Baro'},{val:2,label:'Rangefinder'},{val:3,label:'GPS'},{val:4,label:'Beacon'},{val:6,label:'External nav'}] },
+  { name:'EK3_SRC1_YAW',   cat:'EKF',         def:1,     unit:'',     range:[0,6],     desc:'EKF yaw source.', options:[{val:1,label:'Compass'},{val:2,label:'GPS'},{val:3,label:'GPS, compass fallback'},{val:6,label:'External nav'}] },
   { name:'EK3_IMU_MASK',   cat:'EKF',         def:3,     unit:'',     range:[1,7],     desc:'Bitmask of IMUs to use in EKF.' },
   // Compass
   { name:'COMPASS_USE',    cat:'Compass',     def:1,     unit:'',     range:[0,1],     desc:'Use compass. Should be 1 unless flying indoors.', options:[{val:0,label:'Disabled'},{val:1,label:'Enabled'}] },
@@ -313,7 +319,7 @@ const PARAMS = [
   { name:'LAND_SPEED',     cat:'Navigation',  def:50,    unit:'cm/s', range:[20,200],  desc:'Descent speed during final landing phase.' },
   // RC
   { name:'RC_SPEED',       cat:'RC',          def:490,   unit:'Hz',   range:[50,490],  desc:'PWM refresh rate for servos/ESCs.' },
-  { name:'RC_FEEL_RP',     cat:'RC',          def:25,    unit:'',     range:[0,100],   desc:'RC feel for roll/pitch. 25=relaxed, 100=crisp.' },
+  { name:'ATC_INPUT_TC',   cat:'RC',          def:0.15,  unit:'s',    range:[0,1],     desc:'Pilot input smoothing time constant. Lower = crisper, higher = softer.' },
   { name:'RCMAP_ROLL',     cat:'RC',          def:1,     unit:'',     range:[1,8],     desc:'RC input channel mapped to roll.' },
   { name:'RCMAP_PITCH',    cat:'RC',          def:2,     unit:'',     range:[1,8],     desc:'RC input channel mapped to pitch.' },
   { name:'RCMAP_THROTTLE', cat:'RC',          def:3,     unit:'',     range:[1,8],     desc:'RC input channel mapped to throttle.' },
@@ -324,29 +330,44 @@ const PARAMS = [
   { name:'LOG_REPLAY',     cat:'Logging',     def:0,     unit:'',     range:[0,1],     desc:'Enable EKF replay logging for post-flight analysis.' },
   // Battery Monitor
   { name:'BATT_MONITOR',   cat:'Battery',     def:4,     unit:'',     range:[0,15],    desc:'Battery monitoring type. 4=Analog Volt+Current.', options:[{val:0,label:'Disabled'},{val:3,label:'Voltage only'},{val:4,label:'Volt+Current'}] },
-  { name:'BATT_CAPACITY',  cat:'Battery',     def:3300,  unit:'mAh',  range:[0,100000],desc:'Battery capacity in mAh. Used for remaining capacity calculation.' },
-  { name:'BATT_LOW_VOLT',  cat:'Battery',     def:10.5,  unit:'V',    range:[0,25],    desc:'Low voltage warning threshold.' },
-  { name:'BATT_CRT_VOLT',  cat:'Battery',     def:9.6,   unit:'V',    range:[0,25],    desc:'Critical voltage. Triggers emergency land.' },
+  { name:'BATT_CAPACITY',  cat:'Battery',     def:10000,  unit:'mAh',  range:[0,100000],desc:'Battery capacity in mAh. Used for remaining capacity calculation.' },
+  { name:'BATT_LOW_VOLT',  cat:'Battery',     def:21.6,  unit:'V',    range:[0,25],    desc:'Low voltage warning threshold.' },
+  { name:'BATT_CRT_VOLT',  cat:'Battery',     def:21.0,   unit:'V',    range:[0,25],    desc:'Critical voltage. Triggers emergency land.' },
   { name:'BATT_LOW_MAH',   cat:'Battery',     def:600,   unit:'mAh',  range:[0,10000], desc:'Low capacity warning (mAh remaining). 0=disabled.' },
 ];
 
-// State
-const paramValues = {};
-PARAMS.forEach(p => { paramValues[p.name] = p.def; });
+// ── State ─────────────────────────────────────────────────
+// vehicle  = values read from the Pixhawk (through the Jetson)
+// drafts   = pending edits, shared with every console until written
+// missing  = names this Pixhawk does not have
+const vehicle = {};
+const missing = new Set();
+let drafts = {};
+let readAt = null, busy = false;
 let selectedParam = null;
 let activeFilter = 'all'; // all | modified
 let searchQuery = '';
 let activeCat = null;
+const M = () => window.airsentMission;
+const isDemo = () => (localStorage.getItem('airsentMode') || 'demo').toLowerCase() === 'demo';
+const readOnly = () => !!window.airsentViewerReadOnly?.();
+const toast = (m, k) => window.airsentMissionUI ? window.airsentMissionUI.toast(m, k) : alert(m);
 
-// Categories
 const CATS = [...new Set(PARAMS.map(p => p.cat))];
 
 function el(id) { return document.getElementById(id); }
 function pad(n) { return String(n).padStart(2,"0"); }
 function now()  { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+const fmt = v => v === undefined || v === null ? '—' : (Number.isInteger(v) ? String(v) : String(parseFloat((+v).toFixed(5))));
+const same = (a, b) => a !== undefined && b !== undefined && Math.abs(a - b) <= Math.max(1e-6, Math.abs(b) * 1e-6);
 
-function isModified(p) { return paramValues[p.name] !== p.def; }
+function isModified(p) { return p.name in drafts && !same(drafts[p.name], vehicle[p.name]); }
 function modifiedCount() { return PARAMS.filter(isModified).length; }
+function pendingChanges() {
+  const out = {};
+  PARAMS.forEach(p => { if (isModified(p) && p.name in vehicle) out[p.name] = drafts[p.name]; });
+  return out;
+}
 
 function filteredParams() {
   return PARAMS.filter(p => {
@@ -357,20 +378,72 @@ function filteredParams() {
       return p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q);
     }
     return true;
-  });
+  }).sort((a, b) => missing.has(a.name) - missing.has(b.name));
+}
+
+// ── Talk to the Pixhawk ───────────────────────────────────
+async function readFromDrone(quiet) {
+  if (busy) return;
+  const names = PARAMS.map(p => p.name);
+  let r;
+  busy = true; setBusy('READING…');
+  try {
+    if (isDemo()) {
+      r = { ok: true, values: Object.fromEntries(PARAMS.filter(p => p.name !== 'GPS_TYPE').map(p => [p.name, vehicle[p.name] ?? p.def])),
+            missing: ['GPS_TYPE'], msg: 'Read parameters (demo)' };
+    } else if (!M()) r = { ok: false, msg: 'Command link not loaded' };
+    else r = await M().send('param_read', { names }, { timeout: 30000 });
+  } finally { busy = false; setBusy(); }
+  if (!r.ok) { if (!quiet) toast('READ FAILED — ' + r.msg, 'alert'); el('hVehicle').textContent = 'NOT READ'; return; }
+  Object.keys(vehicle).forEach(k => delete vehicle[k]);
+  Object.assign(vehicle, r.values || {});
+  missing.clear(); (r.missing || []).forEach(n => missing.add(n));
+  readAt = new Date();
+  // drop drafts that already match the drone
+  let changed = false;
+  Object.keys(drafts).forEach(n => { if (same(drafts[n], vehicle[n]) || missing.has(n)) { delete drafts[n]; changed = true; } });
+  if (changed) shareParameterDrafts();
+  el('hVehicle').textContent = `READ ${now()}`;
+  renderAll();
+  if (!quiet) toast('✓ ' + r.msg);
+}
+
+async function writeToDrone() {
+  if (readOnly()) { toast('Viewer mode — read only', 'err'); return; }
+  if (!readAt) { toast('Read from the drone first', 'err'); return; }
+  const changes = pendingChanges();
+  const names = Object.keys(changes);
+  if (!names.length) { toast('No changes to write', 'err'); return; }
+  const list = names.slice(0, 20).map(n => `${n}: ${fmt(vehicle[n])} → ${fmt(changes[n])}`).join('\n') + (names.length > 20 ? `\n… and ${names.length - 20} more` : '');
+  if (!confirm(`Write ${names.length} parameter(s) to the Pixhawk?\n\n${list}\n\nEach value is confirmed by reading it back. Writes are blocked while armed.`)) return;
+  let r;
+  busy = true; setBusy('WRITING…');
+  try {
+    if (isDemo()) r = { ok: true, values: { ...changes }, msg: `Wrote and confirmed ${names.length} parameter(s) (demo)` };
+    else r = await M().send('param_write', { params: changes }, { timeout: 60000 });
+  } finally { busy = false; setBusy(); }
+  Object.entries(r.values || {}).forEach(([n, v]) => { vehicle[n] = v; delete drafts[n]; });
+  shareParameterDrafts();
+  renderAll();
+  toast((r.ok ? '✓ ' : '✗ ') + r.msg, r.ok ? '' : 'alert');
+  if (r.ok && names.some(n => /^(EK3_|GPS|COMPASS_|INS_|FRAME_|BATT_MONITOR|CAN_|RC_SPEED|MOT_PWM)/.test(n)))
+    alert('Some of these parameters only take effect after the Pixhawk reboots.');
+}
+
+function setBusy(text) {
+  ['btnRead', 'btnWriteAll'].forEach(id => { const b = el(id); if (b) b.disabled = !!text; });
+  if (text) el('hVehicle').textContent = text;
 }
 
 // ── Render sidebar ────────────────────────────────────────
 function renderSidebar() {
   const list = el('catList');
   list.innerHTML = '';
-  // All
   const allItem = document.createElement('div');
   allItem.className = 'cat-item' + (!activeCat ? ' active' : '');
   allItem.innerHTML = `<span class="cat-name">All Parameters</span><span class="cat-badge">${PARAMS.length}</span>`;
   allItem.addEventListener('click', () => { activeCat=null; renderSidebar(); renderParams(); });
   list.appendChild(allItem);
-
   CATS.forEach(cat => {
     const count = PARAMS.filter(p => p.cat===cat).length;
     const mods  = PARAMS.filter(p => p.cat===cat && isModified(p)).length;
@@ -386,57 +459,61 @@ function renderSidebar() {
 function renderParams() {
   const rows = el('paramsRows');
   rows.innerHTML = '';
-  const list = filteredParams();
-
-  list.forEach(p => {
-    const val = paramValues[p.name];
-    const mod = isModified(p);
+  filteredParams().forEach(p => {
+    const mod = isModified(p), gone = missing.has(p.name);
     const row = document.createElement('div');
-    row.className = 'param-row' + (selectedParam===p.name?' selected':'') + (mod?' modified':'');
+    row.className = 'param-row' + (selectedParam===p.name?' selected':'') + (mod?' modified':'') + (gone?' missing':'');
     row.innerHTML = `
       <span class="pv-name">${p.name}</span>
-      <span class="pv-default">${p.def}</span>
-      <span class="pv-current">${Number.isInteger(val)?val:parseFloat(val.toFixed(4))}</span>
+      <span class="pv-default">${gone ? 'NOT ON DRONE' : fmt(vehicle[p.name])}</span>
+      <span class="pv-current">${mod ? fmt(drafts[p.name]) : ''}</span>
       <span class="pv-desc">${p.desc}</span>
       <span class="pv-unit">${p.unit||''}</span>`;
     row.addEventListener('click', () => { selectedParam=p.name; renderParams(); renderDetail(); });
     rows.appendChild(row);
   });
-
-  el('hTotal').textContent = PARAMS.length;
+  el('hTotal').textContent = readAt ? `${Object.keys(vehicle).length}/${PARAMS.length}` : PARAMS.length;
   const mc = modifiedCount();
   el('hModified').textContent = mc;
   el('modCount').textContent = mc;
 }
 
 // ── Render detail ─────────────────────────────────────────
+function setDraft(name, v) {
+  if (same(v, vehicle[name])) delete drafts[name]; else drafts[name] = v;
+  shareParameterDrafts();
+  renderAll();
+}
+
 function renderDetail() {
   const param = PARAMS.find(p => p.name === selectedParam);
   el('detailEmpty').style.display = param ? 'none' : 'flex';
   const body = el('detailBody');
   body.style.display = param ? 'block' : 'none';
   if (!param) return;
-
-  const val = paramValues[param.name];
-  const mod = isModified(param);
-
+  const onDrone = vehicle[param.name], gone = missing.has(param.name), mod = isModified(param);
+  const val = mod ? drafts[param.name] : (onDrone ?? param.def);
+  const u = param.unit ? ' ' + param.unit : '';
   let html = `
     <div class="d-param-name">${param.name}</div>
     <div class="d-param-desc">${param.desc}</div>
     <div class="d-row"><span class="d-label">Category</span><span class="d-val">${param.cat}</span></div>
-    <div class="d-row"><span class="d-label">Default</span><span class="d-val" style="color:var(--muted)">${param.def}${param.unit?' '+param.unit:''}</span></div>
-    <div class="d-row"><span class="d-label">Current</span><span class="d-val" style="color:${mod?'var(--amber)':'var(--text)'}">${val}${param.unit?' '+param.unit:''}</span></div>
+    <div class="d-row"><span class="d-label">Default</span><span class="d-val" style="color:var(--muted)">${param.def}${u}</span></div>
+    <div class="d-row"><span class="d-label">On drone</span><span class="d-val">${gone ? 'NOT ON THIS PIXHAWK' : fmt(onDrone) + (onDrone !== undefined ? u : ' (not read)')}</span></div>
+    <div class="d-row"><span class="d-label">Pending</span><span class="d-val" style="color:var(--amber)">${mod ? fmt(drafts[param.name]) + u : '—'}</span></div>
     <div class="d-row"><span class="d-label">Range</span><span class="d-val" style="color:var(--muted)">${param.range[0]} – ${param.range[1]}</span></div>
     <div class="d-divider"></div>`;
-
+  if (gone) {
+    html += `<div class="d-note">This Pixhawk has no parameter called ${param.name}. It was renamed or removed in this ArduPilot version.</div>`;
+    body.innerHTML = html; return;
+  }
   if (param.options) {
     html += `<div class="d-options">`;
     param.options.forEach(opt => {
-      html += `<div class="d-option${val===opt.val?' selected':''}" data-val="${opt.val}"><span>${opt.label}</span><span class="d-option-val">${opt.val}</span></div>`;
+      html += `<div class="d-option${same(val, opt.val)?' selected':''}" data-val="${opt.val}"><span>${opt.label}</span><span class="d-option-val">${opt.val}</span></div>`;
     });
     html += `</div>`;
   }
-
   html += `
     <div class="d-input-wrap">
       <div class="d-input-label">Set Value${param.unit?' ('+param.unit+')':''}</div>
@@ -445,120 +522,100 @@ function renderDetail() {
     </div>
     <div class="d-actions">
       <button class="d-btn d-btn-set" id="dBtnSet">Set Value</button>
-      <button class="d-btn d-btn-reset" id="dBtnReset">Reset Default</button>
+      <button class="d-btn d-btn-reset" id="dBtnReset">${mod ? 'Discard Change' : 'Use Default'}</button>
     </div>`;
-
-  if (mod) html += `<div class="d-divider"></div><div class="d-note">⚠ This value differs from default (${param.def}). Write to vehicle to apply changes.</div>`;
-
+  if (mod) html += `<div class="d-divider"></div><div class="d-note">⚠ Pending: ${fmt(onDrone)} → ${fmt(drafts[param.name])}. Press "Write All to Vehicle" to send it.</div>`;
   body.innerHTML = html;
-
-  // Option click
-  body.querySelectorAll('.d-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      paramValues[param.name] = parseFloat(opt.dataset.val);
-      shareParameterDrafts();
-      renderDetail(); renderParams(); renderSidebar();
-    });
-  });
-
-  // Input change
-  const input = el('dInput');
-  if (input) {
-    input.addEventListener('input', () => {
-      input.classList.toggle('changed', parseFloat(input.value) !== param.def);
-    });
-  }
-
-  // Set button
-  const setBt = el('dBtnSet');
-  if (setBt) setBt.addEventListener('click', () => {
+  const ro = readOnly();
+  body.querySelectorAll('.d-option').forEach(opt => opt.addEventListener('click', () => { if (!ro) setDraft(param.name, parseFloat(opt.dataset.val)); }));
+  el('dBtnSet').addEventListener('click', () => {
+    if (ro) return;
     const v = parseFloat(el('dInput')?.value);
-    if (!isNaN(v) && v >= param.range[0] && v <= param.range[1]) {
-      paramValues[param.name] = v;
-      shareParameterDrafts();
-      renderDetail(); renderParams(); renderSidebar();
-    } else {
-      el('dInput').style.borderColor = 'var(--red)';
-      setTimeout(() => { if(el('dInput')) el('dInput').style.borderColor=''; }, 1000);
-    }
+    if (!isNaN(v) && v >= param.range[0] && v <= param.range[1]) setDraft(param.name, v);
+    else { el('dInput').style.borderColor = 'var(--red)'; setTimeout(() => { if(el('dInput')) el('dInput').style.borderColor=''; }, 1000); }
   });
-
-  // Reset button
-  const rstBt = el('dBtnReset');
-  if (rstBt) rstBt.addEventListener('click', () => {
-    paramValues[param.name] = param.def;
-    shareParameterDrafts();
-    renderDetail(); renderParams(); renderSidebar();
+  el('dBtnReset').addEventListener('click', () => {
+    if (ro) return;
+    if (mod) { delete drafts[param.name]; shareParameterDrafts(); renderAll(); } else setDraft(param.name, param.def);
   });
 }
 
+function renderAll() { renderSidebar(); renderParams(); renderDetail(); }
+
 // ── Toolbar ───────────────────────────────────────────────
-el('searchInput').addEventListener('input', e => {
-  searchQuery = e.target.value;
-  activeCat = null;
-  renderSidebar(); renderParams();
-});
-el('searchClear').addEventListener('click', () => {
-  el('searchInput').value = '';
-  searchQuery = '';
-  renderSidebar(); renderParams();
-});
+el('searchInput').addEventListener('input', e => { searchQuery = e.target.value; activeCat = null; renderSidebar(); renderParams(); });
+el('searchClear').addEventListener('click', () => { el('searchInput').value = ''; searchQuery = ''; renderSidebar(); renderParams(); });
 el('btnAll').addEventListener('click', () => {
-  activeFilter='all'; el('btnAll').classList.add('active'); el('btnModified').classList.remove('active');
-  renderParams();
+  activeFilter='all'; el('btnAll').classList.add('active'); el('btnModified').classList.remove('active'); renderParams();
 });
 el('btnModified').addEventListener('click', () => {
-  activeFilter='modified'; el('btnModified').classList.add('active'); el('btnAll').classList.remove('active');
-  renderParams();
+  activeFilter='modified'; el('btnModified').classList.add('active'); el('btnAll').classList.remove('active'); renderParams();
 });
 el('btnResetMod').addEventListener('click', () => {
-  if (!confirm('Reset all modified parameters to defaults?')) return;
-  PARAMS.forEach(p => { paramValues[p.name] = p.def; });
-  shareParameterDrafts();
-  selectedParam = null;
-  renderSidebar(); renderParams(); renderDetail();
+  if (!modifiedCount()) return;
+  if (!confirm('Discard all pending changes? (Nothing on the drone changes.)')) return;
+  drafts = {}; shareParameterDrafts(); selectedParam = null; renderAll();
 });
 el('btnSaveFile').addEventListener('click', () => {
-  const lines = PARAMS.map(p => `${p.name}\t${paramValues[p.name]}`).join('\n');
+  const lines = PARAMS.filter(p => p.name in vehicle || p.name in drafts).map(p => `${p.name}\t${drafts[p.name] ?? vehicle[p.name]}`).join('\n');
   const blob = new Blob([lines], {type:'text/plain'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='params.param'; a.click();
 });
 el('btnLoadFile').addEventListener('click', () => {
-  const input = document.createElement('input'); input.type='file'; input.accept='.param,.txt';
+  if (readOnly()) return;
+  const input = document.createElement('input'); input.type='file'; input.accept='.param,.txt,.parm';
   input.addEventListener('change', e => {
     const file = e.target.files[0]; if(!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
+      let n = 0;
       ev.target.result.split('\n').forEach(line => {
-        const [name, val] = line.trim().split(/\s+/);
-        if (name && val && paramValues[name] !== undefined) paramValues[name] = parseFloat(val);
+        const [name, val] = line.trim().split(/[\s,]+/);
+        const p = PARAMS.find(x => x.name === name);
+        if (p && val !== undefined && !isNaN(parseFloat(val)) && !missing.has(name)) {
+          const v = parseFloat(val);
+          if (!same(v, vehicle[name])) { drafts[name] = v; n++; }
+        }
       });
-      shareParameterDrafts();
-      renderSidebar(); renderParams(); renderDetail();
+      shareParameterDrafts(); renderAll();
+      toast(`Loaded ${n} change(s) as pending — review, then Write All to Vehicle`);
     };
     reader.readAsText(file);
   });
   input.click();
 });
-el('btnWriteAll').addEventListener('click', () => {
-  const mc = modifiedCount();
-  if (mc === 0) { alert('No modified parameters to write.'); return; }
-  alert(`Write ${mc} modified parameter(s) to vehicle.\n\nNote: In actual mode this would send MAVLink PARAM_SET messages.\nRestart the vehicle after writing critical parameters.`);
-});
+el('btnWriteAll').addEventListener('click', writeToDrone);
+el('btnRead').addEventListener('click', () => readFromDrone(false));
 
 function shareParameterDrafts(){
  if(!window.AirsentShared)return;
- try{window.AirsentShared.set('airsent-parameter-drafts-v1',{...paramValues})}catch(e){alert(e.message)}
+ try{window.AirsentShared.set('airsent-parameter-drafts-v1',{...drafts})}catch(e){toast(e.message,'err')}
+}
+function acceptSharedDrafts(value){
+ const v = value || {};
+ // Older consoles stored every value, not just edits; ignore that format.
+ drafts = Object.keys(v).length >= PARAMS.length * 0.8 ? {} : { ...v };
+ renderAll();
 }
 window.addEventListener('airsent-shared-change',e=>{
  if(e.detail.key!=='airsent-parameter-drafts-v1')return;
- PARAMS.forEach(p=>paramValues[p.name]=e.detail.value[p.name]??p.def);
- renderSidebar();renderParams();renderDetail();
+ acceptSharedDrafts(e.detail.value);
 });
+try { acceptSharedDrafts(JSON.parse(localStorage.getItem('airsent-parameter-drafts-v1') || '{}')); } catch (e) {}
+
 // ── Init ──────────────────────────────────────────────────
 setInterval(() => el('hClock').textContent = now(), 1000);
-renderSidebar();
-renderParams();
+renderAll();
+// Read the real values once the command link is up (mission-client.js loads after this script).
+window.addEventListener('load', () => {
+  if (isDemo()) { readFromDrone(true); return; }
+  let tries = 0;
+  const t = setInterval(() => {
+    tries++;
+    if (readAt || tries > 20) { clearInterval(t); return; }
+    if (M() && M().canCommand) readFromDrone(true);
+  }, 1500);
+});
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>

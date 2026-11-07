@@ -4,7 +4,7 @@
   const page = location.pathname.split('/').pop();
   const rules = {
     'dashboard.html': '#statusSelect,#flightModeSelect,.failsafe-row select,.flight-controls-grid button,#missionPauseBtn,#missionResetBtn,#lmBtnStart,#lmBtnHold,#lmBtnAbort,#lmBtnReset,#confirmOk',
-    'pilot.html': '#btnAuto,#btnMan,#qa-takeoff,#qa-rth,#qa-land,#obstBadge,#wpBtn,.obstBadge,[onclick*="toggleObstDetection"],#qsPanel input,#qsPanel select,#slideConfirm',
+    'pilot.html': '#pilotEstop,#btnAuto,#btnMan,#qa-takeoff,#qa-rth,#qa-land,#obstBadge,#wpBtn,.obstBadge,[onclick*="toggleObstDetection"],#qsPanel input,#qsPanel select,#slideConfirm',
     'mission.html': '#btnUpload,#btnDownload,#btnLoad,#btnClearAll,#btnReverse,#btnAutoAlt,#toolAddWp,#toolAddLoiter,#toolAddRTL,#toolAddLand,.wp-del-btn,#detailPanel input,#detailPanel select,#detailAlt,#detailCmd,#detailSpeed,#detailRadius',
     'parameters.html': '#btnWriteAll,#btnLoadFile,#btnResetMod,#dInput,.d-option,#dBtnSet,#dBtnReset',
     'preflight.html': '#btnClearFail,#btnReset,#btnResetHard,.check-item:not(.auto)',
