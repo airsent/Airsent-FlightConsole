@@ -274,3 +274,80 @@ class StreamRates(unittest.TestCase):
             self.assertEqual(fc.commands, [('stream', srv.mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1)])
         finally:
             srv.PIXHAWK_BAUD = old
+
+
+class NewActions(unittest.TestCase):
+    def setUp(self):
+        self.fc = FakePixhawk()
+        self.fc.targets = []
+        self.fc.mav.set_position_target_global_int_send = lambda *a: self.fc.targets.append(a)
+        with srv.mav_lock:
+            srv.mav_conn = self.fc
+        srv.telem.update(armed=True, alt=10.0, flight_mode='GUIDED', lat=HOME[0], lon=HOME[1])
+        srv.home_state.clear(); srv.home_state.update(set=True, lat=HOME[0], lon=HOME[1])
+        srv.param_store.reset()
+
+    def tearDown(self):
+        with srv.mav_lock:
+            srv.mav_conn = None
+        srv.telem.update(armed=False, alt=0.0)
+
+    def test_goto_sends_position_target_and_stops_joystick(self):
+        srv.vel_last_cmd_ts = time.time()
+        r = run('goto', lat=HOME[0] + 0.001, lon=HOME[1], alt=15)
+        self.assertTrue(r['ok'], r)
+        self.assertEqual(len(self.fc.targets), 1)
+        self.assertEqual(self.fc.targets[0][5], int(round((HOME[0] + 0.001) * 1e7)))
+        self.assertEqual(srv.vel_last_cmd_ts, 0.0)
+
+    def test_goto_limits(self):
+        self.assertIn('limit', run('goto', lat=HOME[0] + 0.02, lon=HOME[1])['msg'])          # ~2.2 km
+        self.assertIn('Altitude', run('goto', lat=HOME[0] + 0.001, lon=HOME[1], alt=200)['msg'])
+        srv.telem['flight_mode'] = 'LOITER'
+        self.assertIn('GUIDED', run('goto', lat=HOME[0] + 0.001, lon=HOME[1])['msg'])
+        srv.telem.update(flight_mode='GUIDED', alt=0.2)
+        self.assertIn('Take off', run('goto', lat=HOME[0] + 0.001, lon=HOME[1])['msg'])
+        self.assertEqual(self.fc.targets, [])
+
+    def test_motor_test_guards(self):
+        self.assertIn('armed', run('motor_test', motor=1, props_off_confirmed=True)['msg'])
+        srv.telem['armed'] = False
+        self.assertIn('propellers', run('motor_test', motor=1)['msg'])
+        self.assertIn('Throttle', run('motor_test', motor=1, throttle=50, props_off_confirmed=True)['msg'])
+        r = run('motor_test', motor=2, throttle=8, seconds=2, props_off_confirmed=True)
+        self.assertTrue(r['ok'], r)
+        self.assertEqual(self.fc.commands[-1][:2], (srv.mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, 2))
+
+    def test_mission_files_and_path_safety(self):
+        import base64, tempfile
+        root = tempfile.mkdtemp()
+        old = srv.MISSION_ROOT
+        srv.MISSION_ROOT = root
+        try:
+            os.makedirs(os.path.join(root, '2026-11-07_0900_test', 'asc'))
+            json.dump({'duration_s': 60, 'max_alt_m': 10, 'checks': {'vibration': {'raised': 2}}},
+                      open(os.path.join(root, '2026-11-07_0900_test', 'asc', 'summary.json'), 'w'))
+            open(os.path.join(root, '2026-11-07_0900_test', 'asc', 'samples.csv'), 'w').write('t,alt\n0,1\n')
+            lst = run('log_list')
+            self.assertEqual(lst['missions'][0]['findings'], 2)
+            self.assertTrue(lst['quiet'])
+            det = run('log_detail', folder='2026-11-07_0900_test')
+            self.assertIn('asc/samples.csv', [f['path'] for f in det['files']])
+            self.assertTrue(det['direct'])
+            chunk = run('log_file', folder='2026-11-07_0900_test', path='asc/samples.csv')
+            self.assertEqual(base64.b64decode(chunk['data']), b't,alt\n0,1\n')
+            self.assertTrue(chunk['eof'])
+            self.assertFalse(run('log_file', folder='..', path='etc/passwd')['ok'])
+            self.assertFalse(run('log_file', folder='2026-11-07_0900_test', path='../../../etc/passwd')['ok'])
+        finally:
+            srv.MISSION_ROOT = old
+
+    def test_param_writes_are_announced_to_every_console(self):
+        from test_param_store import FakePixhawk as ParamFC, PARAMS
+        with srv.mav_lock:
+            srv.mav_conn = ParamFC(srv.param_store, PARAMS)
+        srv.telem['armed'] = False
+        rev = srv.param_changes['rev']
+        self.assertTrue(run('param_write', params={'RTL_ALT': 2200})['ok'])
+        self.assertEqual(srv.param_changes['rev'], rev + 1)
+        self.assertEqual(srv.param_changes['values'], {'RTL_ALT': 2200})
