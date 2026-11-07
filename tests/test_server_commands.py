@@ -243,9 +243,11 @@ class ASCWiring(unittest.TestCase):
 
     def test_payload_carries_asc_snapshot(self):
         srv.esc_monitor = None
+        srv.asc_engine.tick(srv.build_telemetry_payload(include_mission=False))
         p = srv.build_telemetry_payload(include_mission=True)
         self.assertIn(p['asc']['state'], ('standby', 'watching', 'acting'))
-        self.assertLess(len(json.dumps(p['asc'])), 2500)
+        self.assertLess(len(json.dumps(p['asc'])), 6000)
+        self.assertEqual(len(p['asc']['live']), len(srv.asc_engine.checks))
         self.assertNotIn('asc', srv.build_telemetry_payload(include_mission=False))
 
 

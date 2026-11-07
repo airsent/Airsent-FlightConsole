@@ -990,6 +990,7 @@ FAILSAFE_PARAMS = ['FS_THR_ENABLE', 'FS_THR_VALUE', 'RC_FS_TIMEOUT',
                    'FS_CRASH_CHECK', 'ARMING_CHECK', 'FS_VIBE_ENABLE',
                    'RTL_ALT', 'RTL_ALT_FINAL', 'RTL_LOIT_TIME', 'RTL_SPEED']
 _failsafe_rules_sent = [0.0]
+_asc_defs_sent = [0.0]
 
 
 def failsafe_payload(now):
@@ -1013,11 +1014,37 @@ CONSOLE_MODE_ACTIONS = {'set_mode', 'set_guided', 'set_loiter', 'set_rtl', 'set_
 ASC_MODE_NUMS = {'LOITER': 5, 'RTL': 6}
 
 
+def asc_param_dump():
+    """Snapshot of every Pixhawk parameter at the start of a recording."""
+    with mav_lock:
+        mav = mav_conn
+    if mav is None:
+        return
+    try:
+        mav.mav.param_request_list_send(mav.target_system, mav.target_component)
+    except Exception as e:
+        print(f"[ASC] param list: {e}")
+        return
+    last, stable = -1, 0
+    for _ in range(40):                       # until the count stops growing (≤ 20 s)
+        time.sleep(0.5)
+        n = len(param_store.values)
+        stable = stable + 1 if n == last else 0
+        last = n
+        if stable >= 4 and n > 50:
+            break
+    asc_engine.write_params(param_store.all())
+    print(f"[ASC] parameter snapshot: {last} parameters")
+
+
 def asc_loop():
     """ASC: checks + recording at AIRSENT_ASC_HZ (20 Hz). Acts only on console-link loss."""
     period = 1.0 / asc_engine.cfg['rate_hz']
     while True:
         t0 = time.time()
+        if asc_engine.pending_param_dump:
+            asc_engine.pending_param_dump = False
+            threading.Thread(target=asc_param_dump, daemon=True).start()
         try:
             s = build_telemetry_payload(include_mission=False)
             fence = param_store.snapshot(['FENCE_ALT_MAX', 'FENCE_RADIUS'])
@@ -1095,6 +1122,7 @@ def process_command(raw):
             asc_engine.console_heard()                 # ASC: an operator console is alive
             if cmd0.get('action') in CONSOLE_MODE_ACTIONS:
                 asc_engine.console_mode_command()
+            asc_engine.note_command(str(cmd0.get('action')), cmd0.get('operator') or 'Operator', cmd0)
     except Exception:
         pass
     reply = _process_command(raw)
@@ -1486,7 +1514,10 @@ def build_telemetry_payload(include_mission=True):
     if include_mission:
         payload['vehicle_mission'] = vehicle_mission.snapshot()
         payload.update(failsafe_payload(now))
-        payload['asc'] = asc_engine.snapshot()
+        send_defs = now - _asc_defs_sent[0] > 10          # check names/groups every 10 s; states every frame
+        if send_defs:
+            _asc_defs_sent[0] = now
+        payload['asc'] = asc_engine.snapshot(with_defs=send_defs)
         payload['mission'] = mission_cache['mission']
         payload['faults'] = mission_cache['faults']
     return payload

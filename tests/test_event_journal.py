@@ -44,3 +44,12 @@ class JournalTests(unittest.TestCase):
             journal.observe(json.dumps(frame))
             self.assertEqual(len(journal.rows()),3)
             journal.db.close()
+
+    def test_asc_events_recorded_once_and_asc_faults_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as root:
+            journal=EventJournal(str(Path(root)/'events.db'))
+            frame=dict(asc={'boot':7,'events':[{'seq':2,'level':'warning','msg':'Vibration: High vibration 45 m/s²'},{'seq':1,'level':'info','msg':'ASC recording to m1/asc'}]},
+                       faults={'active':[{'id':'F1','since':1,'severity':'warning','source':'ASC','message':'High vibration 45 m/s²'}]})
+            for _ in range(3): journal.observe(json.dumps(frame))
+            self.assertEqual([x['text'] for x in journal.rows()],['ASC: ASC recording to m1/asc','ASC WARNING: Vibration: High vibration 45 m/s²'])
+            journal.db.close()

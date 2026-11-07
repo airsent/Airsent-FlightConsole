@@ -41,17 +41,23 @@ class EventJournal:
                 clock = (str(e.get('clock') or '') + ' ').lstrip()
                 self._once(f"msn:{folder}:{e.get('t')}:{e.get('kind')}:{str(e.get('msg'))[:120]}",
                            f"MISSION {clock}{e.get('msg')}", 'launch sequencer · ' + str(e.get('who') or 'Jetson'))
+        asc = data.get('asc')
+        if isinstance(asc, dict):                 # ASC findings, actions and Pixhawk messages
+            for e in sorted((e for e in asc.get('events') or [] if isinstance(e, dict) and e.get('msg')), key=lambda e: e.get('seq') or 0):
+                level = str(e.get('level') or 'info')
+                prefix = 'ASC' if level in ('info', 'ok') else 'ASC ' + level.upper()
+                self._once(f"asc:{asc.get('boot')}:{e.get('seq')}", f"{prefix}: {e.get('msg')}", 'ASC · Jetson')
         faults = data.get('faults')
         if isinstance(faults, dict):
             for f in faults.get('active') or []:
-                if isinstance(f, dict) and f.get('message'):
+                if isinstance(f, dict) and f.get('message') and f.get('source') != 'ASC':      # ASC ones are logged above
                     self._once(f"fault:{f.get('id')}:{f.get('since')}",
                                f"FAULT {str(f.get('severity') or '').upper()}: {f.get('message')}", 'Jetson faults')
 
     def observe(self, raw):
         try:
             data = json.loads(raw)
-            if '"mission"' in raw or '"faults"' in raw:
+            if '"mission"' in raw or '"faults"' in raw or '"asc"' in raw:
                 self.observe_mission(data)
             if data.get('pixhawk_connected') is not True or float(data.get('telemetry_age', 99)) >= 3 or float(data.get('pixhawk_heartbeat_age', 0)) >= 3:
                 return
