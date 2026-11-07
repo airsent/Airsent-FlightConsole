@@ -77,6 +77,8 @@
     if (data && data.failsafe_rules) api.failsafeRules = data.failsafe_rules;
     if (data && data.asc) { api.asc = data.asc; if (data.asc.defs) api.ascDefs = data.asc.defs; }
     if (data && data.param_rev) api.paramRev = data.param_rev;
+    if (data && data.bin_log) api.binLog = data.bin_log;
+    if (data && data.video) api.video = data.video;
     if (data && (data.mission || data.faults)) emit();
   }
   api.accept = accept;
