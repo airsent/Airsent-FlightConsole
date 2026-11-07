@@ -329,7 +329,7 @@ vps_relay_state = {'telem': False}
 MISSION_CONFIG = default_config(sim=SIM_MODE)
 _gate_extra = ({f"RC{MISSION_CONFIG['rc_gate_channel']}_OPTION": {'value': 31, 'why': 'RC gate = Motor Emergency Stop'}}
                if MISSION_CONFIG['rc_gate_channel'] else {})
-golden = GoldenParams(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden_params.json'),
+golden = GoldenParams(os.environ.get('AIRSENT_GOLDEN_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden_params.json'),
                       extra=_gate_extra)
 mission_cache = {'mission': None, 'faults': None}
 
@@ -457,7 +457,7 @@ def thermal_monitor():
 # ArduPilot assumes a full pack at boot and counts down by current. If the pack
 # isn't full, % is wrong all flight. Once per Pixhawk connection, while disarmed
 # and resting, estimate SoC from voltage and send MAV_CMD_BATTERY_RESET.
-BATT_CELLS = 6
+BATT_CELLS = int(os.environ.get('AIRSENT_BATT_CELLS', '6'))      # 6S Tattu; same setting as ASC
 _LIPO_CURVE = [(4.20,100),(4.15,95),(4.11,90),(4.08,85),(4.02,80),(3.98,75),(3.95,70),(3.91,65),
                (3.87,60),(3.85,55),(3.84,50),(3.82,45),(3.80,40),(3.79,35),(3.77,30),(3.75,25),
                (3.73,20),(3.71,15),(3.69,10),(3.61,5),(3.27,0)]
@@ -556,6 +556,13 @@ def configure_streams(mav):
                                   mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
                                   msg_id, int(1e6 / hz), 0, 0, 0, 0, 0)
     return ', '.join(f'{n} {hz} Hz' for n, hz in FAST_STREAMS.items())
+
+
+# Every ArduCopter mode, so BRAKE / SMART_RTL / AUTO_RTL etc. (set by ASC or by Pixhawk failsafes) show by name.
+COPTER_MODE_NAMES = {0: 'STABILIZE', 1: 'ACRO', 2: 'ALT HOLD', 3: 'AUTO', 4: 'GUIDED', 5: 'LOITER', 6: 'RTL', 7: 'CIRCLE',
+                     9: 'LAND', 11: 'DRIFT', 13: 'SPORT', 14: 'FLIP', 15: 'AUTOTUNE', 16: 'POSHOLD', 17: 'BRAKE', 18: 'THROW',
+                     19: 'AVOID_ADSB', 20: 'GUIDED_NOGPS', 21: 'SMART_RTL', 22: 'FLOWHOLD', 23: 'FOLLOW', 24: 'ZIGZAG',
+                     25: 'SYSTEMID', 26: 'AUTOROTATE', 27: 'AUTO_RTL', 28: 'TURTLE'}
 
 
 def mavlink_reader():
@@ -667,9 +674,7 @@ def mavlink_reader():
                 elif t == 'HEARTBEAT':
                     last_mav_heartbeat = _now
                     telem['armed'] = bool(msg.base_mode & 128)
-                    mode_map={0:'STABILIZE',1:'ACRO',2:'ALT HOLD',3:'AUTO',
-                              4:'GUIDED',5:'LOITER',6:'RTL',9:'LAND',16:'POSHOLD'}
-                    telem['flight_mode'] = mode_map.get(msg.custom_mode, str(msg.custom_mode))
+                    telem['flight_mode'] = COPTER_MODE_NAMES.get(msg.custom_mode, str(msg.custom_mode))
                 elif t == 'SERVO_OUTPUT_RAW':
                     telem['m1']=msg.servo1_raw; telem['m2']=msg.servo2_raw
                     telem['m3']=msg.servo3_raw; telem['m4']=msg.servo4_raw
@@ -1069,10 +1074,56 @@ def send_takeoff(mav, alt):
     )
     log_mavlink(f"MAV_CMD_NAV_TAKEOFF → {alt}m")
 
+def start_auto(mav):
+    """Fly the mission on the Pixhawk. ArduCopter will not start an AUTO takeoff from the ground
+    while the RC throttle is at zero (found in SITL), so on the ground: GUIDED takeoff first,
+    then AUTO once it is climbing. In the air: straight to AUTO."""
+    vm = vehicle_mission.snapshot()
+    if vm.get('known') and not vm.get('nav_count'):
+        return {'ok': False, 'msg': 'No mission on the Pixhawk — upload one on the mission page first'}
+    end = time.time() + 1.5                     # armed state arrives with the next 1 Hz HEARTBEAT
+    while not telem.get('armed') and time.time() < end:
+        time.sleep(0.1)
+    if not telem.get('armed'):
+        return {'ok': False, 'msg': 'Arm first — AUTO starts the mission from a takeoff'}
+    if (telem.get('alt') or 0) > 1.5:
+        since = time.time()
+        set_mode(mav, 3, 'AUTO')
+        r = wait_ack(mavutil.mavlink.MAV_CMD_DO_SET_MODE, since, 2.0)
+        if r not in (None, 0):
+            return {'ok': False, 'msg': 'AUTO refused by the Pixhawk: ' + ACK_RESULTS.get(r, str(r))}
+        return {'ok': True, 'msg': 'Switching to AUTO (mission)'}
+    alt = float(pilot_settings.values.get('takeoff_alt') or 5)
+    set_guided_mode(mav)
+    time.sleep(0.3)
+    send_takeoff(mav, alt)
+
+    def climb_then_auto():
+        end = time.time() + 20
+        while time.time() < end:
+            if not telem.get('armed'):
+                log_mavlink('AUTO start cancelled — disarmed during takeoff')
+                return
+            if telem.get('flight_mode') not in ('GUIDED', 'AUTO'):
+                log_mavlink(f"AUTO start cancelled — mode changed to {telem.get('flight_mode')}")
+                return
+            if (telem.get('alt') or 0) >= 2.0:
+                with mav_lock:
+                    m = mav_conn
+                if m is not None:
+                    asc_engine.console_mode_command()
+                    set_mode(m, 3, 'AUTO')
+                return
+            time.sleep(0.2)
+        log_mavlink('AUTO start: no climb after 20 s — staying in GUIDED')
+    threading.Thread(target=climb_then_auto, daemon=True).start()
+    return {'ok': True, 'msg': f'Taking off to {alt:.0f} m, then AUTO (mission)'}
+
+
 # ── Launch sequencer: vehicle adapter, faults, 5 Hz loop ────────────────────
 class MavVehicle:
     """What the mission engine may do to the aircraft. Never raises."""
-    MODES = {'GUIDED': 4, 'LOITER': 5, 'RTL': 6, 'LAND': 9}
+    MODES = {'AUTO': 3, 'GUIDED': 4, 'LOITER': 5, 'RTL': 6, 'LAND': 9}
 
     def _run(self, label, fn):
         with mav_lock:
@@ -1092,6 +1143,7 @@ class MavVehicle:
         return self._run('MODE ' + name, lambda mav: set_mode(mav, self.MODES[name], name))
 
     def arm(self):
+        bin_log.cancel('Paused for flight — get it from the Logs page')
         return self._run('ARM', arm_drone)
 
     def disarm(self, force=False):
@@ -1240,15 +1292,27 @@ def recording_tick(now):
     vdir = os.path.join(folder, 'video') if (folder and RECORD_VIDEO and not low_disk) else None
     front_rec.set_folder(vdir)
     down_rec.set_folder(vdir)
+    if folder and not _rec_state['folder']:
+        _rec_state['since'] = sess.get('start', now)
+        _rec_state['armed_at'] = None
+    if sess and sess.get('armed_at') and not _rec_state.get('armed_at'):
+        _rec_state['armed_at'] = sess['armed_at']                 # the Pixhawk's flight log starts here
     if _rec_state['folder'] and not folder:
         _rec_state['bin_folder'], _rec_state['bin_at'] = _rec_state['folder'], now + BIN_DELAY_S
+        _rec_state['bin_window'] = (_rec_state.get('armed_at') or _rec_state.get('since') or now, now)
     _rec_state['folder'] = folder
     if folder:
         _rec_state['bin_at'] = None
+    if _rec_state.get('bin_resume') and now >= _rec_state.get('bin_resume_at', 0) and not bin_log.busy() \
+            and not telem.get('armed') and _mav_now() is not None:
+        folder_r, _rec_state['bin_resume'] = _rec_state['bin_resume'], None
+        ok, msg = bin_log.start(_mav_now, folder_r, lambda: bool(telem.get('armed')), window=_rec_state.get('bin_window'))
+        log_mavlink(f"[BIN] resuming: {msg}")
     if _rec_state['bin_at'] and now >= _rec_state['bin_at']:
         _rec_state['bin_at'] = None
         if BIN_AUTO and not telem.get('armed') and _mav_now() is not None:
-            ok, msg = bin_log.start(_mav_now, _rec_state['bin_folder'], lambda: bool(telem.get('armed')))
+            ok, msg = bin_log.start(_mav_now, _rec_state['bin_folder'], lambda: bool(telem.get('armed')),
+                                    window=_rec_state.get('bin_window'))
             log_mavlink(f"[BIN] {msg}")
 
 def recording_payload():
@@ -1268,7 +1332,14 @@ def bin_download(cmd):
         return {'ok': False, 'msg': 'Mission folder not found'}
     if asc_engine.session and os.path.realpath(asc_engine.session['folder']) == os.path.realpath(folder):
         return {'ok': False, 'msg': 'This mission is still recording'}
-    ok, msg = bin_log.start(_mav_now, folder, lambda: bool(telem.get('armed')), cmd.get('log_id'))
+    window = None
+    try:
+        from datetime import datetime as _dt
+        sm = json.load(open(os.path.join(folder, 'asc', 'summary.json')))
+        window = (_dt.fromisoformat(sm.get('armed_at') or sm['started']).timestamp(), _dt.fromisoformat(sm['ended']).timestamp())
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    ok, msg = bin_log.start(_mav_now, folder, lambda: bool(telem.get('armed')), cmd.get('log_id'), window=window)
     return {'ok': ok, 'msg': msg, 'bin_log': bin_log.snapshot()}
 asc_disk = [None]
 try:
@@ -1276,7 +1347,21 @@ try:
 except (OSError, ValueError):
     pass
 CONSOLE_MODE_ACTIONS = {'set_mode', 'set_guided', 'set_loiter', 'set_rtl', 'set_land', 'set_auto', 'takeoff'}
-ASC_MODE_NUMS = {'LOITER': 5, 'RTL': 6}
+ASC_MODE_NUMS = {'LOITER': 5, 'RTL': 6, 'BRAKE': 17}
+
+
+def hold_mode():
+    """How to hold position from the console. LOITER follows the RC throttle stick: with the stick
+    low (or no RC) it DESCENDS — found in SITL. So LOITER only when the RC throttle is centred;
+    otherwise BRAKE, which holds position and altitude whatever the sticks do."""
+    ch = telem.get('rc_channels') or []
+    thr = ch[2] if len(ch) > 2 else 0
+    with rc_lock:
+        present = bool(rc_monitor.snapshot(time.time(), True).get('input_present'))
+    return 'LOITER' if present and 1400 <= thr <= 1600 else 'BRAKE'
+
+
+asc_engine.hold_mode = hold_mode
 
 
 def asc_param_dump():
@@ -1376,6 +1461,8 @@ def mission_loop():
 
 
 # ── Command WebSocket handler ─────────────────────
+FLY_ACTIONS = {'arm', 'takeoff', 'set_auto', 'motor_test', 'goto', 'set_guided'}
+LINK_ACTIONS = {'param_write', 'param_read', 'wp_upload', 'wp_download'}      # need replies the log stream can crowd out
 SLOW_ACTIONS = {'bin_download', 'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
 # Reads and joystick input: kept out of the shared events journal by the relay.
 QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
@@ -1430,6 +1517,11 @@ def _process_command(raw):
     # Launch sequencer requests are handled by the Jetson mission engine,
     # including abort/hold when the Pixhawk link is down.
     if isinstance(action, str) and (action.startswith('mission_') or action == 'fault_ack'):
+        if action == 'mission_create' and cmd.get('route'):
+            vm = vehicle_mission.snapshot()
+            if not (vm.get('verified') and vm.get('nav_count')):
+                return {'ok': False, 'type': 'mission_result', 'request_id': cmd.get('request_id'),
+                        'msg': 'No verified route on the Pixhawk — upload it on the mission page, or choose HOVER'}
         return mission_engine.handle(cmd)
 
     if action == 'asc_set':
@@ -1447,6 +1539,17 @@ def _process_command(raw):
     with mav_lock:
         mav = mav_conn
 
+    if action in FLY_ACTIONS and bin_log.cancel('Paused for flight — get it from the Logs page'):
+        log_mavlink(f"[BIN] Pixhawk log download stopped — {action} has priority on the link")
+        _rec_state['bin_resume'] = None
+    elif action in LINK_ACTIONS:
+        folder = (bin_log.status or {}).get('path')
+        if bin_log.cancel('Paused while the console uses the link — resumes by itself'):
+            _rec_state['bin_resume'] = folder
+            log_mavlink(f"[BIN] Pixhawk log download paused for {action}; resumes when the link is quiet")
+        if _rec_state.get('bin_resume'):
+            _rec_state['bin_resume_at'] = time.time() + 15
+
     if mav is None:
         return {'ok': False, 'msg': 'No MAVLink connection','type':'pilot_setting_result' if action=='pilot_setting' else 'command_error','request_id':cmd.get('request_id')}
 
@@ -1461,10 +1564,15 @@ def _process_command(raw):
             return {'ok': True, 'msg': 'Switching to GUIDED'}
 
         elif action == 'set_loiter':
-            send_loiter(mav)
             with vel_lock:
                 vel_setpoint.update({'vx':0,'vy':0,'vz':0,'yaw_rate':0})
-            return {'ok': True, 'msg': 'Switching to LOITER'}
+            if not telem.get('armed') or (telem.get('alt') or 0) < 0.5:
+                send_loiter(mav)
+                return {'ok': True, 'msg': 'Switching to LOITER'}
+            hm = hold_mode()
+            set_mode(mav, ASC_MODE_NUMS[hm], hm)
+            return {'ok': True, 'msg': 'Holding position (LOITER)' if hm == 'LOITER' else
+                    'Holding position (BRAKE — RC throttle not centred, LOITER would descend)'}
 
         elif action == 'set_rtl':
             send_rtl(mav)
@@ -1479,6 +1587,7 @@ def _process_command(raw):
             arm_drone(mav)
             r = wait_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, since, 2.0)
             if r == 0:
+                telem['armed'] = True          # don't wait up to 1 s for the next HEARTBEAT
                 return {'ok': True, 'msg': 'ARMED — Pixhawk accepted'}
             why = (last_prearm_text(time.time()) or '') if r is not None else ''
             return {'ok': False, 'msg': 'ARM refused by Pixhawk: ' + ACK_RESULTS.get(r, str(r)) + (f' — {why}' if why else '')
@@ -1489,6 +1598,7 @@ def _process_command(raw):
             disarm_drone(mav)
             r = wait_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, since, 2.0)
             if r == 0:
+                telem['armed'] = False
                 return {'ok': True, 'msg': 'DISARMED — Pixhawk accepted'}
             if r is None:
                 return {'ok': False, 'msg': 'DISARM sent, no answer from the Pixhawk — check telemetry'}
@@ -1617,7 +1727,12 @@ def _process_command(raw):
             if mode_name not in CONSOLE_MODES:
                 return {'ok': False, 'msg': f'{mode_name} is not available from the console — use the RC transmitter'}
             num = MODE_NUMS[mode_name]
+            since = time.time()
             set_mode(mav, num, mode_name)
+            r = wait_ack(mavutil.mavlink.MAV_CMD_DO_SET_MODE, since, 1.5)
+            if r not in (None, 0):
+                why = last_prearm_text(time.time()) or ''
+                return {'ok': False, 'msg': f'{mode_name} refused by the Pixhawk: ' + ACK_RESULTS.get(r, str(r)) + (f' — {why}' if why else '')}
             # Zero velocity on any non-GUIDED mode for safety.
             if mode_name != 'GUIDED':
                 with vel_lock:
@@ -1625,8 +1740,7 @@ def _process_command(raw):
             return {'ok': True, 'msg': f'Switching to {mode_name}'}
 
         elif action == 'set_auto':
-            set_mode(mav, 3, 'AUTO')
-            return {'ok': True, 'msg': 'Switching to AUTO (mission)'}
+            return start_auto(mav)
 
         elif action in ('set_detection','set_stop_dist'):
             key='detection' if action=='set_detection' else 'stop_distance'
@@ -1724,7 +1838,8 @@ async def cmd_handler(websocket):
 def mission_interval():
     """Mission/fault state is ~6 KB: send it 2x/s during a mission, every 2 s otherwise."""
     stage = (mission_cache['mission'] or {}).get('stage', 'standby')
-    return 2.0 if stage == 'standby' else 0.5
+    # 2x/s while a countdown mission or an ASC session (armed / flying) is running: the live checks need it
+    return 2.0 if stage == 'standby' and not asc_engine.session else 0.5
 
 
 def build_telemetry_payload(include_mission=True):

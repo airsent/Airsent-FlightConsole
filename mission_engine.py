@@ -162,10 +162,13 @@ def evaluate_checks(s, engine):
     net = s.get('network_link') or {}
     pct = net.get('percent')
     net_ok = bool(net.get('connected'))
-    out.append(check('network', 'Link', 'Network link quality', 'prearm',
-                     net_ok and (pct is None or pct >= 30) if net_ok else False,
-                     f"{(net.get('type') or '--').upper()} {pct if pct is not None else '--'}%",
-                     'connected, >= 30%', warn=net_ok))
+    if cfg.get('sim') and not net_ok:            # SITL machine: no modem / NetworkManager to read
+        out.append(check('network', 'Link', 'Network link quality', 'prearm', True, 'SIM (not checked)', 'connected, >= 30%'))
+    else:
+        out.append(check('network', 'Link', 'Network link quality', 'prearm',
+                         net_ok and (pct is None or pct >= 30) if net_ok else False,
+                         f"{(net.get('type') or '--').upper()} {pct if pct is not None else '--'}%",
+                         'connected, >= 30%', warn=net_ok))
 
     gate = rc_gate_position(s, cfg)
     gate_label = {'SIM': 'SIM (no RC gate)', 'NOT_CONFIGURED': 'NOT CONFIGURED'}.get(gate, gate)
@@ -251,10 +254,14 @@ def evaluate_checks(s, engine):
     out.append(check('fence', 'Safety', 'Geofence and max altitude active on Pixhawk', 'prearm', fence_on,
                      'ENABLED' if fence_on else ('DISABLED' if fence.get('FENCE_ENABLE') == 0 else 'UNKNOWN'), 'enabled'))
 
-    out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm',
-                     bool(s.get('front_cam_active')), 'STREAMING' if s.get('front_cam_active') else 'OFFLINE', 'streaming'))
-    out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', bool(s.get('down_cam_active')),
-                     'STREAMING' if s.get('down_cam_active') else 'OFFLINE', 'streaming', warn=True))
+    if cfg.get('sim'):                           # SITL has no cameras
+        out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm', True, 'SIM (no camera)', 'streaming'))
+        out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', True, 'SIM (no camera)', 'streaming'))
+    else:
+        out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm',
+                         bool(s.get('front_cam_active')), 'STREAMING' if s.get('front_cam_active') else 'OFFLINE', 'streaming'))
+        out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', bool(s.get('down_cam_active')),
+                         'STREAMING' if s.get('down_cam_active') else 'OFFLINE', 'streaming', warn=True))
     temp = s.get('jetson_temp')
     out.append(check('jetson_temp', 'Jetson', 'Jetson temperature', 'prearm',
                      isinstance(temp, (int, float)) and temp < cfg['max_jetson_temp'],
@@ -893,8 +900,10 @@ class MissionEngine:
         elif alt >= 0.9 * cfg['takeoff_alt']:
             self.stage = 'flight'
             self.flight_started = now
-            self._event('flight', f"Climb complete — hovering at {alt:.1f} m" +
-                        ('' if not (self.mission or {}).get('route') else ', starting route'))
+            route = bool((self.mission or {}).get('route'))
+            self._event('flight', f"Climb complete — hovering at {alt:.1f} m" + (', starting the route (AUTO)' if route else ''))
+            if route and self.vehicle:
+                self.vehicle.set_mode('AUTO')
         else:
             return
         self._save()

@@ -57,6 +57,12 @@
     return back;
   }
 
+  function routeOption() {
+    const vm = M.vehicleMission || {};
+    return vm.verified && vm.nav_count ? `<option value="route">FLY THE ROUTE ON THE DRONE (${vm.nav_count} waypoints, verified)</option>`
+      : '<option value="" disabled>FLY THE ROUTE — no verified route on the drone (upload on the mission page)</option>';
+  }
+
   function openCreate() {
     if (viewer()) { toast('Viewer mode — read only', 'err'); return; }
     if (M.active()) { location.href = 'launch.html'; return; }
@@ -68,6 +74,7 @@
         <div><label>COUNTDOWN</label><select id="msnTotal"><option value="180">3:00</option><option value="300">5:00</option></select></div>
       </div>
       <label>MISSION NAME</label><input id="msnName" maxlength="48" placeholder="mission 1" autocomplete="off">
+      <label>AFTER TAKEOFF</label><select id="msnRoute"><option value="">HOVER — the pilot flies from the console</option>${routeOption()}</select>
       <label>BATTERY PACK ID (OPTIONAL)</label><input id="msnPack" maxlength="40" placeholder="e.g. TATTU-03" autocomplete="off">
       <label>TYPE <b style="color:#ffb800">flight</b> TO CONFIRM</label><input id="msnConfirm" autocomplete="off" spellcheck="false">
       <div class="msn-error" id="msnErr"></div>
@@ -80,7 +87,8 @@
       if (!op) { $('msnErr').textContent = 'Enter your name — it is recorded with every action.'; return; }
       M.operatorName = op;
       $('msnStart').disabled = true;
-      const r = await M.send('mission_create', { name, total: Number($('msnTotal').value), pack_id: $('msnPack').value.trim(), confirm: $('msnConfirm').value });
+      const r = await M.send('mission_create', { name, total: Number($('msnTotal').value), pack_id: $('msnPack').value.trim(), confirm: $('msnConfirm').value,
+        route: $('msnRoute').value === 'route' });
       $('msnStart').disabled = false;
       if (!r.ok) { $('msnErr').textContent = r.msg || 'Could not start'; return; }
       d.remove(); toast(r.msg);

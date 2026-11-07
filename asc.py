@@ -12,7 +12,7 @@ until the drone is disarmed on the ground it:
 ASC checks and records; it does not fight the pilot or the Pixhawk. It acts on
 its own in exactly one case nothing else can detect: the operator console link
 is lost while the drone flies a console-driven mode (GUIDED / AUTO). Then it
-holds position (LOITER) after 10 s and returns home (RTL) after 30 s. If the RC
+holds position (LOITER if the RC throttle is centred, else BRAKE) after 10 s and returns home (RTL) after 30 s. If the RC
 pilot or a Pixhawk failsafe changes the mode, ASC stands down.
 """
 import gzip
@@ -28,7 +28,7 @@ from datetime import datetime
 
 OK, INFO, WARN, CRIT = 0, 1, 2, 3
 LEVEL_NAME = {OK: 'ok', INFO: 'info', WARN: 'warning', CRIT: 'critical'}
-CONSOLE_MODES = ('GUIDED', 'AUTO')
+CONSOLE_MODES = ('GUIDED', 'AUTO', 'BRAKE')        # modes only a console (or ASC) puts the drone in
 FAILSAFE_WORDS = {'radio': 'rc', 'rc ': 'rc', 'throttle': 'rc', 'battery': 'battery', 'gcs': 'gcs', 'ekf': 'ekf',
                   'fence': 'fence', 'crash': 'crash', 'vibration': 'vibe', 'terrain': 'terrain', 'adsb': 'adsb'}
 ALERT_TEXTS = ('failsafe', 'crash', 'thrust loss', 'gps glitch', 'ekf variance', 'fence breach', 'vibration compensation',
@@ -166,7 +166,8 @@ def build_checks(cfg):
         if not _num(a):
             return OK, '', None
         lim = c['fence_alt'] or cfg['fence_alt']
-        return (WARN, f'{a:.0f} m — close to the {lim:.0f} m ceiling', a) if a > 0.9 * lim else (OK, '', a)
+        # within 10 % (at least 2.5 m: ArduPilot's fence avoidance stops climbs 2 m short — found in SITL)
+        return (WARN, f'{a:.0f} m — close to the {lim:.0f} m ceiling', a) if a >= lim - max(0.1 * lim, 2.5) else (OK, '', a)
     add('fence_alt', 'Geofence', 'Altitude vs ceiling', fence_alt, when='flying', sustain=0.5)
 
     def fence_dist(s, c):
@@ -287,7 +288,9 @@ def build_checks(cfg):
 
     def obstacle(s, c):
         p = s.get('proximity') or {}
-        d = p.get('closest') if isinstance(p, dict) else None
+        d = (p.get('closest', p.get('dist')) if isinstance(p, dict) else None)   # server sends 'dist' (-1 = none)
+        if _num(d) and d <= 0:
+            d = None
         stop = s.get('stop_distance')
         if not (_num(d) and _num(stop)):
             return OK, '', d
@@ -296,6 +299,30 @@ def build_checks(cfg):
     add('loop', 'ASC', 'ASC loop timing', lambda s, c: (WARN, f"ASC running slow ({c['loop_ms']:.0f} ms/tick)", c['loop_ms'])
         if c['loop_ms'] > 2000 / cfg['rate_hz'] else (OK, '', c['loop_ms']), sustain=3)
     return C
+
+
+def display_meta(cfg):
+    """For the live view: unit and the limit each check is held to. unit 'flag' = a yes/no check."""
+    return {
+        'fc_link': ('s', 'heartbeat age · lost after 5 s'), 'ekf': ('flag', 'EKF must be healthy'),
+        'vps_link': ('flag', 'relay connected'), 'console': ('s', f"since last console · hold {cfg['hold_after']:.0f} s · RTL {cfg['rtl_after']:.0f} s"),
+        'network': ('%', f"warn < {cfg['net_min_pct']}%"), 'rc': ('flag', 'receiver signal present'),
+        'rc_rssi': ('%', f"warn < {cfg['max_rssi_low']}%"),
+        'tilt': ('°', f"warn {cfg['max_tilt_warn']}° · crit {cfg['max_tilt_crit']}°"), 'oscillation': ('°σ', 'warn > 6°σ roll'),
+        'vspeed': ('m/s', f"climb ≤ {cfg['max_climb']} · descent ≤ {cfg['max_descent']}"), 'speed': ('m/s', f"warn > {cfg['max_speed']:.0f}"),
+        'gps_fix': ('text', 'needs 3D fix or better'), 'gps_sats': ('', f"warn < {cfg['min_sats']}"), 'gps_hdop': ('', f"warn > {cfg['max_hdop']}"),
+        'gps_jump': ('m', 'per tick vs speed'), 'home': ('flag', 'home set before flight'),
+        'fence_alt': ('m', f"warn within 10% (≥ 2.5 m) of the ceiling ({cfg['fence_alt']:.0f} m default)"), 'fence_dist': ('m', f"warn at 90% of radius ({cfg['fence_radius']:.0f} m default)"),
+        'lidar_agree': ('m', 'LiDAR vs altitude · warn > 2.5 m'), 'lidar_low': ('m', 'reading below 6 m'), 'flow': ('', f"warn < {cfg['flow_quality_min']} below {cfg['low_agl']:.0f} m"),
+        'vibration': ('m/s²', f"warn {cfg['vib_warn']:.0f} · crit {cfg['vib_crit']:.0f}"),
+        'cell_voltage': ('V/cell', f"warn {cfg['cell_warn']} · crit {cfg['cell_crit']} ({cfg['cells']}S)"), 'sag': ('V', f"warn > {cfg['sag_volts']} V in 1 s"),
+        'current': ('A', f"warn > {cfg['max_current']:.0f} A"), 'reserve': ('%', 'battery needed to get home'),
+        'motor_sat': ('µs', f"warn ≥ {cfg['motor_high_pwm']} µs"), 'motor_balance': ('%', f"warn > {cfg['motor_spread_pct']}%"),
+        'esc': ('', 'ESCs reporting'), 'jetson_temp': ('°C', f"warn ≥ {cfg['max_jetson_temp']} °C"), 'jetson_cpu': ('%', 'warn > 95%'),
+        'jetson_ram': ('%', 'warn > 92%'), 'disk': ('GB', f"warn < {cfg['min_disk_gb']} GB free"),
+        'front_cam': ('flag', 'camera online'), 'down_cam': ('flag', 'camera online'), 'obstacle': ('m', 'warn inside the stop distance'),
+        'loop': ('ms', f"warn > {2000 / cfg['rate_hz']:.0f} ms"),
+    }
 
 
 # ── recording ──────────────────────────────────────────────────────────────
@@ -505,6 +532,7 @@ class ASC:
             'format': 'airsent-asc-summary-1', 'folder': s['folder'],
             'started': datetime.fromtimestamp(s['start']).isoformat(), 'ended': datetime.fromtimestamp(now).isoformat(),
             'duration_s': round(now - s['start'], 1), 'flying_s': round(s['flying_s'], 1),
+            'armed_at': datetime.fromtimestamp(s['armed_at']).isoformat() if s.get('armed_at') else None,
             'checks_run': self.checks_run, 'checks_per_s': self.checks_per_s(),
             'max_alt_m': round(s['max_alt'], 1), 'max_dist_m': round(s['max_dist'], 1), 'distance_flown_m': round(s['dist_m'], 1),
             'min_voltage': s['min_volt'], 'max_current_a': round(s['max_current'], 1), 'used_mah': round(s['mah']),
@@ -572,7 +600,10 @@ class ASC:
 
         mode = s.get('flight_mode')
         if self.last_mode is not None and mode != self.last_mode:
-            who = 'console' if now - self.console_mode_at < 3 else 'ASC' if self.action and now - self.action.get('at', 0) < 2 else 'RC / Pixhawk'
+            # The mode only shows up in telemetry with the next HEARTBEAT (1 Hz), so allow a few
+            # seconds; and ASC's own change is recognised by the mode it asked for.
+            asc_own = bool(self.action and self.action.get('want') == mode and now - self.action.get('at', 0) < 8)
+            who = 'ASC' if asc_own else 'console' if now - self.console_mode_at < 6 else 'RC / Pixhawk'
             self._event('mode', f'Mode {self.last_mode} → {mode} ({who})', INFO)
             if self.action and self.action['stage'] in ('hold', 'rtl') and who == 'RC / Pixhawk':
                 self.action = {'stage': 'stood_down', 'at': now, 'why': f'mode changed to {mode} by RC / Pixhawk'}
@@ -646,18 +677,19 @@ class ASC:
             return []
         if stage == 'stood_down':
             return []
-        if age >= cfg['rtl_after'] and stage != 'rtl' and mode not in ('RTL', 'LAND'):
+        if age >= cfg['rtl_after'] and stage != 'rtl' and mode not in ('RTL', 'LAND', 'SMART_RTL', 'AUTO_RTL'):
             if stage == 'hold' or mode in CONSOLE_MODES:
-                self.action = {'stage': 'rtl', 'at': now, 'age': round(age)}
+                self.action = {'stage': 'rtl', 'at': now, 'age': round(age), 'want': 'RTL'}
                 self.session['actions'].append({'t': round(now - self.session['start'], 1), 'action': 'RTL', 'console_age_s': round(age)})
                 self._event('asc_action', f'No operator console for {age:.0f} s — RETURNING HOME (RTL)', CRIT)
                 return [('mode', 'RTL', f'console link lost {age:.0f} s')]
         elif age >= cfg['hold_after'] and stage is None and mode in CONSOLE_MODES:
-            self.action = {'stage': 'hold', 'at': now, 'age': round(age), 'from_mode': mode}
+            hold = self.hold_mode() if callable(getattr(self, 'hold_mode', None)) else 'LOITER'
+            self.action = {'stage': 'hold', 'at': now, 'age': round(age), 'from_mode': mode, 'want': hold}
             self.session['console_losses'] += 1
-            self.session['actions'].append({'t': round(now - self.session['start'], 1), 'action': 'LOITER', 'console_age_s': round(age)})
-            self._event('asc_action', f'No operator console for {age:.0f} s — HOLDING POSITION (LOITER); RTL at {cfg["rtl_after"]:.0f} s', CRIT)
-            return [('mode', 'LOITER', f'console link lost {age:.0f} s')]
+            self.session['actions'].append({'t': round(now - self.session['start'], 1), 'action': hold, 'console_age_s': round(age)})
+            self._event('asc_action', f'No operator console for {age:.0f} s — HOLDING POSITION ({hold}); RTL at {cfg["rtl_after"]:.0f} s', CRIT)
+            return [('mode', hold, f'console link lost {age:.0f} s')]
         return []
 
     def _drain_rate(self):
@@ -753,7 +785,8 @@ class ASC:
         return out
 
     def defs(self):
-        return [[c.id, c.group, c.label] for c in self.checks]
+        meta = display_meta(self.cfg)
+        return [[c.id, c.group, c.label, *meta.get(c.id, ('', '')), c.when] for c in self.checks]
 
     def live(self):
         out = []

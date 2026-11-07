@@ -1,0 +1,192 @@
+{
+ "results": [
+  {
+   "scenario": "s_configure_like_zd650",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Wrote and confirmed 19 parameter(s) on the Pixhawk",
+    "golden check: MATCH ",
+    "battery reads 12.6 V; LiDAR 0.11 m; flow quality 51"
+   ],
+   "seconds": 56
+  },
+  {
+   "scenario": "s_launch_sequence",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Mission started: 2026-11-07_1006_sitl-run",
+    "GO at stage gonogo: GO recorded",
+    "T-0 takeoff done, hovering at 5.0 m in GUIDED",
+    "mission folder 2026-11-07_1006_sitl-run: ['asc', 'checks_handover.json', 'checks_t0.json', 'events.jsonl', 'faults.jsonl', 'mission.json', 'params_at_arm.json', 'pixhawk.bin', 'pixhawk_bin.json', 'summary.json', 'telemetry.jsonl']"
+   ],
+   "seconds": 94
+  },
+  {
+   "scenario": "s_params_roundtrip",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "read ['ARMING_CHECK', 'BATT_LOW_VOLT', 'FS_GCS_ENABLE', 'FS_THR_ENABLE', 'RTL_ALT', 'WPNAV_SPEED']; not on this firmware: ['RTL_ALT_M', 'WP_SPD']",
+    "Wrote and confirmed 3 parameter(s) on the Pixhawk",
+    "unknown parameter: Wrote 0/1 \u2014 stopped: NOT_A_PARAM_X does not exist on this Pixhawk",
+    "param_rev broadcast: rev 2 by SITL"
+   ],
+   "seconds": 11
+  },
+  {
+   "scenario": "s_basic_flight_and_recording",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "ASC 737 checks/s, live rows 37",
+    "pixhawk.bin 2.9 MB with the flight; charts 11"
+   ],
+   "seconds": 42
+  },
+  {
+   "scenario": "s_mission_upload_auto",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Uploaded and verified 4 waypoints on the Pixhawk",
+    "vehicle_mission state: None",
+    "flew both waypoints and RTL-landed at home"
+   ],
+   "seconds": 99
+  },
+  {
+   "scenario": "s_estop_in_air",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "E-STOP reply: EMERGENCY STOP \u2014 motors stopped (Pixhawk accepted, attempt 1)",
+    "disarmed 0.61 s after E-STOP"
+   ],
+   "seconds": 11
+  },
+  {
+   "scenario": "s_normal_disarm_refused_in_air",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "reply: DISARM refused: FAILED \u2014 the aircraft is flying; use EMERGENCY STOP to cut the motors"
+   ],
+   "seconds": 31
+  },
+  {
+   "scenario": "s_writes_blocked_when_armed",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Parameter writes are blocked while the aircraft is armed | Mission upload is blocked while the aircraft is armed"
+   ],
+   "seconds": 28
+  },
+  {
+   "scenario": "s_joystick_and_stale_stop",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "joystick moved 4.2 m; drift after release 0.06 m in 3 s"
+   ],
+   "seconds": 46
+  },
+  {
+   "scenario": "s_goto_and_rtl",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Flying to the point \u2014 58 m away at 12 m",
+    "far goto refused in the air: Point is 5558 m away \u2014 limit is 500 m per hop"
+   ],
+   "seconds": 86
+  },
+  {
+   "scenario": "s_console_loss_hold_then_rtl",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "BRAKE hold after 9.2 s, RTL after 29.0 s of silence",
+    "ASC state acting, action {'stage': 'hold', 'at': 1794071695.6613936, 'age': 10, 'from_mode': 'GUIDED', 'want': 'BRAKE'}"
+   ],
+   "seconds": 108
+  },
+  {
+   "scenario": "s_console_back_cancels",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "after console returns: ASC state watching, mode BRAKE"
+   ],
+   "seconds": 78
+  },
+  {
+   "scenario": "s_jetson_heartbeat_failsafe",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "Wrote and confirmed 2 parameter(s) on the Pixhawk",
+    "Pixhawk \u2192 RTL 5.4 s after the Jetson froze; ['GCS Failsafe']",
+    "server back; FS_GCS_ENABLE in telemetry: 1",
+    "ASC events: ['Landed while the console link was down', 'Mode BRAKE \u2192 RTL (ASC)', 'No operator console for 30 s \u2014 RETURNING HOME (RTL)', 'PIXHAWK: GCS Failsafe Cleared']"
+   ],
+   "seconds": 61
+  },
+  {
+   "scenario": "s_geofence",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "commanded climb for 30 s: held at 18.0 m by fence avoidance; ASC warned near the ceiling: True"
+   ],
+   "seconds": 77
+  },
+  {
+   "scenario": "s_estop_while_uploading",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "E-STOP answered in 0.61 s during a param read: EMERGENCY STOP \u2014 motors stopped (Pixhawk accepted, attempt 1)"
+   ],
+   "seconds": 10
+  },
+  {
+   "scenario": "s_battery_failsafe",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "while low: server voltage 10.65 V; ASC cell_voltage row [['cell_voltage', 2, 3.55, 'Battery 10.7 V (3.55 V/cell)']]",
+    "battery failsafe \u2192 RTL; Pixhawk said ['Battery 1 is low 10.65V used 4805 mAh', 'Battery Failsafe']",
+    "faults block: {'revision': 441, 'active': [{'id': 'F00038', 'key': 'sys:battery', 'severity': 'critical', 'source': 'Battery', 'message': 'Battery low: 10.7 V', 'since': 1794071878.8597043, 'acked_by': None, 'acked"
+   ],
+   "seconds": 35
+  },
+  {
+   "scenario": "s_pixhawk_reboot_reconnect",
+   "result": "PASS",
+   "error": "",
+   "notes": [
+    "reconnected 7 s after the power cut"
+   ],
+   "seconds": 47
+  }
+ ],
+ "server_errors": [
+  "[MAV] Error: [Errno 111] Connection refused",
+  "Traceback (most recent call last):",
+  "BrokenPipeError: [Errno 32] Broken pipe",
+  "Traceback (most recent call last):",
+  "AttributeError: 'NoneType' object has no attribute 'connect'",
+  "[MAV] Error: [Errno 111] Connection refused",
+  "Traceback (most recent call last):",
+  "BrokenPipeError: [Errno 32] Broken pipe",
+  "Traceback (most recent call last):",
+  "AttributeError: 'NoneType' object has no attribute 'connect'",
+  "Traceback (most recent call last):",
+  "BrokenPipeError: [Errno 32] Broken pipe",
+  "Traceback (most recent call last):",
+  "AttributeError: 'NoneType' object has no attribute 'connect'"
+ ]
+}
