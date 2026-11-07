@@ -265,11 +265,20 @@ body.pilot-fixed{
 <script src="console-navigation.js" defer></script>
 <script src="pilot-readouts.js?v=1"></script>
 <style>
-/* Keep all controls reachable when the height-scaled canvas narrows. */
-.bar{height:auto;min-height:40px;flex-wrap:wrap;row-gap:6px;padding-top:5px;padding-bottom:5px;}
-.bar .brt{flex-wrap:wrap;row-gap:6px;min-width:0;}
-.bar .pilot-stats{gap:16px;flex-wrap:wrap;row-gap:6px;}
-.bar .pilot-actions{gap:8px;margin-right:0;}
+/* Minimal top bar: one row. Left: logo · autopilot/manual · takeoff/RTH/land.
+   Right: E-STOP · countdown + faults · battery % · obstacle · settings · mode. */
+.bar{height:44px;flex-wrap:nowrap;padding:0 18px;}
+.bar .brt{flex-wrap:nowrap;min-width:0;}
+.bar .pilot-actions{gap:10px;margin-right:0;}
+.bar .mtog{margin:0 16px 0 22px;}
+.bar .qact{margin:0;}
+.bar #obstBadge{margin-right:0!important;}
+.pilot-batt,.pilot-mode{display:flex;align-items:center;gap:7px;padding:0 4px;white-space:nowrap;}
+.pilot-batt .bval,.pilot-mode .bval{margin-left:0;font-size:12px;}
+.pilot-mode{padding-left:14px;border-left:1px solid var(--rule);margin-left:4px;}
+.telem-strip,.bar .page-id{display:none!important;}
+.qs-panel{top:52px!important;}
+.qs-mavlink{width:100%;height:28px;}
 .estop-btn{position:relative;overflow:hidden;height:26px;padding:0 14px;border:1px solid #ff2244;background:rgba(255,34,68,.16);
   color:#fff;font:700 11px var(--mono,monospace);letter-spacing:2px;cursor:pointer;flex-shrink:0;touch-action:none;user-select:none;}
 .estop-btn small{font-size:7px;letter-spacing:1px;opacity:.75;margin-left:4px;}
@@ -372,6 +381,9 @@ body.pilot-fixed{
         </div>
       </div>
     </div>
+  <div style="border-top:1px solid var(--rule2);margin-top:12px;padding-top:12px;">
+    <button class="qs-btn qs-mavlink" type="button" onclick="toggleMavLog();toggleQS()">📡 MAVLink log</button>
+  </div>
   </div>
 </div>
 
@@ -428,14 +440,10 @@ body.pilot-fixed{
     <button class="qa qa-ok" id="qa-takeoff" onclick="qAction('takeoff')">▲ Takeoff</button>
     <button class="qa qa-warn" id="qa-rth" onclick="qAction('rth')">⌂ RTH</button>
     <button class="qa qa-warn" id="qa-land" onclick="qAction('land')">▼ Land</button>
-    <button class="qa" onclick="showPrearm()">✓ PreArm</button>
   </div>
-  <div class="bdiv"></div>
-  <div class="pilot-stats">
-    <div class="pilot-stat"><span class="blbl">Alt</span><span class="bval ok" id="bAlt">-- m</span></div>
-    <div class="pilot-stat"><span class="blbl">Spd</span><span class="bval" id="bSpd">-- m/s</span></div>
-    <div class="pilot-stat"><span class="blbl">Batt</span><span class="bval ok" id="bBatt">--%</span></div>
-    <div class="pilot-stat gps"><span class="blbl">GPS</span><span class="bval info" id="bGps">--</span></div>
+  <!-- kept for the scripts that update them; not shown in the minimal bar (the HUD shows alt/speed) -->
+  <div style="display:none">
+    <span id="bAlt">-- m</span><span id="bSpd">-- m/s</span><span id="bGps">--</span>
   </div>
   <div class="brt">
     <div class="rec-dot" id="recDot" style="display:none;margin-right:8px"></div>
@@ -444,6 +452,7 @@ body.pilot-fixed{
         <span class="estop-fill"></span><span class="estop-txt">■ E-STOP <small>HOLD</small></span>
       </button>
       <div id="missionPilotSlot" style="display:flex;align-items:center"></div>
+      <div class="pilot-batt"><span class="blbl">Batt</span><span class="bval ok" id="bBatt">--%</span></div>
       <div id="obstBadge" style="display:flex;align-items:center;gap:5px;padding:0 10px;
         border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.07);
         height:22px;margin-right:8px;flex-shrink:0;cursor:pointer;" onclick="toggleObstDetection()">
@@ -451,13 +460,10 @@ body.pilot-fixed{
           box-shadow:0 0 5px var(--ok);animation:cam-pulse 2s ease-in-out infinite;"></div>
         <span id="obstBadgeTxt" style="font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--ok)">OBST ON</span>
       </div>
-      <button class="qs-btn" onclick="toggleMavLog()">📡 MAVLink</button>
       <button class="qs-btn" onclick="toggleQS()">⚙ Settings</button>
+      <div class="pilot-mode"><span class="blbl">Mode</span><span class="bval info" id="bMode">--</span></div>
     </div>
-    <div class="bdiv"></div>
-    <span class="blbl">Mode</span><span class="bval info" id="bMode" style="margin-left:6px">--</span>
-    <div class="bdiv"></div>
-    <span class="bval" style="color:var(--t3)" id="bClock">--:--:--</span>
+    <span id="bClock" hidden>--:--:--</span>
   </div>
 </div>
 
