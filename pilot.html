@@ -262,6 +262,17 @@ body.pilot-fixed{
 </style>
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
 <script src="console-navigation.js" defer></script>
+<script src="pilot-readouts.js?v=1"></script>
+<style>
+/* Keep all controls reachable when the height-scaled canvas narrows. */
+.bar{height:auto;min-height:40px;flex-wrap:wrap;row-gap:6px;padding-top:5px;padding-bottom:5px;}
+.bar .brt{flex-wrap:wrap;row-gap:6px;min-width:0;}
+.bar .pilot-stats{gap:16px;flex-wrap:wrap;row-gap:6px;}
+.bar .pilot-actions{gap:8px;margin-right:0;}
+.telem-strip{height:auto;min-height:24px;flex-wrap:wrap;row-gap:5px;padding-top:5px;padding-bottom:5px;}
+.ts-item{white-space:nowrap;}
+.qs-btn{color:var(--t2);white-space:nowrap;}
+</style>
 </head>
 <body class="pilot-fixed">
 
@@ -1026,10 +1037,9 @@ function connectTelem(){
         S.alt=lidarValid?(S.rangefinder_agl??S.rangefinder):(d.alt??S.alt);
         E('altSrc').textContent=lidarValid?'LiDAR':'BARO';
         E('altSrc').className='alt-src '+(lidarValid?'lidar':'baro');
-        if(S.spd>1){windEstDeg=Math.round((S.yaw+180)%360);windEstSpd=Math.max(0,Math.abs(S.spd-prevSpd)*10).toFixed(1);}
+        // Wind is displayed only when supplied as measured telemetry.
         prevYaw=S.yaw; prevSpd=S.spd;
-        const mSpread=Math.max(S.m1,S.m2,S.m3,S.m4)-Math.min(S.m1,S.m2,S.m3,S.m4);
-        vibHistory.push(Math.round(mSpread/5));
+        if(Number.isFinite(d.vib_x))vibHistory.push(Math.max(d.vib_x,d.vib_y||0,d.vib_z||0));
         if(vibHistory.length>30)vibHistory.shift();
         altHistory.push(S.alt);
         if(altHistory.length>120)altHistory.shift();
@@ -1053,6 +1063,7 @@ function connectTelem(){
           E('cs-arm').className='cs-dot'; E('cs-armtxt').textContent='DISARMED';
         }
         updateUI();
+        window.AirsentPilotReadouts?.receive(d);
       }catch(_){}
     };
     ws.onclose=()=>{telemConnected=false;startLinkLost();
@@ -1771,12 +1782,7 @@ function drawWind(){
   ctx.clearRect(0,0,28,28);
   ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
-  const rad=windEstDeg*Math.PI/180;
-  ctx.strokeStyle='rgba(59,130,246,0.6)'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.moveTo(cx,cy);
-  ctx.lineTo(cx+Math.sin(rad)*r,cy-Math.cos(rad)*r); ctx.stroke();
-  ctx.fillStyle='rgba(59,130,246,.8)';
-  ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2); ctx.fill();
+
 }
 
 /* ── DOWNCAM — real IMX219 frame or original placeholder ── */
