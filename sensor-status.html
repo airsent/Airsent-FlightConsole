@@ -426,7 +426,7 @@ body {
   <!-- GPS -->
   <div class="card" id="c-gps">
     <div class="card-head">
-      <div><div class="card-title">GPS Receiver</div><div class="card-sub">u-blox M9N · UART/CAN</div></div>
+      <div><div class="card-title">GPS Receiver</div><div class="card-sub">Holybro H-RTK F9P · u-blox ZED-F9P</div></div>
       <span class="chip offline" id="chip-gps">Offline</span>
     </div>
     <div class="card-metrics">
@@ -497,7 +497,7 @@ body {
   <!-- Power -->
   <div class="card" id="c-pwr">
     <div class="card-head">
-      <div><div class="card-title">Power System</div><div class="card-sub">4S LiPo · ADC/SMBUS</div></div>
+      <div><div class="card-title">Power System</div><div class="card-sub">Tattu 6S 10 Ah · Holybro PM07</div></div>
       <span class="chip offline" id="chip-pwr">Offline</span>
     </div>
     <div class="card-metrics">
@@ -516,7 +516,7 @@ body {
   <!-- Lidar + Optical Flow -->
   <div class="card" id="c-range">
     <div class="card-head">
-      <div><div class="card-title">Lidar · Optical Flow</div><div class="card-sub">TF-Mini UART · PMW3901 SPI</div></div>
+      <div><div class="card-title">Lidar · Optical Flow</div><div class="card-sub">Holybro H-Flow · CAN (flow + range)</div></div>
       <span class="chip offline" id="chip-range">Offline</span>
     </div>
     <div class="card-metrics">
@@ -701,7 +701,7 @@ const GO_ITEMS = [
   {id:"go-gps",    name:"GPS Fix"},
   {id:"go-ekf",    name:"EKF Health"},
   {id:"go-batt",   name:"Battery > 30%"},
-  {id:"go-volt",   name:"Voltage > 13V"},
+  {id:"go-volt",   name:"Voltage > 22.2V (3.7 V/cell)"},
   {id:"go-imu",    name:"IMU Sensors"},
   {id:"go-mag",    name:"Compass"},
   {id:"go-rc",     name:"RC Link"},
@@ -837,17 +837,17 @@ function applyData(d) {
 
   // ── Power ────────────────────────────────────────────────────────────────
   const volt=pxOk?(d.voltage||0):0, batt=pxOk&&d.battery!=null?Math.round(d.battery):null;
-  setCard("pwr", !pxOk?"offline":volt>13?"ok":volt>10?"warn":volt>0?"fault":"offline");
-  setVal("pwr-v",    volt?`${volt.toFixed(1)} V`:"--", volt>14?"green":volt>12?"amber":"red");
+  setCard("pwr", !pxOk?"offline":volt>22.2?"ok":volt>21.0?"warn":volt>0?"fault":"offline");      // 6S: 3.7 / 3.5 V per cell
+  setVal("pwr-v",    volt?`${volt.toFixed(1)} V`:"--", volt>22.2?"green":volt>21.6?"amber":"red");
   setVal("pwr-i",    pxOk&&d.current!=null?`${d.current.toFixed(1)} A`:"--", "amber");
-  setVal("pwr-cell", "--");
+  setVal("pwr-cell", volt?`${(volt/6).toFixed(2)} V`:"--", volt/6>3.7?"green":volt/6>3.6?"amber":"red");
   setVal("pwr-pct",  batt!=null?`${batt}%`:"--", batt>50?"green":batt>25?"amber":"red");
   const pwrFill = el("pwr-bar");
   if(pwrFill) pwrFill.style.width=(batt||0)+"%";
   if(pwrFill) pwrFill.className = "bar-fill " + (batt > 50 ? "" : batt > 25 ? "amber" : "red");
   if(el("pwr-barpct")) el("pwr-barpct").textContent = batt!=null?batt+"%":"--";
   setGo("go-batt", !pxOk?"nogo":batt>30?"go":batt>15?"hold":"nogo");
-  setGo("go-volt", !pxOk?"nogo":volt>13?"go":volt>11?"hold":"nogo");
+  setGo("go-volt", !pxOk?"nogo":volt>22.2?"go":volt>21.6?"hold":"nogo");
 
   // ── Lidar ────────────────────────────────────────────────────────────────
   const rng=d.rangefinder, rngOk=rng!=null&&rng>0.05&&rng<12;
@@ -1046,7 +1046,7 @@ window.addEventListener("DOMContentLoaded", () => {
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=3"></script>
+<script src="mission-client.js?v=4"></script>
 <script src="mission-ui.js?v=3"></script>
 </body>
 </html>

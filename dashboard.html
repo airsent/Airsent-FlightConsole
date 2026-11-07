@@ -262,7 +262,7 @@ CPU LOAD: <span id="cpuLoadTop">23%</span>
 </div>
  
 <div class="subbar-item">
-REC: <span>185MB</span>
+REC: <span id="recVal">--</span>
 </div>
  
 <div class="subbar-item console-users-item">
@@ -512,7 +512,7 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
   <div>LAT: <span id="latVal">0.0000°</span></div>
   <div>LON: <span id="lonVal">0.0000°</span></div>
   <div>SPD: <span id="spdVal">0.0 m/s</span></div>
-  <div>LT: <span id="ltVal">0</span></div>
+  <div title="LT = telemetry latency (how old the data is when it reaches the console)">LT: <span id="ltVal">--</span></div>
 </div>
  
 <!-- Body wrapper holds the map + camera views stacked; only one shown at a time -->
@@ -660,7 +660,7 @@ MOTOR OUTPUT AVG / BATTERY CURRENT / VOLTAGE SAG
 </div>
  
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js?v=shared-events-2"></script>
+<script src="script.js?v=fixall-1"></script>
 <script src="shared-events.js?v=1"></script>
 <script src="failsafe-bridge.js"></script>
 <style>
@@ -697,7 +697,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 .signal-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 @media (max-width:720px) { .signal-half {padding:7px 6px;} .signal-half-heading {font-size:9px;letter-spacing:0;} .signal-state {font-size:11px;} .signal-reading {font-size:9px;} }
 </style>
-<script src="telemetry.js?v=shared-events-1"></script>
+<script src="telemetry.js?v=fixall-1"></script>
 <script>
 (function(){
   const REF_W = 2048;
@@ -906,9 +906,9 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   connectDownCam();
 })();
 </script>
-<script src="mission-client.js?v=3"></script>
+<script src="mission-client.js?v=4"></script>
 <script src="mission-ui.js?v=3"></script>
-<script src="failsafe-onboard.js?v=3"></script>
+<script src="failsafe-onboard.js?v=4"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
 </body>

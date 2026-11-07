@@ -447,8 +447,14 @@ function bindTopbarControls() {
   if (telemetryEls.statusSelect) {
     telemetryEls.statusSelect.addEventListener("change", () => {
       if (isRealMode) {
+        const wanted = telemetryEls.statusSelect.value;
         telemetryEls.statusSelect.value = telemetryEls.statusSelect.dataset.confirmedValue || 'disarmed';
-        updateStatusSelectClass();
+        updateStatusSelectClass();                       // shows the real state until telemetry confirms
+        if (isViewerMode || wanted === telemetryEls.statusSelect.value) return;
+        openConfirm(wanted === "armed" ? "ARM the aircraft? Motors will spin at idle." : "DISARM the aircraft? (Refused in flight — use E-STOP there.)", () => {
+          const sent = sendCmd({ action: wanted === "armed" ? "arm" : "disarm" });
+          prependEvent(sent ? `CMD SENT: ${wanted === "armed" ? "ARM" : "DISARM"}` : "CMD FAILED — no link to drone");
+        });
         return;
       }
       updateStatusSelectClass();
@@ -786,20 +792,20 @@ function applyMotorFaultState(pwmVals, outVals) {
 function applyRealModeZeroState() {
   setStatusSelectValue("disarmed");
  
-  if (telemetryEls.topVoltage) telemetryEls.topVoltage.textContent = "0.0V";
-  if (telemetryEls.topCurrent) telemetryEls.topCurrent.textContent = "0.0A";
-  if (telemetryEls.topBattery) telemetryEls.topBattery.textContent = "0%";
-  if (telemetryEls.cpuLoadTop) telemetryEls.cpuLoadTop.textContent = "0%";
+  if (telemetryEls.topVoltage) telemetryEls.topVoltage.textContent = "--V";
+  if (telemetryEls.topCurrent) telemetryEls.topCurrent.textContent = "--A";
+  if (telemetryEls.topBattery) telemetryEls.topBattery.textContent = "--%";
+  if (telemetryEls.cpuLoadTop) telemetryEls.cpuLoadTop.textContent = "--%";
  
   setElementState(telemetryEls.gpsFixTop, "NO FIX", false);
-  if (telemetryEls.satCountTop) telemetryEls.satCountTop.textContent = "0";
+  if (telemetryEls.satCountTop) telemetryEls.satCountTop.textContent = "--";
   setElementState(telemetryEls.ekfTop, "OFFLINE", false);
   setElementState(telemetryEls.linkTop, "NO SIGNAL", false);
  
-  if (telemetryEls.rollVal) telemetryEls.rollVal.textContent = "0.0°";
-  if (telemetryEls.pitchVal) telemetryEls.pitchVal.textContent = "0.0°";
-  if (telemetryEls.headingVal) telemetryEls.headingVal.textContent = "0°";
-  if (telemetryEls.altVal) telemetryEls.altVal.textContent = "0.0 m";
+  if (telemetryEls.rollVal) telemetryEls.rollVal.textContent = "--°";
+  if (telemetryEls.pitchVal) telemetryEls.pitchVal.textContent = "--°";
+  if (telemetryEls.headingVal) telemetryEls.headingVal.textContent = "--°";
+  if (telemetryEls.altVal) telemetryEls.altVal.textContent = "-- m";
   if (telemetryEls.spdVal) telemetryEls.spdVal.textContent = "0.0 m/s";
  
   if (telemetryEls.m1pwm) telemetryEls.m1pwm.textContent = "0";
@@ -848,7 +854,7 @@ function applyRealModeZeroState() {
   if (telemetryEls.latVal) telemetryEls.latVal.textContent = "0.0000°";
   if (telemetryEls.lonVal) telemetryEls.lonVal.textContent = "0.0000°";
  
-  if (telemetryEls.missionDistanceVal) telemetryEls.missionDistanceVal.textContent = "0.0";
+  // mission distance comes from the Jetson session (updateRealMissionCounters)
   if (telemetryEls.ltVal) telemetryEls.ltVal.textContent = "0";
   if (telemetryEls.mapModeVal) telemetryEls.mapModeVal.textContent = "DISCONNECTED";
   if (telemetryEls.positionVal) telemetryEls.positionVal.textContent = "NO DATA";
@@ -941,8 +947,26 @@ if (leafletMapEl && typeof L !== "undefined") {
 /* ---------------------------
    TELEMETRY UPDATE
 ---------------------------- */
+ // Real consoles: mission time, distance and recording size come from the Jetson's ASC
+ // recording session, so every device shows the same numbers.
+function updateRealMissionCounters() {
+  const f = window.airsentMission && window.airsentMission.asc && window.airsentMission.asc.flight;
+  const recEl = document.getElementById("recVal");
+  if (!f) {
+    if (telemetryEls.missionTime) telemetryEls.missionTime.textContent = "--:--:--";
+    if (telemetryEls.missionDistanceVal) telemetryEls.missionDistanceVal.textContent = "--";
+    if (recEl) recEl.textContent = "OFF";
+    return;
+  }
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - f.since));
+  if (telemetryEls.missionTime) telemetryEls.missionTime.textContent = `${pad(Math.floor(secs / 3600))}:${pad(Math.floor((secs % 3600) / 60))}:${pad(secs % 60)}`;
+  if (telemetryEls.missionDistanceVal) telemetryEls.missionDistanceVal.textContent = f.dist_m >= 1000 ? (f.dist_m / 1000).toFixed(2) + " km" : Math.round(f.dist_m) + " m";
+  if (recEl) recEl.textContent = (f.rec_mb || 0).toFixed(1) + " MB";
+}
+
 function updateTelemetry() {
-  if (!missionTimerPaused) {
+  if (isRealMode) { updateRealMissionCounters(); }
+  else if (!missionTimerPaused) {
     missionSeconds++;
   }
  
@@ -950,7 +974,7 @@ function updateTelemetry() {
   const minutes = Math.floor((missionSeconds % 3600) / 60);
   const seconds = missionSeconds % 60;
  
-  if (telemetryEls.missionTime) {
+  if (!isRealMode && telemetryEls.missionTime) {
     telemetryEls.missionTime.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
   }
  
@@ -1236,3 +1260,9 @@ window.addEventListener('airsent-events', event=>{
   renderSharedEvents();
 });
 window.addEventListener('airsent-events-resume',renderSharedEvents);
+
+
+// Real consoles: mission time is the Jetson's (shared) — the local pause / reset buttons do not apply.
+if (isRealMode) {
+  ["missionPauseBtn", "missionResetBtn"].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = "none"; });
+}
