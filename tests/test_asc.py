@@ -35,6 +35,8 @@ class ASCTests(unittest.TestCase):
         self.a = ascmod.ASC(self.tmp.name, cfg, clock=self.clock, real=False)
 
     def tearDown(self):
+        if self.a.post_thread:
+            self.a.post_thread.join(20)
         if self.a.rec:
             self.a.rec.close()
         self.tmp.cleanup()
@@ -136,6 +138,51 @@ class ASCTests(unittest.TestCase):
         old = os.path.join(self.tmp.name, 'old'); os.makedirs(old)
         self.assertEqual(ascmod.make_room(self.tmp.name, 0.001, min_free_gb=0.0005), [])     # plenty of space
         self.assertEqual(ascmod.make_room(self.tmp.name, 10**9, min_free_gb=10**9, protect=[old]), [])   # protected
+
+    def test_live_view_runs_at_standby_and_greys_out_flight_checks(self):
+        self.run_for(1)
+        live = {r[0]: r for r in self.a.snapshot()['live']}
+        self.assertEqual(len(live), len(self.a.checks))           # every check is reported
+        self.assertEqual(live['tilt'][1], -1)                      # flight-only check: inactive on the ground
+        self.assertEqual(live['ekf'][1], 0)                        # always-on check: OK
+        self.assertEqual(self.a.fault_conditions(), {})            # no faults / recording outside a session
+        self.run_for(1, ekf_healthy=False)
+        live = {r[0]: r for r in self.a.snapshot()['live']}
+        self.assertEqual(live['ekf'][1], ascmod.WARN)
+        self.assertIn('EKF', live['ekf'][3])
+        self.assertIn('defs', self.a.snapshot(with_defs=True))
+
+    def test_recording_starts_at_mission_create_and_writes_everything(self):
+        mission = {'stage': 'countdown', 'mission': {'folder': os.path.join(self.tmp.name, 'm1')}}
+        self.run_for(0.5, mission=mission)
+        self.assertIsNotNone(self.a.session)
+        self.a.write_params({'RTL_ALT': 3000, 'FS_THR_ENABLE': 1})
+        self.a.note_command('set_mode', 'Aarav', {'action': 'set_mode', 'mode': 'LOITER', 'request_id': 'x'})
+        self.a.note_command('velocity', 'Aarav', {'vx': 1.5, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+        self.a.note_command('mission_ping', 'Aarav', {})
+        seqs = [e['seq'] for e in self.a.snapshot()['events']]
+        self.assertEqual(seqs, sorted(seqs, reverse=True))
+        self.run_for(3, mission=mission, **self.flying(vib_z=45))
+        self.run_for(4, mission={'stage': 'standby'}, armed=False, alt=0)
+        d = os.path.join(self.tmp.name, 'm1', 'asc')
+        for _ in range(100):                                       # post-processing runs in a thread
+            if os.path.exists(os.path.join(d, 'charts', 'checks_timeline.png')):
+                break
+            import time; time.sleep(0.1)
+        files = set(os.listdir(d))
+        for f in ('summary.json', 'samples.jsonl.gz', 'samples.csv', 'telemetry_full.jsonl.gz', 'events.jsonl',
+                  'controls.jsonl.gz', 'params_start.json', 'focus.jsonl.gz', 'charts'):
+            self.assertIn(f, files)
+        self.assertIn('altitude.png', os.listdir(os.path.join(d, 'charts')))
+        self.assertIn('checks_timeline.png', os.listdir(os.path.join(d, 'charts')))
+        events = [json.loads(x)['msg'] for x in open(os.path.join(d, 'events.jsonl'))]
+        self.assertTrue(any("Aarav: set_mode {'mode': 'LOITER'}" in e for e in events))
+        self.assertFalse(any('mission_ping' in e for e in events))
+        with gzip.open(os.path.join(d, 'controls.jsonl.gz'), 'rt') as f:
+            self.assertEqual(json.loads(f.readline())['vx'], 1.5)
+        self.assertEqual(json.load(open(os.path.join(d, 'params_start.json')))['params']['RTL_ALT'], 3000)
+        header = open(os.path.join(d, 'samples.csv')).readline()
+        self.assertTrue(header.startswith('t,') and 'voltage' in header)
 
 
 if __name__ == '__main__':

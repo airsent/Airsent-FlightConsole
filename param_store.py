@@ -76,6 +76,11 @@ class ParamStore:
                     out[n] = int(round(v['value'])) if v['type'] in INT_TYPES else round(v['value'], 6)
         return out
 
+    def all(self):
+        """Every parameter seen so far: {name: value}."""
+        with self._cond:
+            return {n: (int(round(v['value'])) if v['type'] in INT_TYPES else round(v['value'], 6)) for n, v in self.values.items()}
+
     def _wait_for(self, names, since, timeout):
         end = self.clock() + timeout
         with self._cond:
