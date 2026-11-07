@@ -1,0 +1,134 @@
+/* mission-ui.css — shared launch-sequencer widgets (dialogs, overlay, faults, chips). */
+:root {
+  --msn-bg: #060d14; --msn-bg2: #0a1520; --msn-line: rgba(0,180,255,.18);
+  --msn-text: #e8f4ff; --msn-dim: #6f8ba3; --msn-cyan: #00c8ff; --msn-green: #00e383;
+  --msn-amber: #ffb800; --msn-red: #ff3355; --msn-grey: #4d6478;
+  --msn-mono: 'Share Tech Mono', ui-monospace, Menlo, monospace;
+}
+.msn-hidden { display: none !important; }
+
+/* ── status colours ───────────────────────────────────────────── */
+.msn-pass { color: var(--msn-green); } .msn-warn { color: var(--msn-amber); }
+.msn-fail { color: var(--msn-red); }   .msn-pending { color: var(--msn-grey); }
+@keyframes msn-blink { 0%,55% { opacity: 1; } 56%,100% { opacity: .25; } }
+@keyframes msn-flash { 0%,100% { box-shadow: 0 0 0 0 rgba(255,51,85,.0); } 50% { box-shadow: 0 0 0 3px rgba(255,51,85,.55); } }
+.msn-blink { animation: msn-blink 1s steps(1) infinite; }
+
+/* ── overlay bar on every other page ──────────────────────────── */
+.msn-overlay {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 10050;
+  display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 8px 0 14px;
+  background: rgba(6,13,20,.96); border: 1px solid var(--msn-line); border-top: none;
+  border-radius: 0 0 6px 6px; font: 11px var(--msn-mono); color: var(--msn-text);
+  box-shadow: 0 6px 24px rgba(0,0,0,.6); cursor: pointer; letter-spacing: .5px; max-width: 96vw;
+}
+.msn-overlay.held { border-color: var(--msn-red); background: rgba(40,6,12,.96); }
+.msn-overlay .msn-ov-name { color: var(--msn-dim); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msn-overlay .msn-ov-clock { font-size: 15px; color: var(--msn-cyan); }
+.msn-overlay.held .msn-ov-clock { color: var(--msn-red); }
+.msn-overlay .msn-ov-stage { padding: 1px 7px; border: 1px solid currentColor; border-radius: 3px; font-size: 10px; }
+.msn-overlay .msn-ov-reason { color: #ff9aa8; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── buttons ──────────────────────────────────────────────────── */
+.msn-btn {
+  font: 10px var(--msn-mono); letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  height: 24px; padding: 0 10px; border-radius: 3px; border: 1px solid var(--msn-line);
+  background: var(--msn-bg2); color: var(--msn-text); white-space: nowrap;
+}
+.msn-btn:hover:not(:disabled) { border-color: var(--msn-cyan); }
+.msn-btn:disabled { opacity: .35; cursor: not-allowed; }
+.msn-btn.go { border-color: rgba(0,227,131,.5); color: var(--msn-green); background: rgba(0,227,131,.08); }
+.msn-btn.hold { border-color: rgba(255,184,0,.5); color: var(--msn-amber); background: rgba(255,184,0,.07); }
+.msn-btn.abort { border-color: rgba(255,51,85,.6); color: #fff; background: rgba(255,51,85,.85); font-weight: 700; }
+.msn-btn.abort:hover:not(:disabled) { background: #ff1840; border-color: #fff; }
+
+/* ── pilot top-bar chip ───────────────────────────────────────── */
+.msn-chip {
+  display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; margin-right: 8px;
+  border: 1px solid var(--msn-line); background: rgba(10,14,21,.88); font: 10px var(--msn-mono);
+  color: var(--msn-dim); letter-spacing: 1px; cursor: pointer; flex-shrink: 0; text-decoration: none;
+}
+.msn-chip .msn-chip-clock { color: var(--msn-cyan); font-size: 13px; letter-spacing: .5px; }
+.msn-chip.held { border-color: var(--msn-red); }
+.msn-chip.held .msn-chip-clock { color: var(--msn-red); }
+.msn-chip-abort { height: 28px; margin-right: 8px; }
+
+/* ── fault badge + panel (pilot / overlay) ────────────────────── */
+.msn-fault-badge {
+  position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; margin-right: 8px;
+  border: 1px solid var(--msn-line); background: rgba(10,14,21,.88); color: var(--msn-dim);
+  font: 10px var(--msn-mono); letter-spacing: 1px; cursor: pointer; flex-shrink: 0;
+}
+.msn-fault-badge b { color: var(--msn-text); font-weight: 400; }
+.msn-fault-badge.has-warn { border-color: rgba(255,184,0,.6); color: var(--msn-amber); }
+.msn-fault-badge.has-critical { border-color: var(--msn-red); color: var(--msn-red); background: rgba(255,51,85,.1); }
+.msn-fault-badge.unacked { animation: msn-flash 1s ease-in-out infinite; }
+.msn-fault-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 92vw); z-index: 10060;
+  background: var(--msn-bg); border-left: 1px solid var(--msn-line); box-shadow: -12px 0 40px rgba(0,0,0,.7);
+  display: flex; flex-direction: column; transform: translateX(105%); transition: transform .18s ease;
+  font: 12px var(--msn-mono); color: var(--msn-text);
+}
+.msn-fault-panel.open { transform: none; }
+.msn-fp-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--msn-line); }
+.msn-fp-head h3 { margin: 0; flex: 1; font: 12px var(--msn-mono); letter-spacing: 2px; color: var(--msn-cyan); }
+.msn-fp-body { flex: 1; overflow-y: auto; padding: 8px 10px 16px; }
+.msn-fp-section { margin: 12px 4px 6px; font-size: 9px; letter-spacing: 2px; color: var(--msn-dim); }
+.msn-fault {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: start;
+  padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--msn-line); border-left-width: 3px; background: var(--msn-bg2);
+}
+.msn-fault.critical { border-left-color: var(--msn-red); }
+.msn-fault.warning { border-left-color: var(--msn-amber); }
+.msn-fault.info { border-left-color: var(--msn-cyan); }
+.msn-fault.cleared { opacity: .5; border-left-color: var(--msn-grey); }
+.msn-sev { font-size: 9px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; }
+.msn-sev.critical { background: var(--msn-red); color: #fff; }
+.msn-sev.warning { background: var(--msn-amber); color: #000; }
+.msn-sev.info { background: var(--msn-cyan); color: #000; }
+.msn-sev.cleared { background: var(--msn-grey); color: #000; }
+.msn-fault-msg { font-size: 11px; line-height: 1.35; }
+.msn-fault-meta { grid-column: 2 / 4; font-size: 9px; color: var(--msn-dim); }
+.msn-ack { height: 20px; font-size: 9px; padding: 0 7px; }
+.msn-empty { padding: 18px 8px; color: var(--msn-dim); font-size: 11px; text-align: center; }
+
+/* ── dashboard fault panel additions ──────────────────────────── */
+.fault-panel-item .msn-fault-src { font-size: 9px; opacity: .6; margin-right: 4px; }
+.fault-panel-item.acked { opacity: .65; }
+.fault-panel-item .fault-ack-btn {
+  margin-left: auto; font: 9px var(--msn-mono); letter-spacing: .5px; padding: 1px 6px; cursor: pointer;
+  background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 2px;
+}
+.fault-panel-item .fault-acked-by { margin-left: auto; font-size: 9px; opacity: .7; white-space: nowrap; }
+
+/* ── dialogs ──────────────────────────────────────────────────── */
+.msn-dialog-back { position: fixed; inset: 0; z-index: 10070; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; }
+.msn-dialog {
+  width: min(440px, 94vw); background: var(--msn-bg); border: 1px solid var(--msn-line); border-radius: 6px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.8); font: 12px var(--msn-mono); color: var(--msn-text); padding: 18px 20px;
+}
+.msn-dialog h3 { margin: 0 0 4px; font: 14px var(--msn-mono); letter-spacing: 2px; color: var(--msn-cyan); }
+.msn-dialog p { margin: 0 0 14px; color: var(--msn-dim); font-size: 11px; line-height: 1.45; }
+.msn-dialog label { display: block; margin: 10px 0 4px; font-size: 9px; letter-spacing: 1.5px; color: var(--msn-dim); }
+.msn-dialog input, .msn-dialog select {
+  width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; background: var(--msn-bg2); color: var(--msn-text);
+  border: 1px solid var(--msn-line); border-radius: 3px; font: 13px var(--msn-mono); outline: none;
+}
+.msn-dialog input:focus, .msn-dialog select:focus { border-color: var(--msn-cyan); }
+.msn-dialog .msn-row { display: flex; gap: 10px; } .msn-dialog .msn-row > div { flex: 1; }
+.msn-dialog .msn-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.msn-dialog .msn-actions .msn-btn { height: 34px; padding: 0 16px; font-size: 11px; }
+.msn-dialog .msn-error { min-height: 16px; margin-top: 10px; color: var(--msn-red); font-size: 11px; }
+.msn-dialog.danger { border-color: rgba(255,51,85,.6); }
+.msn-dialog.danger h3 { color: var(--msn-red); }
+
+/* ── toast ────────────────────────────────────────────────────── */
+.msn-toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 10080; max-width: 80vw;
+  padding: 10px 16px; background: var(--msn-bg); border: 1px solid var(--msn-line); border-radius: 4px;
+  font: 12px var(--msn-mono); color: var(--msn-text); box-shadow: 0 8px 30px rgba(0,0,0,.7);
+}
+.msn-toast.err { border-color: var(--msn-red); color: #ffb3bf; }
+.msn-toast.alert { border-color: var(--msn-red); background: #2a0710; color: #fff; top: 40px; bottom: auto; }
+
+#faultCounter.msn-unacked { animation: msn-flash 1s ease-in-out infinite; }
