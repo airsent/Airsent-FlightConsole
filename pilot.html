@@ -761,7 +761,7 @@ function showPrearm(){
   st('pa-ekf',S.ekf_healthy,false,S.ekf_healthy?'HEALTHY':'DEGRADED');
   st('pa-batt',S.battery>50,S.battery>25,S.battery>0?S.battery+'%':'NO DATA');
   st('pa-link',telemConnected,false,telemConnected?'LINKED':'OFFLINE');
-  st('pa-lidar',S.rangefinder>0,false,S.rangefinder>0?S.rangefinder.toFixed(2)+'m':'NO DATA');
+  st('pa-lidar',S.rangefinder>0,false,S.rangefinder>0?(S.rangefinder_agl??S.rangefinder).toFixed(2)+'m':'NO DATA');
   st('pa-cam',camConnected,false,camConnected?'LIVE':'OFFLINE');
   st('pa-downcam',downcamConnected,false,downcamConnected?'LIVE':'OFFLINE');
 }
@@ -1007,7 +1007,7 @@ function connectTelem(){
         S.rssi=d.rssi??S.rssi; S.armed=d.armed??S.armed; S.flight_mode=d.flight_mode??S.flight_mode;
         S.ekf_healthy=d.pixhawk_connected===false?false:(d.ekf_healthy??S.ekf_healthy);
         S.m1=d.m1??S.m1; S.m2=d.m2??S.m2; S.m3=d.m3??S.m3; S.m4=d.m4??S.m4;
-        S.rangefinder=d.rangefinder??S.rangefinder;
+        S.rangefinder=d.rangefinder??S.rangefinder; S.rangefinder_agl=d.rangefinder_agl??S.rangefinder_agl;
         if(d.pixhawk_connected===false){
           S.roll=0;S.pitch=0;S.voltage=0;S.current=0;S.battery=0;
           S.rssi=0;S.sats=0;S.fix_type='NO FIX';S.armed=false;
@@ -1020,7 +1020,7 @@ function connectTelem(){
         }
         if(d.detection_active !== undefined) applyDetectionState(!!d.detection_active);
         const lidarValid=S.rangefinder>0.05&&S.rangefinder<12;
-        S.alt=lidarValid?S.rangefinder:(d.alt??S.alt);
+        S.alt=lidarValid?(S.rangefinder_agl??S.rangefinder):(d.alt??S.alt);
         E('altSrc').textContent=lidarValid?'LiDAR':'BARO';
         E('altSrc').className='alt-src '+(lidarValid?'lidar':'baro');
         if(S.spd>1){windEstDeg=Math.round((S.yaw+180)%360);windEstSpd=Math.max(0,Math.abs(S.spd-prevSpd)*10).toFixed(1);}
@@ -1490,7 +1490,7 @@ function updateUI(){
   E('tsEkf').className='ts-val '+(S.ekf_healthy?'ok':'err');
   E('tsRoll').textContent=fmt1(S.roll)+'°';
   E('tsPitch').textContent=fmt1(S.pitch)+'°';
-  E('tsLidar').textContent=S.rangefinder>0?S.rangefinder.toFixed(2)+' m':'-- m';
+  E('tsLidar').textContent=S.rangefinder>0?(S.rangefinder_agl??S.rangefinder).toFixed(2)+' m':'-- m';
   E('tsLidar').className='ts-val '+(S.rangefinder>0&&S.rangefinder<12?'ok':'');
   const vibAvg=vibHistory.length?Math.round(vibHistory.reduce((a,b)=>a+b,0)/vibHistory.length):0;
   const vibTxt=vibAvg<5?'LOW':vibAvg<15?'MED':'HIGH';
@@ -1508,7 +1508,7 @@ function updateUI(){
     const p=[p1,p2,p3,p4][i];
     E(id).style.width=p+'%'; E(id).className='ts-mfill'+(p>80?' hot':'');
   });
-  E('downcamRange').textContent=S.rangefinder>0?S.rangefinder.toFixed(2)+' m':'-- m';
+  E('downcamRange').textContent=S.rangefinder>0?(S.rangefinder_agl??S.rangefinder).toFixed(2)+' m':'-- m';
   E('downcamTelem').textContent=`ALT ${altD}${altU()} · ROLL ${fmt1(S.roll)}° · PITCH ${fmt1(S.pitch)}°`;
   drawHUD(); drawDowncam(); drawAltProfile(); drawWind();
 }

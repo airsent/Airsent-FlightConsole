@@ -50,6 +50,7 @@ STREAM_H      = 480           # 4:3 to match (was 360); preview path is idle.
 # frames at the same bitrate (more bits per frame). These are the main levers
 # to trade motion smoothness for CPU headroom / picture quality on this board.
 FRONTCAM_FPS  = 30           # pilot-view (OAK-D) RTMP framerate. Was 30.
+RNG_GND_CLEAR_M = 0.30       # H-Flow height above ground when landed (matches RNGFND1_GNDCLEAR)
 DOWNCAM_FPS   = 15           # down-cam capture + RTMP + WS preview. Was 30.
                              # NOTE: AprilTag precision-landing detection runs
                              # separately at 5 fps and is NOT affected by this.
@@ -506,6 +507,11 @@ def mavlink_reader():
                 elif t == 'RANGEFINDER':
                     telem['rangefinder'] = round(msg.distance, 2)
                     _sensor_ts['rangefinder'] = time.time()
+                elif t == 'DISTANCE_SENSOR' and getattr(msg, 'orientation', 25) == 25:
+                    # ArduPilot 4.6 sends DroneCAN rangefinders (H-Flow) as DISTANCE_SENSOR, not RANGEFINDER
+                    telem['rangefinder'] = round(msg.current_distance / 100.0, 2)   # raw distance (0 = no data, UI relies on this)
+                    telem['rangefinder_agl'] = round(max(0.0, msg.current_distance / 100.0 - RNG_GND_CLEAR_M), 2)   # height above ground, display only
+                    _sensor_ts['rangefinder'] = time.time()
                 elif t == 'OPTICAL_FLOW':
                     telem['of_quality'] = msg.quality
                     telem['of_flow_x']  = round(msg.flow_comp_m_x, 3)
@@ -894,6 +900,7 @@ def build_telemetry_payload():
                    or of_offline)
     if rng_offline:
         payload['rangefinder'] = 0
+        payload['rangefinder_agl'] = None
     if of_offline:
         payload['of_quality'] = 0
         payload['of_flow_x']  = 0.0
@@ -1350,99 +1357,161 @@ def cam_rtmp_thread():
         time.sleep(3)
 
 
-# ── Down camera RTMP → VPS ──────────────────────────────────────────────────
-# Reads frames from downcam_raw (full 720p BGR, written by downcam_capture_thread)
-# and pushes H.264 RTMP to the VPS. MediaMTX re-serves it as WebRTC via WHEP
-# at rtmp://165.22.210.225:1935/downcam → ws://165.22.210.225:8889/downcam/whep
+# ── Down camera → VPS: GStreamer x264 → SRT, adaptive bitrate (front cam has priority) ──
+downcam_bitrate_kbps = 0
+
 def downcam_rtmp_thread():
-    W, H, FPS  = STREAM_W, STREAM_H, 10
-    VPS_RTMP   = f"rtmp://{RTMP_HOST}:{RTMP_PORT}/downcam"
+    """downcam_raw frames → resize to STREAM_WxSTREAM_H → x264enc (live bitrate) → MPEG-TS → SRT → VPS 'downcam'.
+    ABR ceiling follows the front cam's bitrate so the pilot view always keeps priority on the uplink."""
+    import gi
+    gi.require_version('Gst', '1.0')
+    from gi.repository import Gst
+    Gst.init(None)
+    global downcam_bitrate_kbps
+
+    W, H, FPS      = STREAM_W, STREAM_H, DOWNCAM_FPS
+    SRT_LATENCY_MS = 150
+    BR_MIN, BR_MAX = 400, 3000      # kbps
+    BR_START       = 1000
+    STEP_UP        = 250
+    DOWN_FACTOR    = 0.7
+    CLEAN_SECS     = 3
+    LOSS_LIMIT     = 0.02
+    uri            = f"srt://{RTMP_HOST}:8890"
+    STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms')
+
+    def ceiling():
+        fb = globals().get('frontcam_bitrate_kbps', 0) or 0
+        if fb == 0 or fb >= 6000: return BR_MAX     # front idle or link healthy
+        if fb >= 3000:            return 1500
+        return 600                                  # link struggling: pilot view first
+
+    def build():
+        desc = (
+            f'appsrc name=src is-live=true format=time do-timestamp=true block=false '
+            f'caps=video/x-raw,format=BGR,width={W},height={H},framerate={FPS}/1 ! '
+            f'queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! '
+            f'videoconvert ! video/x-raw,format=I420 ! '
+            f'x264enc name=enc tune=zerolatency speed-preset=ultrafast bitrate={BR_START} '
+            f'key-int-max={FPS} vbv-buf-capacity=1000 threads=2 ! '
+            f'h264parse config-interval=-1 ! mpegtsmux alignment=7 ! '
+            f'srtsink name=sink uri="{uri}" streamid="publish:downcam" latency={SRT_LATENCY_MS} '
+            f'wait-for-connection=false sync=false async=false'
+        )
+        return Gst.parse_launch(desc)
+
+    def read_stats(sink):
+        out = {}
+        try:
+            s = sink.get_property('stats')
+        except Exception:
+            return out
+        if s is None:
+            return out
+        for k in STAT_KEYS:
+            try:
+                if s.has_field(k):
+                    out[k] = float(s.get_value(k))
+            except Exception:
+                pass
+        return out
 
     while True:
-        # Wait until downcam_capture_thread is producing frames
         with downcam_lock:
             ready = downcam_raw['frame'] is not None
         if not ready:
             time.sleep(2)
             continue
         if not rtmp_port_reachable():
-            print("[RTMP-DOWN] VPS RTMP port unreachable — retrying in 3s")
+            print("[SRT-DOWN] VPS unreachable — retrying in 3s")
             time.sleep(3)
             continue
 
-        proc = None
+        pipe = None
         try:
-            cmd = [
-                'ffmpeg', '-y', '-loglevel', 'warning',
-                '-f', 'rawvideo', '-pix_fmt', 'bgr24',
-                '-s', f'{W}x{H}', '-r', str(FPS),
-                '-i', 'pipe:0',
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-threads', '1',
-                # Keep the down cam light so RTMP cannot starve MAVLink/telemetry
-                # relays on the same Jetson uplink. AprilTag landing still reads
-                # the full raw frame locally, before this encode.
-                '-b:v', '700k', '-maxrate', '900k', '-bufsize', '1200k',
-                '-g', str(FPS),
-                '-f', 'flv', VPS_RTMP
-            ]
-            # stderr -> our stdout so any ffmpeg complaint is visible in the
-            # server log instead of dying silently (was DEVNULL before).
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=None,
-                bufsize=0
-            )
-            print(f"[RTMP-DOWN] Streaming down cam → {VPS_RTMP}")
+            pipe = build()
+            src  = pipe.get_by_name('src')
+            enc  = pipe.get_by_name('enc')
+            sink = pipe.get_by_name('sink')
+            bus  = pipe.get_bus()
+            pipe.set_state(Gst.State.PLAYING)
+            print(f"[SRT-DOWN] Streaming down cam → {uri} streamid=publish:downcam | {W}x{H}@{FPS} ABR {BR_MIN}-{BR_MAX} kbps")
 
-            interval   = 1.0 / FPS
-            last_sent  = 0.0
-            last_frame = None
+            br, clean, rtt_base, prev = BR_START, 0, None, None
+            downcam_bitrate_kbps = br
+            pushed, ctl_n = 0, 0
+            interval, last_sent, last_frame, last_ctl = 1.0 / FPS, 0.0, None, time.time()
 
             while True:
-                if proc.poll() is not None:
-                    print("[RTMP-DOWN] ffmpeg exited — reconnecting in 3s")
+                msg = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
+                if msg:
+                    if msg.type == Gst.MessageType.ERROR:
+                        err, _dbg = msg.parse_error()
+                        print(f"[SRT-DOWN] Pipeline error: {err.message} — reconnecting in 3s")
+                    else:
+                        print("[SRT-DOWN] EOS — reconnecting in 3s")
                     break
 
                 now = time.time()
-                if now - last_sent < interval:
-                    time.sleep(0.005)
-                    continue
 
+                # ── ABR controller (1 Hz) ──
+                if now - last_ctl >= 1.0:
+                    last_ctl = now
+                    ctl_n += 1
+                    if ctl_n % 5 == 0:
+                        print(f"[SRT-DOWN-FPS] pushing {pushed/5:.1f} fps @ {br} kbps (cap {ceiling()})")
+                        pushed = 0
+                    st = read_stats(sink)
+                    if prev is not None and 'packets-sent' in st:
+                        d_sent = st['packets-sent'] - prev.get('packets-sent', 0)
+                        d_bad  = sum(st.get(k, 0) - prev.get(k, 0) for k in ('packets-retransmitted', 'packets-sent-dropped'))
+                        loss   = (d_bad / d_sent) if d_sent > 0 else 0.0
+                        rtt    = st.get('rtt-ms', 0.0)
+                        if rtt > 0:
+                            rtt_base = rtt if rtt_base is None else min(rtt, rtt_base + 0.5)
+                        rtt_spike = bool(rtt_base) and rtt > max(rtt_base * 2, rtt_base + 80)
+                        cap = ceiling()
+                        new = br
+                        if loss > LOSS_LIMIT or rtt_spike:
+                            new, clean = max(BR_MIN, int(br * DOWN_FACTOR)), 0
+                        else:
+                            clean += 1
+                            if clean >= CLEAN_SECS:
+                                new, clean = br + STEP_UP, 0
+                        new = max(BR_MIN, min(new, cap))
+                        if new != br:
+                            enc.set_property('bitrate', new)
+                            print(f"[SRT-DOWN-ABR] {br} → {new} kbps | rtt {rtt:.0f}ms (base {rtt_base or 0:.0f}) loss {loss*100:.1f}% cap {cap}")
+                            br = new
+                            downcam_bitrate_kbps = br
+                    prev = st
+
+                # ── push newest frame at FPS ──
+                if now - last_sent < interval:
+                    time.sleep(0.003)
+                    continue
                 with downcam_lock:
                     frame = downcam_raw['frame']
-
-                if frame is None:
-                    time.sleep(0.05)
+                if frame is None or frame is last_frame:
+                    time.sleep(0.003)
                     continue
-
-                if frame is last_frame:
-                    time.sleep(0.005)
-                    continue
-
-                try:
-                    rtmp_frame = cv2.resize(frame, (W, H), interpolation=cv2.INTER_AREA)
-                    proc.stdin.write(rtmp_frame.tobytes())
-                    last_frame = frame
-                    last_sent  = now
-                except BrokenPipeError:
-                    print("[RTMP-DOWN] Pipe broken — reconnecting")
+                out = frame if (frame.shape[0] == H and frame.shape[1] == W) else cv2.resize(frame, (W, H), interpolation=cv2.INTER_AREA)
+                ret = src.emit('push-buffer', Gst.Buffer.new_wrapped(out.tobytes()))
+                if ret != Gst.FlowReturn.OK:
+                    print(f"[SRT-DOWN] push-buffer returned {ret} — reconnecting in 3s")
                     break
+                last_frame, last_sent = frame, now
+                pushed += 1
 
         except Exception as e:
-            print(f"[RTMP-DOWN] Error: {e}")
+            print(f"[SRT-DOWN] Error: {e}")
+            traceback.print_exc()
         finally:
-            if proc:
+            if pipe is not None:
                 try:
-                    proc.terminate()
-                    proc.wait(timeout=2)
+                    pipe.set_state(Gst.State.NULL)
                 except Exception:
-                    try: proc.kill()
-                    except: pass
+                    pass
         time.sleep(3)
 
 

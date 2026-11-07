@@ -701,7 +701,7 @@ function applyTelemetry(data) {
     pushBuffer("alt", data.alt);
   }
   if (data.rangefinder !== undefined) {
-    setText("lidarAltVal", data.rangefinder.toFixed(2) + " m");
+    setText("lidarAltVal", (data.rangefinder_agl ?? data.rangefinder).toFixed(2) + " m");
   }
 
   if (data.spd !== undefined) setText("spdVal", data.spd.toFixed(1) + " m/s");
