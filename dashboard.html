@@ -142,6 +142,12 @@ body.dashboard-fixed .events-panel .panel-action-group.events-icons{display:flex
 body.dashboard-fixed .events-icons .panel-action-btn{width:28px!important;min-width:28px!important;height:22px!important;padding:0!important;font-size:13px!important;line-height:20px;
   background:#0c1822!important;color:#9be5ff!important;border:1px solid rgba(127,220,255,.25)!important;letter-spacing:0!important}
 body.dashboard-fixed .events-icons .panel-action-btn:hover{border-color:#9be5ff!important;color:#fff!important}
+/* Failsafe box: every onboard failsafe, scrollable inside the same box (no scrollbar). */
+body.dashboard-fixed .failsafe-list.fso-list{display:flex!important;flex-direction:column;flex:1 1 auto;min-height:0!important;overflow-y:auto;scrollbar-width:none;grid-template-rows:none!important}
+body.dashboard-fixed .failsafe-list.fso-list::-webkit-scrollbar{display:none;width:0}
+body.dashboard-fixed .fso-list .failsafe-row{grid-template-columns:minmax(0,1fr) auto!important;gap:6px!important;flex:0 0 auto;min-height:clamp(30px, calc(26px * var(--dashboard-row-scale, 1)), 40px)}
+body.dashboard-fixed .fso-list .failsafe-row>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.dashboard-fixed .fso-list .fso-pill{min-width:64px;padding:0 7px;min-height:clamp(28px, calc(24px * var(--dashboard-row-scale, 1)), 36px);display:flex;align-items:center;justify-content:center;font-size:clamp(11px, calc(11px * var(--dashboard-row-scale, 1)), 14px)}
 /* Events log still scrolls (wheel / trackpad / touch), just without the white scrollbar. */
 body.dashboard-fixed .events-panel{scrollbar-width:none;-ms-overflow-style:none}
 body.dashboard-fixed .events-panel::-webkit-scrollbar{display:none;width:0;height:0}
@@ -902,6 +908,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 </script>
 <script src="mission-client.js?v=1"></script>
 <script src="mission-ui.js?v=1"></script>
+<script src="failsafe-onboard.js?v=1"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
 </body>
