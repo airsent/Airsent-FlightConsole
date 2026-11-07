@@ -300,6 +300,7 @@ const PARAMS = [
   { name:'COMPASS_MOTCT',  cat:'Compass',     def:0,     unit:'',     range:[0,2],     desc:'Motor interference compensation type.', options:[{val:0,label:'Disabled'},{val:1,label:'Throttle'},{val:2,label:'Current'}] },
   // Arming
   { name:'ARMING_CHECK',   cat:'Arming',      def:1,     unit:'',     range:[0,16383], desc:'Bitmask of pre-arm checks. 1=All, 0=None. CAUTION: disabling checks is dangerous.' },
+  { name:'ARMING_SKIPCHK', cat:'Arming',      def:0,     unit:'',     range:[0,1048575], desc:'Newer ArduPilot: bitmask of arming checks to SKIP. 0 = none skipped (every check runs). Replaces ARMING_CHECK.' },
   { name:'ARMING_MIN_VOLT',cat:'Arming',      def:0,     unit:'V',    range:[0,20],    desc:'Minimum battery voltage to allow arming. 0=disabled.' },
   { name:'ARMING_REQUIRE', cat:'Arming',      def:1,     unit:'',     range:[0,2],     desc:'Arming method required.', options:[{val:0,label:'Disabled'},{val:1,label:'Arm switch'},{val:2,label:'Rudder'}] },
   // Flight modes
@@ -311,11 +312,14 @@ const PARAMS = [
   { name:'FLTMODE6',       cat:'Flight Modes',def:9,     unit:'',     range:[0,27],    desc:'Flight mode for RC channel 5 position 6.' },
   // Speed / Nav
   { name:'WPNAV_SPEED',    cat:'Navigation',  def:500,   unit:'cm/s', range:[20,2000], desc:'Horizontal speed for AUTO/GUIDED mode waypoint navigation.' },
+  { name:'WP_SPD',         cat:'Navigation',  def:5,     unit:'m/s',  range:[0.2,20],  desc:'Newer ArduPilot: horizontal speed for AUTO/GUIDED waypoints. Replaces WPNAV_SPEED.' },
   { name:'WPNAV_SPEED_UP', cat:'Navigation',  def:250,   unit:'cm/s', range:[10,1000], desc:'Maximum climb speed in AUTO mode.' },
   { name:'WPNAV_SPEED_DN', cat:'Navigation',  def:150,   unit:'cm/s', range:[10,500],  desc:'Maximum descent speed in AUTO mode.' },
   { name:'WPNAV_ACCEL',    cat:'Navigation',  def:250,   unit:'cm/s²',range:[50,500],  desc:'Horizontal acceleration used in AUTO/GUIDED modes.' },
   { name:'RTL_ALT',        cat:'Navigation',  def:1500,  unit:'cm',   range:[200,8000],desc:'Return to launch altitude. Vehicle climbs to this before returning.' },
+  { name:'RTL_ALT_M',      cat:'Navigation',  def:15,    unit:'m',    range:[2,120],   desc:'Newer ArduPilot: return-to-launch altitude in metres. Replaces RTL_ALT (cm).' },
   { name:'RTL_SPEED',      cat:'Navigation',  def:0,     unit:'cm/s', range:[0,2000],  desc:'RTL horizontal speed. 0=use WPNAV_SPEED.' },
+  { name:'RTL_SPEED_MS',   cat:'Navigation',  def:0,     unit:'m/s',  range:[0,20],    desc:'Newer ArduPilot: RTL horizontal speed in m/s, 0 = waypoint speed. Replaces RTL_SPEED (cm/s).' },
   { name:'LAND_SPEED',     cat:'Navigation',  def:50,    unit:'cm/s', range:[20,200],  desc:'Descent speed during final landing phase.' },
   // RC
   { name:'RC_SPEED',       cat:'RC',          def:490,   unit:'Hz',   range:[50,490],  desc:'PWM refresh rate for servos/ESCs.' },

@@ -3,6 +3,11 @@
 Rules per parameter: {"value": x} (exact, small tolerance), {"min": a, "max": b},
 or {"in": [a, b, ...]}. A parameter must have been read from the aircraft
 within FRESH seconds to count; missing or stale values are never treated as OK.
+
+Newer ArduPilot renamed some parameters. A rule can list the new name(s) with their
+own rule under "alt", e.g. "ARMING_CHECK": {"value": 1, "alt": {"ARMING_SKIPCHK": {"value": 0}}};
+whichever the Pixhawk has is checked. A name the Pixhawk never answers for
+(within ABSENT_AFTER seconds of asking) is reported as not on this Pixhawk.
 """
 import json
 import math
@@ -11,6 +16,7 @@ import time
 from pathlib import Path
 
 FRESH = 120.0
+ABSENT_AFTER = 30.0
 
 
 def _name(msg):
@@ -33,13 +39,17 @@ class GoldenParams:
             self.available = False
         for name, rule in (extra or {}).items():
             self.rules[name] = rule
+        self.asked_at = None
 
     def names(self):
-        return list(self.rules)
+        out = list(self.rules)
+        for rule in self.rules.values():
+            out += [n for n in (rule.get('alt') or {}) if n not in out]
+        return out
 
     def observe(self, msg):
         name = _name(msg)
-        if name not in self.rules:
+        if name not in self.names():
             return
         value = float(msg.param_value)
         if not math.isfinite(value):
@@ -49,7 +59,9 @@ class GoldenParams:
 
     def request(self, mav, only_stale=True):
         now = self.clock()
-        for name in self.rules:
+        if self.asked_at is None:
+            self.asked_at = now
+        for name in self.names():
             seen = self.values.get(name)
             if only_stale and seen and now - seen[1] < FRESH / 2:
                 continue
@@ -58,6 +70,7 @@ class GoldenParams:
     def reset(self):
         with self.lock:
             self.values.clear()
+            self.asked_at = None
 
     @staticmethod
     def matches(value, rule):
@@ -84,13 +97,19 @@ class GoldenParams:
         diffs, missing, values = [], [], {}
         with self.lock:
             for name, rule in self.rules.items():
-                seen = self.values.get(name)
-                if not seen or now - seen[1] > FRESH:
-                    missing.append(name)
+                options = [(name, rule)] + list((rule.get('alt') or {}).items())
+                hit = next(((n, r, self.values[n][0]) for n, r in options
+                            if n in self.values and now - self.values[n][1] <= FRESH), None)
+                if hit is None:
+                    if self.asked_at is not None and now - self.asked_at > ABSENT_AFTER:
+                        diffs.append(f"{' / '.join(n for n, _ in options)} not on this Pixhawk (renamed in newer ArduPilot?)")
+                    else:
+                        missing.append(name)
                     continue
-                values[name] = seen[0]
-                if not self.matches(seen[0], rule):
-                    diffs.append(f"{name}={seen[0]:g} (approved {self.describe(rule)})")
+                n, r, v = hit
+                values[n] = v
+                if not self.matches(v, r):
+                    diffs.append(f"{n}={v:g} (approved {self.describe(r)})")
         if diffs:
             state = 'diff'
         elif missing:
