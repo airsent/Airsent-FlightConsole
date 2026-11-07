@@ -190,6 +190,26 @@ class ParamsAndModes(unittest.TestCase):
         self.assertTrue(run('set_mode', mode='LOITER')['ok'])
         self.assertTrue(run('set_mode', mode='ALTHOLD')['ok'])
 
+    def test_set_mode_reports_a_refusal(self):
+        fc = FakePixhawk(ack=4)
+        with srv.mav_lock:
+            srv.mav_conn = fc
+        r = run('set_mode', mode='AUTO')
+        self.assertFalse(r['ok'])
+        self.assertIn('refused', r['msg'])
+
+    def test_hold_uses_brake_when_the_rc_throttle_is_not_centred(self):
+        # SITL finding: LOITER follows the RC throttle stick — with the stick low it descends.
+        fc = FakePixhawk()
+        with srv.mav_lock:
+            srv.mav_conn = fc
+        srv.telem.update(armed=True, alt=10.0, rc_channels=[1500, 1500, 1000, 1500])
+        r = run('set_loiter')
+        self.assertIn('BRAKE', r['msg'])
+        self.assertEqual(fc.commands[-1][2], 17)                    # DO_SET_MODE custom mode 17 = BRAKE
+        self.assertEqual(srv.hold_mode(), 'BRAKE')
+        srv.telem.update(armed=False, alt=0.0)
+
 
 class FailsafeTelemetry(unittest.TestCase):
     def test_payload_has_values_and_rules(self):

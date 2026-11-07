@@ -155,11 +155,14 @@ def items_match(sent, got):
         a, b = sent[seq], got[seq]
         if a['command'] != b['command']:
             return f'Item {seq}: command {b["command"]} on the Pixhawk, sent {a["command"]}'
-        if not (a['frame'] == b['frame'] or (a['frame'] in rel and b['frame'] in rel)):
+        no_pos = a['command'] in (DO_CHANGE_SPEED, NAV_RTL)    # ArduPilot stores these without a frame (returns 0)
+        if not no_pos and not (a['frame'] == b['frame'] or (a['frame'] in rel and b['frame'] in rel)):
             return f'Item {seq}: frame {b["frame"]} on the Pixhawk, sent {a["frame"]}'
-        if abs(a['x'] - b['x']) > 1 or abs(a['y'] - b['y']) > 1:
+        if no_pos:
+            pass
+        elif abs(a['x'] - b['x']) > 1 or abs(a['y'] - b['y']) > 1:
             return f'Item {seq}: position differs on the Pixhawk'
-        if abs(a['z'] - b['z']) > 0.05:
+        if not no_pos and abs(a['z'] - b['z']) > 0.05:
             return f'Item {seq}: altitude {b["z"]:.2f} m on the Pixhawk, sent {a["z"]:.2f} m'
         for p in ('p1', 'p2', 'p3', 'p4'):
             if abs(a[p] - b[p]) > 0.01 and not (math.isnan(a[p]) and math.isnan(b[p])):

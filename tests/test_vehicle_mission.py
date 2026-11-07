@@ -140,6 +140,19 @@ class Transfer(unittest.TestCase):
             self.link.upload_plan(fc, plan(WP1, RTL), HOME)
         self.assertFalse(self.link.snapshot()['known'])
 
+    def test_ardupilot_returns_do_commands_without_a_frame(self):
+        # SITL finding: DO_CHANGE_SPEED / RTL come back with frame 0 — that is not a mismatch.
+        items, _ = vm.build_items({'waypoints': [dict(WP1, speed=5), WP2, RTL]}, HOME)
+        got = [dict(i) for i in items]
+        for i in got:
+            if i['command'] in (vm.DO_CHANGE_SPEED, vm.NAV_RTL):
+                i['frame'] = 0
+        self.assertIsNone(vm.items_match(items, got))
+        got2 = [dict(i) for i in items]
+        nav = next(i for i in got2[1:] if i['command'] == vm.NAV_WAYPOINT)
+        nav['frame'] = 0                                   # a waypoint really in the wrong frame still fails
+        self.assertIn('frame', vm.items_match(items, got2))
+
     def test_readback_mismatch_is_not_verified(self):
         fc = FakeArduPilot(self.link, corrupt_alt=3)
         with self.assertRaisesRegex(RuntimeError, 'read-back does not match'):

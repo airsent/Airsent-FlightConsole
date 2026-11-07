@@ -96,6 +96,34 @@ class ASCTests(unittest.TestCase):
         self.run_for(1, heard=True, **self.flying(flight_mode='RTL'))
         self.assertIsNone(self.a.action)                           # console back: operator decides, no auto-resume
 
+    def test_own_mode_change_reported_late_is_not_an_rc_takeover(self):
+        # SITL finding: the new mode reaches telemetry with the next 1 Hz HEARTBEAT, often > 2 s
+        # after ASC asked. ASC must still recognise its own LOITER and go on to RTL at 30 s.
+        self.run_for(2, heard=True, **self.flying())
+        acts = self.run_for(11, **self.flying())
+        self.assertEqual([a[1] for a in acts], ['LOITER'])
+        self.run_for(3.5, **self.flying())                                  # still GUIDED in telemetry
+        self.run_for(14, **self.flying(flight_mode='LOITER'))
+        self.assertEqual(self.a.action['stage'], 'hold')
+        acts = self.run_for(3, **self.flying(flight_mode='LOITER'))
+        self.assertEqual([a[1] for a in acts], ['RTL'])
+
+    def test_obstacle_reads_the_servers_proximity_dist(self):
+        self.run_for(1, heard=True, **self.flying(proximity={'obstacle': True, 'dist': 1.2}, stop_distance=3.0))
+        self.run_for(1, **self.flying(proximity={'obstacle': True, 'dist': 1.2}, stop_distance=3.0))
+        row = next(r for r in self.a.live() if r[0] == 'obstacle')
+        self.assertEqual(row[1], ascmod.WARN)
+        self.run_for(1, **self.flying(proximity={'obstacle': False, 'dist': -1.0}, stop_distance=3.0))
+        row = next(r for r in self.a.live() if r[0] == 'obstacle')
+        self.assertEqual(row[1], ascmod.OK)
+
+    def test_defs_carry_units_and_limits(self):
+        d = {x[0]: x for x in self.a.defs()}
+        self.assertEqual(d['vibration'][3], 'm/s²')
+        self.assertIn('30', d['vibration'][4])
+        self.assertEqual(d['tilt'][5], 'flying')
+        self.assertTrue(all(len(x) == 6 for x in d.values()))
+
     def test_never_fights_the_rc_pilot(self):
         self.run_for(2, heard=True, **self.flying())
         self.assertEqual(self.run_for(12, **self.flying(flight_mode='ALT_HOLD')), [])   # RC pilot flying: alert only

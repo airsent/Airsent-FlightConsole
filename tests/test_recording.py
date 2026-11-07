@@ -115,6 +115,27 @@ class BinLogTests(unittest.TestCase):
         self.assertFalse(dl.download(lambda: fake, self.tmp, lambda: False, stall_timeout=1.0))
         self.assertIn('stopped sending', dl.snapshot()['msg'])
 
+    def test_cancel_for_flight(self):
+        dl = pixhawk_log.LogDownloader()
+        fake = FakeArduPilot(dl, {1: os.urandom(400_000)}, stop_after=200)
+        ok, _ = dl.start(lambda: fake, self.tmp, lambda: False)
+        time.sleep(0.3)
+        self.assertTrue(dl.cancel('Paused for flight'))
+        self.assertFalse(dl.busy())
+        self.assertIn('Paused for flight', dl.snapshot()['msg'])
+        self.assertTrue(fake.ended)
+        self.assertFalse(dl.cancel('again'))
+
+    def test_pick_takes_the_flight_not_a_newer_post_disarm_log(self):
+        e = {1: {'id': 1, 'size': 2_700_000, 'time_utc': 1000}, 2: {'id': 2, 'size': 400_000, 'time_utc': 1300},
+             3: {'id': 3, 'size': 0, 'time_utc': 0}}
+        self.assertEqual(pixhawk_log.LogDownloader.pick(e, (1002, 1290))['id'], 1)       # armed at 1002
+        self.assertEqual(pixhawk_log.LogDownloader.pick(e)['id'], 2)            # no window: newest non-empty
+        self.assertEqual(pixhawk_log.LogDownloader.pick(e, (9000, 9100))['id'], 2)
+        # SITL finding: an older, bigger log from 100 s before must not win over this flight's log
+        e2 = {4: {'id': 4, 'size': 4_000_000, 'time_utc': 900}, 5: {'id': 5, 'size': 1_000_000, 'time_utc': 1001}}
+        self.assertEqual(pixhawk_log.LogDownloader.pick(e2, (1000, 1100))['id'], 5)
+
     def test_explicit_log_id_and_busy(self):
         dl = pixhawk_log.LogDownloader()
         a, b = os.urandom(9000), os.urandom(9000)

@@ -33,6 +33,7 @@ class LogDownloader:
         self.last_data = 0.0
         self.thread = None
         self.status = {'state': 'idle'}
+        self.cancel_reason = None
 
     # ── fed by the MAVLink reader thread ────────────────────────────────────
     def observe(self, msg):
@@ -63,6 +64,17 @@ class LogDownloader:
     def busy(self):
         return bool(self.thread and self.thread.is_alive())
 
+    def cancel(self, reason, wait=1.0):
+        """Stop a running download (e.g. the operator is arming: the log stream would delay
+        the arm command on the serial link). Returns True if one was running."""
+        if not self.busy():
+            return False
+        self.cancel_reason = reason
+        with self.cond:
+            self.cond.notify_all()
+        self.thread.join(wait)
+        return True
+
     def snapshot(self):
         s = dict(self.status)
         a = self.active
@@ -72,17 +84,34 @@ class LogDownloader:
         return s
 
     # ── the download itself (runs in its own thread) ────────────────────────
-    def start(self, mav_getter, folder, armed, log_id=None):
+    def start(self, mav_getter, folder, armed, log_id=None, window=None):
         if self.busy():
             return False, 'A Pixhawk log download is already running'
-        self.thread = threading.Thread(target=self.download, args=(mav_getter, folder, armed, log_id), daemon=True)
+        self.thread = threading.Thread(target=self.download, args=(mav_getter, folder, armed, log_id),
+                                       kwargs={'window': window}, daemon=True)
         self.thread.start()
         return True, 'Pixhawk log download started'
 
     def _set(self, **kw):
-        self.status = {'folder': os.path.basename(str(kw.get('folder') or self.status.get('folder') or '')), **kw}
+        path = str(kw.get('folder') or self.status.get('path') or '')
+        self.status = {**kw, 'folder': os.path.basename(path), 'path': path}
 
-    def download(self, mav_getter, folder, armed, log_id=None, list_timeout=6.0, stall_timeout=20.0):
+    @staticmethod
+    def pick(entries, window=None):
+        """The flight's log. window = (arm time, session end) in unix time. ArduPilot starts a log
+        when it arms (and may start another after disarming), so take the log that started
+        closest to the arm time; without a usable window, the newest non-empty log."""
+        usable = [e for e in entries.values() if e['size'] > 0]
+        if not usable:
+            return None
+        if window and window[0]:
+            t_arm = window[0]
+            near = [e for e in usable if e.get('time_utc') and abs(e['time_utc'] - t_arm) <= 120]
+            if near:
+                return min(near, key=lambda e: (abs(e['time_utc'] - t_arm), -e['size']))
+        return max(usable, key=lambda e: e['id'])
+
+    def download(self, mav_getter, folder, armed, log_id=None, list_timeout=6.0, stall_timeout=20.0, window=None):
         dest = os.path.join(folder, 'pixhawk.bin')
         part = dest + '.part'
         mav = mav_getter()
@@ -92,6 +121,7 @@ class LogDownloader:
         if armed():
             self._set(state='error', folder=folder, msg='Not downloading while armed')
             return False
+        self.cancel_reason = None
         self._set(state='listing', folder=folder, msg='Asking the Pixhawk for its log list')
         with self.cond:
             self.entries, self.list_done, self.num_logs = {}, False, None
@@ -105,11 +135,10 @@ class LogDownloader:
             self._set(state='error', folder=folder, msg='The Pixhawk reported no logs' if self.num_logs == 0 else 'No answer to the log list request')
             return False
         if log_id is None:
-            usable = [e for e in entries.values() if e['size'] > 0]
-            if not usable:
+            entry = self.pick(entries, window)
+            if not entry:
                 self._set(state='error', folder=folder, msg='The newest Pixhawk logs are empty')
                 return False
-            entry = max(usable, key=lambda e: e['id'])
         else:
             entry = entries.get(int(log_id))
             if not entry or entry['size'] <= 0:
@@ -132,6 +161,9 @@ class LogDownloader:
             while True:
                 if armed():
                     why = 'Drone armed — Pixhawk log download stopped'
+                    break
+                if self.cancel_reason:
+                    why = self.cancel_reason
                     break
                 with self.cond:
                     self.cond.wait(0.2)
