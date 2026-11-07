@@ -65,6 +65,17 @@ class ParamStore:
             v = self.values.get(name)
             return dict(v) if v else None
 
+    def snapshot(self, names, max_age=None):
+        """{name: value} for the names currently known (optionally only fresh ones)."""
+        now = self.clock()
+        out = {}
+        with self._cond:
+            for n in names:
+                v = self.values.get(n)
+                if v and (max_age is None or now - v['at'] <= max_age):
+                    out[n] = int(round(v['value'])) if v['type'] in INT_TYPES else round(v['value'], 6)
+        return out
+
     def _wait_for(self, names, since, timeout):
         end = self.clock() + timeout
         with self._cond:

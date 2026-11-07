@@ -189,3 +189,28 @@ class ParamsAndModes(unittest.TestCase):
         self.assertEqual(fc.commands, [])
         self.assertTrue(run('set_mode', mode='LOITER')['ok'])
         self.assertTrue(run('set_mode', mode='ALTHOLD')['ok'])
+
+
+class FailsafeTelemetry(unittest.TestCase):
+    def test_payload_has_values_and_rules(self):
+        import re
+        from test_param_store import Msg
+        srv.param_store.reset()
+        srv.param_store.observe(Msg(param_id=b'FS_THR_ENABLE', param_value=1.0, param_type=2, param_count=900))
+        srv.param_store.observe(Msg(param_id=b'BATT_LOW_VOLT', param_value=21.6, param_type=9, param_count=900))
+        srv._failsafe_rules_sent[0] = 0
+        out = srv.failsafe_payload(time.time())
+        self.assertEqual(out['failsafe_params'], {'FS_THR_ENABLE': 1, 'BATT_LOW_VOLT': 21.6})
+        self.assertEqual(out['failsafe_rules']['FS_THR_ENABLE'], {'value': 1})
+        self.assertNotIn('why', json.dumps(out['failsafe_rules']))
+        self.assertNotIn('failsafe_rules', srv.failsafe_payload(time.time()))      # rules only every 10 s
+
+    def test_web_and_jetson_use_the_same_parameter_list(self):
+        import re
+        js = open(os.path.join(ROOT, 'failsafe-onboard.js')).read()
+        names = set(re.findall(r"name: '([A-Z0-9_]+)'", js))
+        self.assertEqual(names, set(srv.FAILSAFE_PARAMS))
+        golden = json.load(open(os.path.join(ROOT, 'golden_params.json')))['params']
+        for n in ('FS_THR_ENABLE', 'FS_GCS_ENABLE', 'BATT_FS_LOW_ACT', 'FS_EKF_ACTION', 'FENCE_ENABLE'):
+            self.assertIn(n, srv.FAILSAFE_PARAMS)
+            self.assertIn(n, golden)
