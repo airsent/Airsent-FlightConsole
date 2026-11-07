@@ -2,1270 +2,420 @@
 <html lang="en">
 <head>
 <script src="demo-isolation.js?v=viewer-1"></script>
-<script src="viewer-access.js?v=shared-2"></script>
-<script src="shared-state.js?v=1"></script>
+<script src="viewer-access.js?v=mission-1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Launch Sequencer</title>
 <link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="mission-ui.css?v=1">
 <script src="fit-screen.js"></script>
 <style>
-*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
- 
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:    #020507;
-  --bg1:   #060d14;
-  --bg2:   #0a1520;
-  --line:  rgba(0,180,255,.08);
-  --line2: rgba(0,180,255,.18);
-  --cyan:  #00c8ff;
-  --green: #00ff88;
-  --amber: #ffb800;
-  --red:   #ff2244;
-  --white: #e8f4ff;
-  --muted: #2a5070;
-  --mono:  'Share Tech Mono', monospace;
-  --head:  'Rajdhani', sans-serif;
+  --bg: #020507; --bg1: #060d14; --bg2: #0a1520; --line: rgba(0,180,255,.08); --line2: rgba(0,180,255,.18);
+  --cyan: #00c8ff; --green: #00e383; --amber: #ffb800; --red: #ff3355; --white: #e8f4ff; --muted: #5d7a92; --grey: #3d5466;
+  --mono: 'Share Tech Mono', ui-monospace, monospace; --head: 'Rajdhani', sans-serif;
 }
- 
-body {
-  height: 100vh; overflow: hidden;
-  background: var(--bg);
-  color: var(--white);
-  font-family: var(--head);
-  display: flex; flex-direction: column;
-}
- 
-/* scanlines */
-body::after {
-  content:''; position:fixed; inset:0; pointer-events:none; z-index:9998;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.04) 2px, rgba(0,0,0,.04) 4px);
-}
- 
-/* ── Nav ─────────────────────────────────────────────────── */
-.logo-dropdown { position:relative; display:inline-block; }
-.logo-dropdown-btn { background:transparent; border:none; padding:0; display:flex; align-items:center; cursor:pointer; }
-.logo-dropdown-menu { display:none; position:absolute; top:calc(100%+6px); left:0; min-width:220px; background:#060d14; border:1px solid var(--line2); border-radius:4px; overflow:hidden; z-index:9999; }
-.logo-dropdown-menu a { display:block; padding:10px 14px; color:var(--white); text-decoration:none; font-size:13px; font-family:var(--head); border-bottom:1px solid var(--line); letter-spacing:.5px; }
-.logo-dropdown-menu a:hover { background:rgba(0,200,255,.07); color:var(--cyan); }
-.logo-dropdown:hover .logo-dropdown-menu, .logo-dropdown:focus-within .logo-dropdown-menu { display:block; }
- 
-/* ── Topbar ──────────────────────────────────────────────── */
-.topbar {
-  flex-shrink:0; height:42px;
-  background: linear-gradient(90deg, #030a10, #050f18, #030a10);
-  border-bottom:1px solid var(--line2);
-  display:flex; align-items:center; padding:0 12px; gap:0;
-  position:relative;
-}
-.topbar::after { content:''; position:absolute; bottom:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--cyan),transparent); opacity:.3; }
-.tb-seg { display:flex; align-items:center; gap:6px; padding:0 10px; border-right:1px solid var(--line); height:100%; }
-.tb-label { font-size:8px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; font-family:var(--mono); }
-.tb-val { font-size:11px; font-family:var(--mono); }
-.tb-val.c{color:var(--cyan);} .tb-val.g{color:var(--green);} .tb-val.a{color:var(--amber);} .tb-val.r{color:var(--red);}
-.tb-title { font-size:13px; letter-spacing:4px; font-weight:700; color:var(--cyan); text-transform:uppercase; }
-.tb-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
- 
-/* ── Main layout ─────────────────────────────────────────── */
-.main {
-  flex:1; min-height:0;
-  display:grid;
-  grid-template-columns:340px 1fr 340px;
-  gap:1px;
-  background:var(--line);
-  overflow:hidden;
-}
- 
-/* ── Panels ──────────────────────────────────────────────── */
-.panel { background:var(--bg); display:flex; flex-direction:column; overflow:hidden; }
-.panel-head {
-  padding:9px 14px 7px; border-bottom:1px solid var(--line2);
-  background:linear-gradient(180deg,var(--bg1),var(--bg));
-  flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
-}
-.panel-title {
-  font-size:10px; font-weight:700; letter-spacing:2.5px; text-transform:uppercase; color:var(--cyan);
-  display:flex; align-items:center; gap:7px;
-}
-.panel-title::before { content:''; width:5px; height:5px; background:var(--cyan); border-radius:50%; box-shadow:0 0 6px var(--cyan); flex-shrink:0; }
-.panel-sub { font-size:9px; color:var(--muted); font-family:var(--mono); margin-top:1px; }
- 
-/* ── CENTER: Countdown ───────────────────────────────────── */
-.center-panel {
-  background: radial-gradient(ellipse at 50% 20%, rgba(0,100,180,.08), transparent 60%),
-              radial-gradient(ellipse at 50% 80%, rgba(0,200,255,.04), transparent 50%),
-              var(--bg);
-  display:flex; flex-direction:column; align-items:center; overflow:hidden;
-  position:relative;
-}
- 
-/* Grid lines background */
-.center-panel::before {
-  content:''; position:absolute; inset:0; pointer-events:none;
-  background-image:
-    linear-gradient(rgba(0,180,255,.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,180,255,.04) 1px, transparent 1px);
-  background-size:40px 40px;
-}
- 
-.mission-id {
-  margin-top:24px; text-align:center; position:relative; z-index:1;
-}
-.mission-name {
-  font-size:11px; letter-spacing:5px; color:var(--muted); text-transform:uppercase;
-  font-family:var(--mono); margin-bottom:4px;
-}
-.mission-vehicle {
-  font-size:16px; letter-spacing:3px; font-weight:700; color:var(--white); text-transform:uppercase;
-}
- 
-/* Clock */
-.clock-wrap {
-  margin-top:20px; text-align:center; position:relative; z-index:1;
-}
-.clock-label {
-  font-size:10px; letter-spacing:3px; color:var(--muted); text-transform:uppercase;
-  font-family:var(--mono); margin-bottom:6px;
-}
-.clock {
-  font-size:72px; font-weight:700; font-family:var(--mono); line-height:1;
-  letter-spacing:4px; transition:color .3s;
-}
-.clock.nominal { color:var(--cyan); text-shadow:0 0 40px rgba(0,200,255,.3); }
-.clock.warning { color:var(--amber); text-shadow:0 0 40px rgba(255,184,0,.3); }
-.clock.abort   { color:var(--red);   text-shadow:0 0 40px rgba(255,34,68,.4); animation:blink-r .5s infinite; }
-.clock.launch  { color:var(--green); text-shadow:0 0 60px rgba(0,255,136,.5); }
-@keyframes blink-r { 0%,100%{opacity:1} 50%{opacity:.3} }
- 
-.clock-sign {
-  font-size:28px; font-family:var(--mono); font-weight:700;
-  position:absolute; left:-36px; top:50%; transform:translateY(-50%);
-  color:var(--muted);
-}
-.clock-sign.active { color:var(--cyan); }
- 
-/* Status label */
-.status-badge {
-  margin-top:12px;
-  font-size:11px; letter-spacing:4px; text-transform:uppercase; font-weight:700;
-  font-family:var(--mono); padding:4px 16px; border:1px solid;
-  transition:all .3s;
-}
-.status-badge.standby  { color:var(--muted); border-color:var(--muted); }
-.status-badge.counting { color:var(--cyan);  border-color:var(--cyan); box-shadow:0 0 12px rgba(0,200,255,.2); }
-.status-badge.hold     { color:var(--amber); border-color:var(--amber); }
-.status-badge.abort    { color:var(--red);   border-color:var(--red); animation:blink-r .7s infinite; }
-.status-badge.launch   { color:var(--green); border-color:var(--green); box-shadow:0 0 20px rgba(0,255,136,.3); }
- 
-/* Progress bar */
-.progress-wrap {
-  width:calc(100% - 48px); margin-top:20px; position:relative; z-index:1;
-}
-.progress-track {
-  height:3px; background:var(--bg2); border-radius:2px; overflow:hidden;
-  border:1px solid var(--line2);
-}
-.progress-fill {
-  height:100%; background:var(--cyan); border-radius:2px;
-  transition:width .5s linear, background .3s;
-  box-shadow:0 0 8px var(--cyan);
-}
-.progress-markers {
-  display:flex; justify-content:space-between; margin-top:5px;
-  font-size:8px; color:var(--muted); font-family:var(--mono); letter-spacing:.5px;
-}
- 
-/* Control buttons */
-.controls {
-  display:flex; gap:10px; margin-top:24px; position:relative; z-index:1;
-}
-.ctrl-btn {
-  height:42px; padding:0 24px; border-radius:2px; border:1px solid;
-  font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
-  cursor:pointer; font-family:var(--head); transition:all .15s;
-}
-.btn-start {
-  border-color:var(--cyan); color:var(--cyan);
-  background:rgba(0,200,255,.06);
-}
-.btn-start:hover { background:rgba(0,200,255,.16); box-shadow:0 0 20px rgba(0,200,255,.2); }
-.btn-hold {
-  border-color:var(--amber); color:var(--amber);
-  background:rgba(255,184,0,.06);
-}
-.btn-hold:hover { background:rgba(255,184,0,.14); }
-.btn-abort {
-  border-color:var(--red); color:var(--red);
-  background:rgba(255,34,68,.06);
-}
-.btn-abort:hover { background:rgba(255,34,68,.14); box-shadow:0 0 20px rgba(255,34,68,.2); }
-.ctrl-btn:disabled { opacity:.25; cursor:not-allowed; box-shadow:none; }
- 
-/* Config row */
-.config-row {
-  display:flex; align-items:center; gap:10px; margin-top:14px;
-  font-size:10px; color:var(--muted); font-family:var(--mono); position:relative; z-index:1;
-}
-.config-input {
-  width:52px; height:26px; background:var(--bg2); border:1px solid var(--line2);
-  color:var(--cyan); font-family:var(--mono); font-size:11px; text-align:center;
-  border-radius:2px; outline:none;
-}
-.config-input:focus { border-color:var(--cyan); }
- 
-/* Abort reason */
-.abort-reason {
-  margin-top:14px; padding:8px 16px;
-  border:1px solid rgba(255,34,68,.35); background:rgba(255,34,68,.06);
-  color:var(--red); font-family:var(--mono); font-size:11px; letter-spacing:.5px;
-  text-align:center; display:none; position:relative; z-index:1;
-}
- 
-/* ── LEFT/RIGHT: Sequence + Telemetry ──────────────────── */
- 
-/* Sequence list */
-.seq-list { flex:1; overflow-y:auto; scrollbar-width:none; }
-.seq-list::-webkit-scrollbar { display:none; }
- 
-.seq-item {
-  display:flex; align-items:flex-start; gap:10px;
-  padding:9px 14px; border-bottom:1px solid var(--line);
-  position:relative; transition:background .2s;
-}
-.seq-item.active   { background:rgba(0,200,255,.04); }
-.seq-item.complete { opacity:.6; }
-.seq-item.failed   { background:rgba(255,34,68,.04); }
- 
-/* left status line */
-.seq-item::before {
-  content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
-  background:transparent; transition:background .3s;
-}
-.seq-item.pending::before  { background:var(--muted); opacity:.3; }
-.seq-item.active::before   { background:var(--cyan); box-shadow:0 0 6px var(--cyan); }
-.seq-item.complete::before { background:var(--green); }
-.seq-item.failed::before   { background:var(--red); }
-.seq-item.hold::before     { background:var(--amber); }
-.seq-item.skipped::before  { background:var(--muted); }
- 
-.seq-icon {
-  width:20px; height:20px; border-radius:50%; border:1px solid; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700;
-  margin-top:1px; transition:all .3s;
-}
-.seq-icon.pending  { border-color:var(--muted); color:var(--muted); }
-.seq-icon.active   { border-color:var(--cyan); color:var(--cyan); background:rgba(0,200,255,.1); animation:pulse-icon .8s infinite; }
-.seq-icon.complete { border-color:var(--green); color:var(--green); background:rgba(0,255,136,.08); }
-.seq-icon.failed   { border-color:var(--red); color:var(--red); background:rgba(255,34,68,.1); }
-.seq-icon.skipped  { border-color:var(--muted); color:var(--muted); opacity:.4; }
-@keyframes pulse-icon { 0%,100%{box-shadow:0 0 0 0 rgba(0,200,255,.4)} 50%{box-shadow:0 0 0 4px rgba(0,200,255,0)} }
- 
-.seq-content { flex:1; min-width:0; }
-.seq-time {
-  font-size:9px; font-family:var(--mono); color:var(--muted);
-  float:right; margin-top:1px;
-}
-.seq-time.active { color:var(--cyan); }
-.seq-name { font-size:12px; font-weight:700; letter-spacing:.5px; color:var(--white); margin-bottom:2px; }
-.seq-desc { font-size:10px; color:var(--muted); line-height:1.4; font-family:var(--mono); }
-.seq-result {
-  font-size:9px; font-family:var(--mono); margin-top:3px; letter-spacing:.5px;
-  text-transform:uppercase;
-}
-.seq-result.ok   { color:var(--green); }
-.seq-result.fail { color:var(--red); }
-.seq-result.warn { color:var(--amber); }
- 
-/* Right: telemetry readouts */
-.telem-rows { flex:1; overflow-y:auto; scrollbar-width:none; }
-.telem-rows::-webkit-scrollbar { display:none; }
- 
-.t-section {
-  padding:5px 14px 3px;
-  font-size:8px; letter-spacing:2px; text-transform:uppercase; color:var(--muted);
-  font-family:var(--mono); border-bottom:1px solid var(--line); background:var(--bg1);
-}
- 
-.t-row {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:7px 14px; border-bottom:1px solid var(--line); gap:8px;
-}
-.t-label { font-size:11px; color:#4a7090; font-weight:500; }
-.t-val { font-size:13px; font-weight:700; font-family:var(--mono); }
-.t-val.g { color:var(--green); }
-.t-val.a { color:var(--amber); }
-.t-val.r { color:var(--red); }
-.t-val.c { color:var(--cyan); }
-.t-val.ready { color:var(--green); }
-.t-val.notready { color:var(--red); animation:blink-r .8s infinite; }
- 
-/* GO/NO-GO summary */
-.gono-summary {
-  padding:10px 14px; border-top:1px solid var(--line2);
-  flex-shrink:0; background:var(--bg1);
-}
-.gono-title { font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); font-family:var(--mono); margin-bottom:8px; }
-.gono-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
-.gono-item {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:4px 8px; border:1px solid var(--line);
-  font-size:10px;
-}
-.gono-name { color:#4a7090; }
-.gono-chip {
-  font-size:8px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-  padding:1px 5px; border:1px solid;
-}
-.go   { color:var(--green); border-color:rgba(0,255,136,.3); }
-.nogo { color:var(--red);   border-color:rgba(255,34,68,.3); }
-.hold { color:var(--amber); border-color:rgba(255,184,0,.3); }
-.un   { color:var(--muted); border-color:var(--line); }
- 
-/* Launch flash */
-.launch-flash {
-  position:fixed; inset:0; background:rgba(0,255,136,.08);
-  pointer-events:none; z-index:9990;
-  animation:flash-in .6s ease-out forwards;
-  display:none;
-}
-@keyframes flash-in { 0%{opacity:1} 100%{opacity:0} }
- 
-/* Handover badge */
-.handover-badge {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  font-family: var(--mono);
-  color: var(--amber);
-  border: 1px solid rgba(255,184,0,.4);
-  background: rgba(255,184,0,.08);
-  padding: 5px 16px;
-  animation: pulse-amber .8s infinite;
-  position: relative;
-  z-index: 1;
-}
-@keyframes pulse-amber { 0%,100%{opacity:1} 50%{opacity:.5} }
-.mission-timeline {
-  width: calc(100% - 48px);
-  margin-top: 16px;
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-}
-.mtl-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.mtl-title {
-  font-size: 9px;
-  letter-spacing: 2.5px;
-  color: var(--muted);
-  text-transform: uppercase;
-  font-family: var(--mono);
-}
-.mtl-sub {
-  font-size: 9px;
-  color: var(--muted);
-  font-family: var(--mono);
-}
-.mtl-track-wrap {
-  position: relative;
-  margin-bottom: 10px;
-}
-.mtl-track {
-  height: 4px;
-  background: rgba(0,180,255,.12);
-  border-radius: 2px;
-  position: relative;
-  overflow: visible;
-}
-.mtl-progress-line {
-  height: 100%;
-  background: var(--cyan);
-  border-radius: 2px;
-  transition: width .5s linear;
-  box-shadow: 0 0 8px rgba(0,200,255,.4);
-  pointer-events: none;
-}
-.mtl-node {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid;
-  background: var(--bg);
-  cursor: default;
-  transition: all .3s;
-  z-index: 2;
-}
-.mtl-node.pending  { border-color: var(--muted); background: var(--bg); }
-.mtl-node.active   { border-color: var(--cyan); background: var(--cyan); box-shadow: 0 0 10px var(--cyan); animation: pulse-node .8s infinite; }
-.mtl-node.complete { border-color: var(--green); background: var(--green); }
-.mtl-node.skipped  { border-color: var(--muted); background: var(--muted); opacity: .4; }
-@keyframes pulse-node { 0%,100%{box-shadow:0 0 0 0 rgba(0,200,255,.5)} 50%{box-shadow:0 0 0 5px rgba(0,200,255,0)} }
- 
-.mtl-node-label {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 8px;
-  font-family: var(--mono);
-  white-space: nowrap;
-  color: var(--muted);
-  text-align: center;
-  line-height: 1.3;
-}
-.mtl-node-label.active   { color: var(--cyan); }
-.mtl-node-label.complete { color: var(--green); }
- 
-.mtl-events {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 36px;
-  max-height: 110px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-.mtl-events::-webkit-scrollbar { display: none; }
-.mtl-event-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 10px;
-  padding: 3px 8px;
-  border-left: 2px solid;
-  background: rgba(0,0,0,.2);
-}
-.mtl-event-row.takeoff { border-color: var(--green); }
-.mtl-event-row.waypoint { border-color: var(--cyan); }
-.mtl-event-row.rtl     { border-color: var(--amber); }
-.mtl-event-row.land    { border-color: var(--red); }
-.mtl-event-row.loiter  { border-color: var(--purple); }
-.mtl-ev-icon { font-size: 11px; flex-shrink: 0; }
-.mtl-ev-label { color: var(--white); font-weight: 600; flex-shrink: 0; }
-.mtl-ev-detail { color: var(--muted); font-family: var(--mono); font-size: 9px; }
-.mtl-ev-dist { color: var(--muted); font-family: var(--mono); font-size: 9px; margin-left: auto; }
+body { height: 100vh; overflow: hidden; background: var(--bg); color: var(--white); font-family: var(--head); display: flex; flex-direction: column; }
+
+/* nav (same as other console pages) */
+.logo-dropdown { position: relative; display: inline-block; }
+.logo-dropdown-btn { background: transparent; border: none; padding: 0; display: flex; align-items: center; cursor: pointer; }
+.logo-dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; background: #060d14; border: 1px solid var(--line2); border-radius: 4px; overflow: hidden; z-index: 9999; }
+.logo-dropdown-menu a { display: block; padding: 10px 14px; color: var(--white); text-decoration: none; font-size: 13px; font-family: var(--head); border-bottom: 1px solid var(--line); letter-spacing: .5px; }
+.logo-dropdown-menu a:hover { background: rgba(0,200,255,.07); color: var(--cyan); }
+.logo-dropdown:hover .logo-dropdown-menu, .logo-dropdown:focus-within .logo-dropdown-menu { display: block; }
+
+.topbar { flex-shrink: 0; height: 44px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line2); background: linear-gradient(90deg,#030a10,#050f18,#030a10); }
+.tb-seg { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 100%; border-right: 1px solid var(--line); }
+.tb-title { font-size: 13px; letter-spacing: 4px; font-weight: 700; color: var(--cyan); }
+.tb-label { font-size: 8px; letter-spacing: 2px; color: var(--muted); font-family: var(--mono); }
+.tb-val { font-size: 11px; font-family: var(--mono); }
+.tb-right { margin-left: auto; display: flex; align-items: center; height: 100%; }
+#missionFaultSlot { display: flex; align-items: center; padding: 0 4px 0 10px; }
+
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px 1fr 430px; gap: 1px; background: var(--line); }
+.col { background: var(--bg); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.head { padding: 10px 14px 8px; border-bottom: 1px solid var(--line2); background: linear-gradient(180deg,var(--bg1),var(--bg)); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.title { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; color: var(--cyan); display: flex; align-items: center; gap: 7px; }
+.title::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.sub { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+
+/* stage track */
+.stages { padding: 10px 0; overflow-y: auto; }
+.stage { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 9px 14px; position: relative; color: var(--grey); }
+.stage::after { content: ''; position: absolute; left: 26px; top: 32px; bottom: -9px; width: 1px; background: var(--line2); }
+.stage:last-child::after { display: none; }
+.stage .dot { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font: 11px var(--mono); }
+.stage .name { font-size: 14px; font-weight: 600; letter-spacing: 1.5px; }
+.stage .when { font: 10px var(--mono); }
+.stage .desc { grid-column: 2 / 4; font: 9px var(--mono); color: var(--muted); margin-top: -4px; }
+.stage.done { color: var(--green); } .stage.done .dot { background: rgba(0,227,131,.12); }
+.stage.current { color: var(--cyan); background: rgba(0,200,255,.06); } .stage.current .dot { box-shadow: 0 0 10px var(--cyan); background: rgba(0,200,255,.15); }
+.stage.current.held { color: var(--red); background: rgba(255,51,85,.08); } .stage.current.held .dot { box-shadow: 0 0 10px var(--red); }
+.stage.aborted { color: var(--red); }
+.info { border-top: 1px solid var(--line2); padding: 10px 14px; font: 10px var(--mono); color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; flex-shrink: 0; }
+.info b { font-weight: 400; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* center */
+.center { align-items: center; overflow-y: auto; background: radial-gradient(ellipse at 50% 18%, rgba(0,100,180,.09), transparent 60%), var(--bg); }
+.mission-line { margin-top: 20px; font: 11px var(--mono); letter-spacing: 4px; color: var(--muted); text-transform: uppercase; text-align: center; }
+.mission-line b { color: var(--white); font-weight: 400; }
+.clock { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; font-family: var(--mono); line-height: 1; }
+.clock .sign { font-size: 40px; color: var(--muted); }
+.clock .digits { font-size: 108px; color: var(--cyan); text-shadow: 0 0 30px rgba(0,200,255,.35); letter-spacing: 2px; }
+.clock.held .digits { color: var(--red); text-shadow: 0 0 30px rgba(255,51,85,.4); }
+.clock.air .digits { color: var(--green); text-shadow: 0 0 30px rgba(0,227,131,.35); }
+.clock.idle .digits { color: #2f6a8a; text-shadow: none; }
+.stage-badge { margin-top: 8px; padding: 4px 16px; border: 1px solid currentColor; font: 13px var(--mono); letter-spacing: 5px; color: var(--muted); }
+.stage-badge.counting { color: var(--cyan); } .stage-badge.hold { color: var(--red); } .stage-badge.launch { color: var(--green); } .stage-badge.abort { color: var(--red); }
+.hold-banner { margin-top: 12px; width: min(760px, 92%); padding: 10px 14px; border: 1px solid var(--red); background: rgba(255,51,85,.1); color: #ffd0d8; font: 13px var(--mono); text-align: center; }
+.hold-banner small { display: block; margin-top: 4px; color: #ff9aaa; font-size: 10px; }
+.notice { margin-top: 12px; width: min(760px, 92%); padding: 8px 14px; border: 1px solid var(--line2); background: var(--bg1); color: var(--white); font: 12px var(--mono); text-align: center; }
+.notice.ok { border-color: rgba(0,227,131,.5); color: var(--green); }
+.notice.warn { border-color: rgba(255,184,0,.5); color: var(--amber); }
+
+.progress { position: relative; width: min(820px, 92%); height: 46px; margin-top: 18px; }
+.progress .track { position: absolute; left: 0; right: 0; top: 10px; height: 4px; background: var(--bg2); border: 1px solid var(--line2); }
+.progress .fill { position: absolute; left: 0; top: 10px; height: 4px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.progress .mark { position: absolute; top: 2px; transform: translateX(-50%); text-align: center; font: 9px var(--mono); color: var(--muted); white-space: nowrap; }
+.progress .mark::before { content: ''; display: block; margin: 0 auto 4px; width: 2px; height: 18px; background: var(--line2); }
+.progress .mark.passed { color: var(--cyan); } .progress .mark.passed::before { background: var(--cyan); }
+
+.controls { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+.controls .msn-btn { height: 42px; min-width: 130px; font-size: 12px; letter-spacing: 2px; }
+.controls .msn-btn.abort { min-width: 150px; }
+
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: min(820px, 94%); margin-top: 18px; }
+.card { border: 1px solid var(--line2); background: var(--bg1); padding: 10px 12px; }
+.card h4 { font: 9px var(--mono); letter-spacing: 2px; color: var(--muted); font-weight: 400; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.gate { display: flex; gap: 10px; align-items: stretch; }
+.gate > div { flex: 1; border: 1px solid var(--line2); padding: 8px; text-align: center; }
+.gate .big { font: 20px var(--mono); letter-spacing: 2px; margin-top: 4px; color: var(--muted); }
+.gate .big.ok { color: var(--green); } .gate .big.bad { color: var(--red); } .gate .big.wait { color: var(--amber); }
+.gate small { display: block; font: 9px var(--mono); color: var(--muted); letter-spacing: 1px; }
+.motors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.motor { border: 1px solid var(--line2); padding: 6px; text-align: center; font-family: var(--mono); }
+.motor .m { font-size: 9px; color: var(--muted); } .motor .rpm { font-size: 17px; color: var(--white); } .motor .cur { font-size: 9px; color: var(--muted); }
+.motor.off .rpm { color: var(--grey); } .motor.bad { border-color: var(--red); } .motor.bad .rpm { color: var(--red); }
+.events { width: min(820px, 94%); margin: 12px 0 20px; }
+.ev { display: grid; grid-template-columns: 70px 64px 1fr auto; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font: 10px var(--mono); color: var(--white); }
+.ev .t, .ev .c, .ev .w { color: var(--muted); } .ev.hold .m, .ev.abort .m { color: var(--red); } .ev.go .m, .ev.takeoff .m, .ev.safed .m { color: var(--green); }
+
+/* checklist */
+.summary { display: flex; gap: 12px; font: 10px var(--mono); }
+.checks { overflow-y: auto; padding: 4px 0 16px; }
+.group { padding: 10px 14px 4px; font: 9px var(--mono); letter-spacing: 2px; color: var(--muted); }
+.chk { display: grid; grid-template-columns: 18px 1fr auto; gap: 2px 8px; align-items: center; padding: 5px 14px; border-left: 2px solid transparent; }
+.chk .ic { font: 12px var(--mono); text-align: center; }
+.chk .lb { font-size: 13px; font-weight: 500; color: var(--white); line-height: 1.15; }
+.chk .vl { font: 10px var(--mono); text-align: right; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chk .meta { grid-column: 2 / 4; font: 9px var(--mono); color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.chk .meta .gt { border: 1px solid var(--line2); padding: 0 4px; }
+.chk .note { color: var(--amber); }
+.chk.pass .ic, .chk.pass .vl { color: var(--green); }
+.chk.warn { border-left-color: var(--amber); } .chk.warn .ic, .chk.warn .vl { color: var(--amber); }
+.chk.fail { border-left-color: var(--red); background: rgba(255,51,85,.06); } .chk.fail .ic, .chk.fail .vl { color: var(--red); }
+.chk.pending .ic, .chk.pending .vl { color: var(--grey); } .chk.pending .lb { color: #9fb3c4; }
+.chk .tick { margin-left: auto; height: 20px; font-size: 9px; padding: 0 8px; }
 </style>
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
 <script src="console-navigation.js" defer></script>
 </head>
 <body class="console-fit">
-<div class="launch-flash" id="launchFlash"></div>
- 
-<!-- TOPBAR -->
+
 <div class="topbar">
   <div class="tb-seg">
     <div class="logo-dropdown">
       <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
       <div class="logo-dropdown-menu">
-      <a href="dashboard.html">Main Dashboard</a>
-      <a href="mission.html">Mission Planner</a>
-      <a href="preflight.html">Pre-Flight Checklist</a>
-      <a href="parameters.html">Parameters</a>
-      <a href="logs.html">Flight Logs</a>
-      <a href="launch.html">Launch Sequencer</a>
-      <a href="pilot.html">Pilot</a>
-      <a href="health.html">System Health</a>
-      <a href="failsafe.html">Failsafe Systems</a>
-      <a href="sensor-status.html">Sensor Status</a>
-      <a href="actuators.html">Actuators</a>
-    </div>
+        <a href="dashboard.html">Main Dashboard</a>
+        <a href="mission.html">Mission Planner</a>
+        <a href="preflight.html">Pre-Flight Checklist</a>
+        <a href="parameters.html">Parameters</a>
+        <a href="logs.html">Flight Logs</a>
+        <a href="launch.html">Launch Sequencer</a>
+        <a href="pilot.html">Pilot</a>
+        <a href="health.html">System Health</a>
+        <a href="failsafe.html">Failsafe Systems</a>
+        <a href="sensor-status.html">Sensor Status</a>
+        <a href="actuators.html">Actuators</a>
+      </div>
     </div>
   </div>
-  <div class="tb-seg"><span class="tb-title">Launch Sequencer</span></div>
-  <div class="tb-seg"><span class="tb-label">Vehicle</span>&nbsp;<span class="tb-val c" id="hVehicle">--</span></div>
-  <div class="tb-seg"><span class="tb-label">Link</span>&nbsp;<span class="tb-val r" id="hLink">OFFLINE</span></div>
-  <div class="tb-seg"><span class="tb-label">Armed</span>&nbsp;<span class="tb-val a" id="hArmed">--</span></div>
-  <div class="tb-seg"><span class="tb-label">Battery</span>&nbsp;<span class="tb-val g" id="hBatt">--</span></div>
-  <div class="tb-seg"><span class="tb-label">GPS</span>&nbsp;<span class="tb-val" id="hGps" style="color:var(--muted)">--</span></div>
+  <div class="tb-seg"><span class="tb-title">LAUNCH SEQUENCER</span></div>
+  <div class="tb-seg"><span class="tb-label">JETSON</span><span class="tb-val" id="tbLink">--</span></div>
+  <div class="tb-seg"><span class="tb-label">PILOT IN COMMAND</span><span class="tb-val" id="tbPic">--</span></div>
+  <div class="tb-seg"><span class="tb-label">YOU</span><span class="tb-val" id="tbYou">--</span></div>
   <div class="tb-right">
-    <div class="tb-seg" style="border-right:none">
-      <span class="tb-val" style="color:var(--muted);font-family:var(--mono)" id="hClock">--:--:--</span>
-    </div>
+    <div id="missionFaultSlot"></div>
+    <div class="tb-seg" style="border-right:none"><span class="tb-val" style="color:var(--muted)" id="tbClock">--:--:--</span></div>
   </div>
 </div>
- 
-<!-- MAIN -->
+
 <div class="main">
- 
-  <!-- LEFT: Sequence steps -->
-  <div class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">Launch Sequence</div>
-        <div class="panel-sub">AUTOMATED PRE-LAUNCH CHECKS</div>
-      </div>
-      <span id="seqProgress" style="font-size:10px;font-family:var(--mono);color:var(--muted)">0/0</span>
+  <!-- LEFT: stages -->
+  <section class="col">
+    <div class="head"><div><div class="title">SEQUENCE</div><div class="sub">owned by the Jetson · same on every console</div></div></div>
+    <div class="stages" id="stages"></div>
+    <div class="info">
+      <span>MISSION</span><b id="iName">—</b>
+      <span>FOLDER</span><b id="iFolder" title="">—</b>
+      <span>STARTED BY</span><b id="iOperator">—</b>
+      <span>BATTERY PACK</span><b id="iPack">—</b>
+      <span>TAKEOFF ALT</span><b id="iAlt">—</b>
+      <span>RC GATE CH</span><b id="iGateCh">—</b>
+      <span>CONSOLES</span><b id="iConsoles">—</b>
     </div>
-    <div class="seq-list" id="seqList"></div>
-  </div>
- 
-  <!-- CENTER: Countdown + Mission Timeline -->
-  <div class="center-panel">
- 
-    <div class="mission-id">
-      <div class="mission-name" id="missionName">Airsent GCS · Mission 001</div>
-      <div class="mission-vehicle" id="missionVehicle">ArduCopter · Pixhawk</div>
-    </div>
- 
-    <div class="clock-wrap">
-      <div class="clock-label">T-MINUS</div>
-      <div style="position:relative;display:inline-block">
-        <span class="clock-sign" id="clockSign">T−</span>
-        <div class="clock nominal" id="mainClock">03:00</div>
-      </div>
-    </div>
- 
-    <div class="status-badge standby" id="statusBadge">STANDBY</div>
- 
-    <div class="progress-wrap">
-      <div class="progress-track">
-        <div class="progress-fill" id="progressFill" style="width:0%"></div>
-        <!-- Handover marker on track -->
-        <div id="handoverMarker" style="position:absolute;top:-4px;width:2px;height:12px;background:var(--amber);opacity:.8;transition:left .3s;pointer-events:none;"></div>
-      </div>
-      <div class="progress-markers" id="progressMarkers">
-        <span>T-3:00</span><span>T-2:00</span><span>CHECKS</span><span>T-0:30</span><span>LAUNCH</span>
-      </div>
-    </div>
- 
-    <div class="handover-badge" id="handoverBadge" style="display:none">
-      ⚡ VEHICLE HANDOVER — DRONE IN CONTROL
-    </div>
- 
+  </section>
+
+  <!-- CENTER: clock, controls, GO/NO-GO, motors, events -->
+  <section class="col center">
+    <div class="mission-line">AIRSENT · <b id="cName">NO ACTIVE MISSION</b></div>
+    <div class="clock idle" id="clock"><span class="sign" id="clockSign">T−</span><span class="digits" id="clockDigits">03:00</span></div>
+    <div class="stage-badge" id="stageBadge">STANDBY</div>
+    <div class="hold-banner msn-hidden" id="holdBanner"></div>
+    <div class="notice msn-hidden" id="notice"></div>
+    <div class="progress" id="progress"><div class="track"></div><div class="fill" id="progressFill" style="width:0"></div></div>
     <div class="controls">
-      <button class="ctrl-btn btn-start" id="btnStart">▶ INITIATE</button>
-      <button class="ctrl-btn btn-hold" id="btnHold" disabled>⏸ HOLD</button>
-      <button class="ctrl-btn btn-abort" id="btnAbort" disabled>■ ABORT</button>
-        <button class="ctrl-btn" id="btnReset" style="display:none;border-color:rgba(127,220,255,.4);color:#7fdcff;background:rgba(127,220,255,.06);">↺ RESET</button>
+      <button class="msn-btn go" id="lsCreate">▶ START MISSION</button>
+      <button class="msn-btn go" id="lsGo">✓ GO — AREA CLEAR</button>
+      <button class="msn-btn hold" id="lsHold">⏸ HOLD</button>
+      <button class="msn-btn abort" id="lsAbort">■ ABORT</button>
+      <button class="msn-btn go" id="lsClose">✓ CLOSE MISSION</button>
+      <button class="msn-btn" id="lsClaim">TAKE PILOT IN COMMAND</button>
     </div>
- 
-    <div class="config-row">
-      <span>COUNTDOWN</span>
-      <span style="font-family:var(--mono);color:var(--cyan);display:flex;align-items:center;gap:4px;margin:0 6px">
-        T−
-        <input class="config-input" id="cfgMins" type="number" value="3" min="0" max="59" style="width:38px;font-size:16px;height:32px">
-        <span style="color:var(--muted)">M</span>
-        <input class="config-input" id="cfgSecs" type="number" value="0" min="0" max="59" style="width:38px;font-size:16px;height:32px">
-        <span style="color:var(--muted)">S</span>
-      </span>
-      <span style="margin-left:8px">HANDOVER AT T−</span>
-      <input class="config-input" id="cfgHandoverMins" type="number" value="2" min="0" max="59" style="width:38px;font-size:16px;height:32px;margin:0 4px">
-      <span style="color:var(--muted)">M</span>
-      <input class="config-input" id="cfgHandoverSecs" type="number" value="0" min="0" max="59" style="width:38px;font-size:16px;height:32px;margin:0 4px">
-      <span style="color:var(--muted)">S &nbsp;</span>
-      <span style="margin-left:8px">ALT</span>
-      <input class="config-input" id="altInput" type="number" value="10" min="2" max="100" style="width:40px;margin:0 4px">
-      <span style="color:var(--muted)">M</span>
-      <input type="hidden" id="handoffInput" value="180">
-      <input type="hidden" id="handoverInput" value="120">
-    </div>
- 
-    <div class="abort-reason" id="abortReason">ABORT: --</div>
- 
-<!-- Password modal -->
-<div id="resetModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;">
-  <div style="background:#0a1520;border:1px solid rgba(127,220,255,.3);border-radius:6px;padding:24px 28px;width:280px;display:flex;flex-direction:column;gap:12px;align-items:center;">
-    <div style="font-size:11px;color:#ff5566;letter-spacing:2px;font-weight:700;">RESET AUTHORIZATION</div>
-    <div style="font-size:9px;color:#4a7090;letter-spacing:1px;">Enter operator password to reset sequencer</div>
-    <input id="resetPwdInput" type="password" placeholder="password" style="width:100%;background:#060e18;border:1px solid rgba(127,220,255,.3);color:#fff;font-size:12px;padding:8px 10px;border-radius:3px;text-align:center;outline:none;font-family:monospace;letter-spacing:3px;"/>
-    <div style="display:flex;gap:8px;width:100%;">
-      <button id="resetConfirmBtn" style="flex:1;height:32px;border-radius:3px;border:1px solid rgba(127,220,255,.4);color:#7fdcff;background:rgba(127,220,255,.06);font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;">CONFIRM</button>
-      <button id="resetCancelBtn"  style="flex:1;height:32px;border-radius:3px;border:1px solid rgba(255,184,0,.4);color:#ffb800;background:rgba(255,184,0,.06);font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;">CANCEL</button>
-    </div>
-    <div id="resetErrMsg" style="font-size:9px;color:#ff5566;letter-spacing:1px;min-height:12px;"></div>
-  </div>
-</div>
- 
-    <!-- Mission Timeline -->
-    <div class="mission-timeline" id="missionTimeline">
-      <div class="mtl-header">
-        <span class="mtl-title">MISSION TIMELINE</span>
-        <span class="mtl-sub" id="mtlSub">No mission loaded</span>
-      </div>
-      <div class="mtl-track-wrap">
-        <div class="mtl-track" id="mtlTrack">
-          <div class="mtl-progress-line" id="mtlProgressLine" style="width:0%"></div>
+    <div class="cards">
+      <div class="card">
+        <h4><span>GO / NO-GO</span><span id="goWhen">AT T-1:00</span></h4>
+        <div class="gate">
+          <div><small>PILOT IN COMMAND</small><div class="big" id="goState">—</div><small id="goBy">&nbsp;</small></div>
+          <div><small>RC ARM SWITCH</small><div class="big" id="rcState">—</div><small id="rcHint">&nbsp;</small></div>
         </div>
       </div>
-      <div class="mtl-events" id="mtlEvents"></div>
-    </div>
- 
-  </div>
- 
-  <!-- RIGHT: Live telemetry + GO/NO-GO -->
-  <div class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">Vehicle Telemetry</div>
-        <div class="panel-sub">LIVE FROM DRONE</div>
+      <div class="card">
+        <h4><span>MOTOR HEALTH AT IDLE</span><span id="motorStatus">FROM T-0:10</span></h4>
+        <div class="motors" id="motors"></div>
       </div>
-      <span style="font-size:9px;font-family:var(--mono);color:var(--muted)" id="telemAge">--:--:--</span>
     </div>
-    <div class="telem-rows">
-      <div class="t-section">Navigation</div>
-      <div class="t-row"><span class="t-label">GPS Fix</span><span class="t-val c" id="tv-fix">--</span></div>
-      <div class="t-row"><span class="t-label">Satellites</span><span class="t-val" id="tv-sats">--</span></div>
-      <div class="t-row"><span class="t-label">HDOP</span><span class="t-val" id="tv-hdop">--</span></div>
-      <div class="t-row"><span class="t-label">EKF Status</span><span class="t-val g" id="tv-ekf">--</span></div>
-      <div class="t-section">Power</div>
-      <div class="t-row"><span class="t-label">Voltage</span><span class="t-val" id="tv-volt">--</span></div>
-      <div class="t-row"><span class="t-label">Battery</span><span class="t-val" id="tv-batt">--</span></div>
-      <div class="t-row"><span class="t-label">Current</span><span class="t-val a" id="tv-curr">--</span></div>
-      <div class="t-section">Attitude</div>
-      <div class="t-row"><span class="t-label">Roll</span><span class="t-val" id="tv-roll">--</span></div>
-      <div class="t-row"><span class="t-label">Pitch</span><span class="t-val" id="tv-pitch">--</span></div>
-      <div class="t-row"><span class="t-label">Heading</span><span class="t-val c" id="tv-hdg">--</span></div>
-      <div class="t-section">Sensors</div>
-      <div class="t-row"><span class="t-label">IMU</span><span class="t-val" id="tv-imu">--</span></div>
-      <div class="t-row"><span class="t-label">Barometer</span><span class="t-val" id="tv-baro">--</span></div>
-      <div class="t-row"><span class="t-label">Compass</span><span class="t-val" id="tv-mag">--</span></div>
-      <div class="t-row"><span class="t-label">RC RSSI</span><span class="t-val" id="tv-rssi">--</span></div>
-      <div class="t-row"><span class="t-label">Vibration</span><span class="t-val" id="tv-vib">--</span></div>
-      <div class="t-row"><span class="t-label">CPU Load</span><span class="t-val" id="tv-cpu">--</span></div>
-      <div class="t-row"><span class="t-label">Flight Mode</span><span class="t-val c" id="tv-mode">--</span></div>
+    <div class="card events">
+      <h4><span>EVENTS · SAVED TO THE MISSION FOLDER</span><span id="evCount"></span></h4>
+      <div id="events"></div>
     </div>
- 
-    <div class="gono-summary">
-      <div class="gono-title">Go / No-Go Status</div>
-      <div class="gono-grid" id="gonoGrid"></div>
+  </section>
+
+  <!-- RIGHT: live checks -->
+  <section class="col">
+    <div class="head">
+      <div><div class="title">LIVE CHECKS</div><div class="sub">grey = not required yet · red blocks the countdown</div></div>
+      <div class="summary" id="summary"></div>
     </div>
-  </div>
- 
+    <div class="checks" id="checks"></div>
+  </section>
 </div>
- 
+
+<script src="mission-client.js?v=1"></script>
+<script src="mission-ui.js?v=1"></script>
 <script>
-// ═══════════════════════════════════════════════════════════
-// SHARED STATE KEY — dashboard mirrors this exactly
-// ═══════════════════════════════════════════════════════════
-const LS_STATE  = 'airsent_launch_state_v2';
-const LS_HANDOFF = 'airsent_launch_handoff';
-const LS_HANDOVER = 'airsent_launch_handover';
-const LS_CMD    = 'airsent_launch_cmd_v1';
- 
-const airsentMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
-const isViewerMode = airsentMode === "viewer";
-const canSendCommands = airsentMode === "actual" || airsentMode === "operator" || airsentMode === "real";
-const isActual = canSendCommands || isViewerMode;
- 
-let telemetry = {};
-let ws = null;
-let countdownTimer = null;
-let seqTimer = null;
-let totalSeconds = 180;
-let remainingSeconds = 180;
-let handoverSeconds = 120; // T-2:00 default — when drone takes over
-let handoverTriggered = false;
-let seqState = 'standby';
-let currentStep = -1;
-let heldAt = 0;
-let launchElapsed = 0;
-let lastCmdTs = 0; // track processed commands to avoid double-fire
- 
-function pad(n) { return String(n).padStart(2,"0"); }
-function now()  { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-function el(id) { return document.getElementById(id); }
-function r2d(r) { return r * 180 / Math.PI; }
- 
-// ── Broadcast state to localStorage so dashboard mirrors it ─
-function broadcastState(extra) {
-  if (isActual) return;
-  try {
-    localStorage.setItem(LS_STATE, JSON.stringify({
-      state: seqState,
-      remaining: remainingSeconds,
-      total: totalSeconds,
-      handoverAt: handoverSeconds,
-      handoverTriggered,
-      heldAt,
-      launchElapsed,
-      abortReason: extra?.reason || '',
-      ts: Date.now()
-    }));
-  } catch(e) {}
-}
- 
-// ── Sequence ──────────────────────────────────────────────
-// SEQUENCE steps — triggerAt values are computed dynamically
-// by buildSequence() when the countdown starts, relative to handoverSeconds.
-const SEQUENCE_DEFS = [
-  { id:'link',    name:'Telemetry Link',       desc:'Verify GCS↔vehicle MAVLink link active',    duration:3,  check: () => Object.keys(telemetry).length > 0 },
-  { id:'gps',     name:'GPS Acquisition',      desc:'GPS fix with ≥8 satellites',                duration:5,  check: () => telemetry.fix_type && telemetry.fix_type !== 'NO FIX' && telemetry.sats >= 8 },
-  { id:'ekf',     name:'EKF Convergence',      desc:'Extended Kalman Filter healthy',             duration:4,  check: () => telemetry.ekf_healthy !== false },
-  { id:'batt',    name:'Battery Verify',       desc:'Voltage ≥ 13V and battery ≥ 30%',           duration:3,  check: () => (telemetry.voltage||0) >= 13 && (telemetry.battery||0) >= 30 },
-  { id:'imu',     name:'IMU Sensor Check',     desc:'All inertial sensors nominal',               duration:4,  check: () => telemetry.sensors_health ? !!(telemetry.sensors_health & 0x3F) : telemetry.roll !== undefined },
-  { id:'compass', name:'Compass Calibration',  desc:'Magnetometer calibrated, low variance',      duration:3,  check: () => telemetry.sensors_health ? !!(telemetry.sensors_health & 0x100) : true },
-  { id:'baro',    name:'Barometer Nominal',    desc:'Altitude reading stable and plausible',      duration:3,  check: () => telemetry.alt !== undefined },
-  { id:'rc',      name:'RC Link Active',       desc:'Radio controller with RSSI > 30%',           duration:3,  check: () => (telemetry.rssi||0) > 30 },
-  { id:'vib',     name:'Vibration Baseline',   desc:'Vibration < 30 m/s²',                       duration:4,  check: () => { if(telemetry.vib_x===undefined)return true; return Math.sqrt(telemetry.vib_x**2+(telemetry.vib_y||0)**2+(telemetry.vib_z||0)**2)<30; }},
-  { id:'prearm',  name:'Pre-Arm Checks',       desc:'ArduPilot pre-arm all systems pass',         duration:5,  check: () => (telemetry.voltage||0) > 10 && telemetry.ekf_healthy !== false },
-  { id:'gono',    name:'Final GO / NO-GO Poll',desc:'All systems GO — ready to commit',           duration:8,  check: () => computeGoNogo().every(g => g.state === 'go') },
-  { id:'arm',     name:'Vehicle ARM',          desc:'Sending ARM command to flight controller',   duration:4,  check: () => true },
-  { id:'mode',    name:'Set Flight Mode',      desc:'Switching to GUIDED mode',                   duration:3,  check: () => true },
-  { id:'takeoff', name:'TAKEOFF Command',      desc:'Sending TAKEOFF — mission start',            duration:1,  check: () => true },
-];
- 
-// Build SEQUENCE dynamically based on totalSeconds + handoverSeconds.
-//
-// Layout:
-//   T-total … T-handover  → pre-checks (link … gono) spread evenly
-//   T-handover … T-0      → post-handover actions (arm, mode, takeoff)
-//
-// Example: total=3min, handover=2min
-//   Checks fire between T-3:00 and T-2:00 (one per ~6s)
-//   ARM fires at T-1:50, Mode at T-1:55, Takeoff at T-1:59
-let SEQUENCE = [];
-function buildSequence() {
-  const PRE_CHECKS = SEQUENCE_DEFS.slice(0, 11);  // link → gono (indices 0-10)
-  const POST_ACTS  = SEQUENCE_DEFS.slice(11);      // arm, mode, takeoff (indices 11-13)
- 
-  // Pre-check window: from T-(totalSeconds-2) down to T-(handoverSeconds+5)
-  // -2 at start so first check doesn't fire the instant countdown begins
-  // +5 buffer before handover so last check completes before handover fires
-  const winStart = totalSeconds - 2;
-  const winEnd   = handoverSeconds + 5;
-  const usable   = Math.max(winStart - winEnd, 0);
-  const gap      = PRE_CHECKS.length > 1 ? Math.floor(usable / (PRE_CHECKS.length - 1)) : 0;
- 
-  const preSteps = PRE_CHECKS.map((def, i) => ({
-    ...def,
-    triggerAt: Math.max(handoverSeconds + 5, winStart - i * gap)
-  }));
- 
-  // Post-handover actions: fixed offsets BELOW handoverSeconds
-  // ARM at handover-10, Mode at handover-5, Takeoff at handover-1
-  const offsets = [10, 5, 1];
-  const postSteps = POST_ACTS.map((def, i) => ({
-    ...def,
-    triggerAt: Math.max(1, handoverSeconds - offsets[i])
-  }));
- 
-  SEQUENCE = [...preSteps, ...postSteps].sort((a, b) => b.triggerAt - a.triggerAt);
-}
-buildSequence(); // initial build with default handoverSeconds
-let stepStates = {};
-SEQUENCE.forEach(s => stepStates[s.id] = 'pending');
- 
-// ── GO/NO-GO ──────────────────────────────────────────────
-function computeGoNogo() {
-  const d = telemetry;
-  const vm = d.vib_x !== undefined ? Math.sqrt(d.vib_x**2+(d.vib_y||0)**2+(d.vib_z||0)**2) : 0;
-  return [
-    { name:'GPS',       state: d.fix_type && d.fix_type !== 'NO FIX' && d.sats >= 6 ? 'go':'nogo' },
-    { name:'EKF',       state: d.ekf_healthy !== false ? 'go':'nogo' },
-    { name:'Battery',   state: (d.voltage||0)>=13 && (d.battery||0)>=25 ? 'go':'nogo' },
-    { name:'RC Link',   state: (d.rssi||0)>20 ? 'go':'nogo' },
-    { name:'IMU',       state: d.sensors_health ? !!(d.sensors_health&0x3F)?'go':'nogo' : d.roll!==undefined?'go':'nogo' },
-    { name:'Vibration', state: vm<30 ? 'go':'nogo' },
-    { name:'Compass',   state: d.sensors_health ? !!(d.sensors_health&0x100)?'go':'nogo' : 'go' },
-    { name:'Telemetry', state: Object.keys(d).length > 0 ? 'go':'nogo' },
-  ];
-}
- 
-// ── Render sequence ───────────────────────────────────────
-function renderSeq() {
-  const list = el('seqList'); list.innerHTML = '';
-  SEQUENCE.forEach(step => {
-    const state = stepStates[step.id];
-    const div = document.createElement('div');
-    div.className = `seq-item ${state}`;
-    const icons = { pending:'○', active:'◉', complete:'✓', failed:'✗', skipped:'—', hold:'⏸' };
-    const tStr = `T−${pad(Math.floor(step.triggerAt/60))}:${pad(step.triggerAt%60)}`;
-    div.innerHTML = `<div class="seq-icon ${state}">${icons[state]||'○'}</div>
-      <div class="seq-content">
-        <span class="seq-time ${state==='active'?'active':''}">${tStr}</span>
-        <div class="seq-name">${step.name}</div>
-        <div class="seq-desc">${step.desc}</div>
-        ${state==='complete'?'<div class="seq-result ok">✓ PASSED</div>':''}
-        ${state==='failed'?'<div class="seq-result fail">✗ FAILED — ABORT</div>':''}
-      </div>`;
-    list.appendChild(div);
+(() => {
+  'use strict';
+  const M = window.airsentMission, UI = window.airsentMissionUI;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const PRE = ['countdown', 'prearm', 'gonogo', 'armed'], AIR = ['takeoff', 'flight'];
+  const ORDER = ['standby', 'countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed', 'safed'];
+  const GROUPS = ['Link', 'RC', 'Config', 'GPS', 'Estimator', 'Battery', 'Sensors', 'Safety', 'Jetson', 'Vehicle', 'Motors', 'Manual', 'GO/NO-GO'];
+  const ICON = { pass: '✓', warn: '⚠', fail: '✗', pending: '○' };
+  const viewer = !M.canCommand;
+
+  function stageDefs(s) {
+    const m = (s && s.marks) || { handover: 180, gonogo: 60, arm: 10 }, total = s && s.stage !== 'standby' ? s.total : null;
+    return [
+      ['standby', 'STANDBY', '', 'No mission — bench mode'],
+      ['countdown', 'COUNTDOWN', total ? 'T-' + M.mmss(total) : 'START', 'Mission folder created, recording'],
+      ['prearm', 'PRE-ARM', 'T-' + M.mmss(m.handover), 'Vehicle handover — full check'],
+      ['gonogo', 'GO / NO-GO', 'T-' + M.mmss(m.gonogo), 'PIC GO + RC switch to ARM'],
+      ['armed', 'ARMED', 'T-' + M.mmss(m.arm), 'Motors idle, motor health check'],
+      ['takeoff', 'TAKEOFF', 'T-0', `Climb to ${s && s.config ? s.config.takeoff_alt : 5} m, watchdog`],
+      ['flight', 'IN FLIGHT', 'T+', 'Hover / mission, failsafes armed'],
+      ['landed', 'LANDED', '', 'Disarmed on the ground'],
+      ['safed', 'SAFED', '', 'RC switch SAFE — safe to approach'],
+    ];
+  }
+  const gateWhen = (g, s) => ({ create: 'START', countdown: 'START', prearm: 'T-' + M.mmss((s && s.marks && s.marks.handover) || 180), gonogo: 'T-1:00', armed: 'T-0:10', takeoff: 'T-0' }[g] || g);
+
+  function renderStages(s) {
+    const idx = s ? ORDER.indexOf(s.stage) : 0;
+    $('stages').innerHTML = stageDefs(s).map(([id, name, when, desc], i) => {
+      let cls = 'stage';
+      if (s && s.stage === 'aborted') cls += i === 0 ? '' : ' aborted';
+      else if (i < idx) cls += ' done';
+      else if (i === idx) cls += ' current' + (s && s.held ? ' held' : '');
+      const dot = s && s.stage !== 'aborted' && i < idx ? '✓' : i + 1;
+      return `<div class="${cls}"><span class="dot">${dot}</span><span class="name">${name}</span><span class="when">${when}</span><span class="desc">${desc}</span></div>`;
+    }).join('') + (s && s.stage === 'aborted' ? `<div class="stage current held"><span class="dot">✗</span><span class="name">ABORTED</span><span class="when"></span><span class="desc">${esc(s.abort && s.abort.reason)}</span></div>` : '');
+  }
+
+  function renderChecks(s) {
+    const list = (s && s.checks) || [];
+    const n = k => list.filter(c => c.status === k).length;
+    $('summary').innerHTML = `<span class="msn-pass">✓ ${n('pass')}</span><span class="msn-warn">⚠ ${n('warn')}</span><span class="msn-fail">✗ ${n('fail')}</span><span class="msn-pending">○ ${n('pending')}</span>`;
+    const pic = M.isPIC(), canTick = !viewer && pic && s && PRE.includes(s.stage);
+    const groups = [...GROUPS, ...new Set(list.map(c => c.group).filter(g => !GROUPS.includes(g)))];
+    $('checks').innerHTML = list.length ? groups.map(g => {
+      const rows = list.filter(c => c.group === g);
+      if (!rows.length) return '';
+      return `<div class="group">${esc(g.toUpperCase())}</div>` + rows.map(c => {
+        const manual = c.group === 'Manual';
+        const btn = manual && canTick ? `<button class="msn-btn tick ls-manual-btn" data-key="${esc(c.id)}" data-on="${c.raw === 'pass' ? 0 : 1}">${c.raw === 'pass' ? 'UNDO' : 'CONFIRM'}</button>` : '';
+        const title = esc(`Required: ${c.need}${c.note ? ' — ' + c.note : ''}`);
+        return `<div class="chk ${c.status}" title="${title}"><span class="ic">${ICON[c.status] || '?'}</span><span class="lb">${esc(c.label)}</span>
+          <span class="vl">${esc(c.value)}</span><span class="meta"><span class="gt">${gateWhen(c.gate, s)}</span><span>${esc(c.need)}</span>${c.note && c.raw !== 'pass' ? `<span class="note">${esc(c.note)}</span>` : ''}${btn}</span></div>`;
+      }).join('');
+    }).join('') : '<div class="msn-empty">Waiting for the Jetson…</div>';
+  }
+
+  function renderEvents(s) {
+    const ev = (s && s.events) || [];
+    $('evCount').textContent = ev.length ? ev.length + ' latest' : '';
+    $('events').innerHTML = ev.length ? ev.map(e => `<div class="ev ${esc(e.kind)}"><span class="t">${new Date(e.t * 1000).toLocaleTimeString([], { hour12: false })}</span>
+      <span class="c">${esc(e.clock || '')}</span><span class="m">${esc(e.msg)}</span><span class="w">${esc(e.who)}</span></div>`).join('') : '<div class="msn-empty">No events yet</div>';
+  }
+
+  function renderMotors(s) {
+    const motors = (s && s.motors) || [];
+    const armedish = s && ['armed', 'takeoff', 'flight'].includes(s.stage);
+    const mh = s && (s.checks || []).find(c => c.id === 'motor_health');
+    $('motorStatus').textContent = mh ? (mh.status === 'pass' ? '✓ HEALTHY' : mh.status === 'pending' ? 'FROM T-0:10' : mh.value) : '';
+    $('motorStatus').className = mh ? 'msn-' + mh.status : '';
+    $('motors').innerHTML = (motors.length ? motors : [1, 2, 3, 4].map(ch => ({ ch }))).map(m => {
+      const off = !m.connected || !m.rpm;
+      const bad = armedish && m.connected && (!m.rpm || m.status);
+      return `<div class="motor${off ? ' off' : ''}${bad ? ' bad' : ''}"><div class="m">M${m.ch}</div><div class="rpm">${m.connected ? (m.rpm ?? '--') : '--'}</div>
+        <div class="cur">${m.connected ? (m.current != null ? m.current.toFixed(1) + ' A' : '-- A') : 'NO TELEM'}</div></div>`;
+    }).join('');
+  }
+
+  function renderProgress(s) {
+    const box = $('progress');
+    box.querySelectorAll('.mark').forEach(n => n.remove());
+    if (!s || s.stage === 'standby') { $('progressFill').style.width = '0'; return; }
+    const total = s.total || 180, rem = M.remaining();
+    const pct = r => Math.max(0, Math.min(100, 100 * (total - r) / total));
+    $('progressFill').style.width = (AIR.includes(s.stage) || ['landed', 'safed'].includes(s.stage) ? 100 : pct(rem)) + '%';
+    [[total, 'START'], [s.marks.handover, 'HANDOVER'], [s.marks.gonogo, 'GO/NO-GO'], [s.marks.arm, 'ARM'], [0, 'T-0']]
+      .filter(([r], i, a) => r <= total && a.findIndex(x => x[0] === r) === i)
+      .forEach(([r, label]) => {
+        const d = document.createElement('div');
+        d.className = 'mark' + (rem <= r || !PRE.includes(s.stage) ? ' passed' : '');
+        d.style.left = pct(r) + '%';
+        d.textContent = label + (r ? ' T-' + M.mmss(r) : '');
+        box.append(d);
+      });
+  }
+
+  function render() {
+    const s = M.state, fresh = M.mode === 'demo' || M.stateFresh();
+    $('tbClock').textContent = new Date().toLocaleTimeString([], { hour12: false });
+    $('tbLink').textContent = M.mode === 'demo' ? 'DEMO' : fresh ? 'LIVE' : 'NO DATA';
+    $('tbLink').className = 'tb-val ' + (M.mode === 'demo' ? 'msn-warn' : fresh ? 'msn-pass' : 'msn-fail');
+    $('tbPic').textContent = s && s.pic && s.pic.name ? s.pic.name + (s.pic.connected ? '' : ' (OFFLINE)') : '—';
+    $('tbYou').textContent = M.operatorName + (M.isPIC() ? ' · PIC' : viewer ? ' · VIEWER' : '');
+
+    const stage = s ? s.stage : 'standby';
+    const clock = $('clock'), text = M.clockText();
+    const signed = /^T[+-]/.test(text);
+    $('clockSign').textContent = signed ? (text[1] === '+' ? 'T+' : 'T−') : 'T−';
+    $('clockDigits').textContent = signed ? text.slice(2) : '--:--';
+    clock.className = 'clock' + (!s || stage === 'standby' ? ' idle' : s.held || stage === 'aborted' ? ' held' : ['takeoff', 'flight', 'landed', 'safed'].includes(stage) ? ' air' : '');
+    const badge = $('stageBadge');
+    badge.textContent = s ? UI.stageLabel(s) : 'NO DATA';
+    badge.className = 'stage-badge ' + (!s ? '' : s.held ? 'hold msn-blink' : (UI.STAGE[stage] || ['', ''])[1]);
+    $('cName').textContent = s && s.mission ? s.mission.name : 'NO ACTIVE MISSION';
+
+    const hb = $('holdBanner');
+    if (s && s.held) {
+      const left = Math.max(0, (s.config ? s.config.recycle_after : 120) - (s.hold_elapsed || 0));
+      hb.innerHTML = `⏸ HOLD — ${esc(s.hold_reason)}<small>held ${M.mmss(s.hold_elapsed || 0)} · ${left > 0 ? 'recycles to the vehicle handover if held ' + M.mmss(left) + ' longer' : 'will recycle to the vehicle handover on resume'} · resume: pilot in command</small>`;
+      hb.classList.remove('msn-hidden');
+    } else hb.classList.add('msn-hidden');
+
+    const notice = $('notice');
+    let msg = '', cls = '';
+    if (!fresh) { msg = 'No mission state from the Jetson — check the telemetry link. Nothing on this page is current.'; cls = 'warn'; }
+    else if (stage === 'standby') msg = viewer ? 'Viewer mode — read only.' : 'Bench mode. Start a mission to create the mission folder and begin the countdown. The RC switch must be in SAFE.';
+    else if (stage === 'gonogo') { msg = s.go ? (s.rc_gate === 'ARM' || s.rc_gate === 'SIM' ? 'GO ✓ and RC ARM ✓ — arming at T-0:10' : 'GO ✓ — RC pilot: flip the switch to ARM when the area is clear') : 'GO / NO-GO — pilot in command: confirm area and props are clear'; cls = s.go ? 'ok' : 'warn'; }
+    else if (stage === 'armed' && !s.held) { msg = 'ARMED — motors at idle. RC switch to SAFE or ABORT stops everything.'; cls = 'warn'; }
+    else if (stage === 'flight') { msg = s.abort ? `ABORT in progress — ${s.abort.mode === 'rtl' ? 'returning home' : 'landing'}` : `In flight — max ${s.max_alt.toFixed(1)} m. Failsafes armed.`; cls = s.abort ? 'warn' : 'ok'; }
+    else if (stage === 'safed') { msg = 'SAFED — aircraft disarmed and RC switch in SAFE. Safe to approach. Close the mission to write the summary.'; cls = 'ok'; }
+    else if (stage === 'aborted') { msg = `ABORTED — ${s.abort ? s.abort.reason + ' (' + s.abort.by + ')' : ''}. Aircraft disarmed. Close the mission to return to standby.`; cls = 'warn'; }
+    else if (stage === 'landed') msg = 'LANDED — RC pilot: switch to SAFE to safe the aircraft.';
+    notice.textContent = msg; notice.className = 'notice ' + cls + (msg ? '' : ' msn-hidden');
+
+    const pic = M.isPIC(), show = (id, on) => $(id).classList.toggle('msn-hidden', !on);
+    show('lsCreate', stage === 'standby');
+    $('lsCreate').disabled = viewer || !fresh;
+    show('lsGo', ['prearm', 'gonogo'].includes(stage) && !s.go);
+    $('lsGo').disabled = viewer || !pic || !!(s && s.held);
+    $('lsHold').textContent = s && s.held ? '▶ RESUME' : '⏸ HOLD';
+    $('lsHold').className = 'msn-btn ' + (s && s.held ? 'go' : 'hold');
+    show('lsHold', PRE.includes(stage));
+    $('lsHold').disabled = viewer || (s && s.held && !pic);
+    show('lsAbort', PRE.includes(stage) || AIR.includes(stage));
+    $('lsAbort').disabled = viewer;
+    show('lsClose', ['safed', 'aborted'].includes(stage));
+    $('lsClose').disabled = viewer || !pic;
+    show('lsClaim', !viewer && stage !== 'standby' && !pic && !(s.pic && s.pic.connected));
+
+    $('goState').textContent = s && s.go ? 'GO' : stage === 'standby' ? '—' : 'WAITING';
+    $('goState').className = 'big ' + (s && s.go ? 'ok' : stage === 'gonogo' ? 'wait' : '');
+    $('goBy').textContent = s && s.go ? 'by ' + s.go.by : ' ';
+    const rc = s ? s.rc_gate : '—';
+    $('rcState').textContent = { SIM: 'SIM', NOT_CONFIGURED: 'NOT SET', UNKNOWN: 'UNKNOWN' }[rc] || rc;
+    const wantArm = ['gonogo', 'armed', 'takeoff', 'flight'].includes(stage);
+    $('rcState').className = 'big ' + (rc === 'SIM' ? 'ok' : rc === 'ARM' ? (wantArm ? 'ok' : 'bad') : rc === 'SAFE' ? (wantArm && stage !== 'flight' ? 'wait' : 'ok') : 'bad');
+    $('rcHint').textContent = rc === 'NOT_CONFIGURED' ? 'set AIRSENT_RC_GATE_CHANNEL' : wantArm ? 'ARM by T-0:10' : 'SAFE until GO/NO-GO';
+    $('goWhen').textContent = 'AT T-' + M.mmss((s && s.marks && s.marks.gonogo) || 60);
+
+    $('iName').textContent = s && s.mission ? s.mission.name : '—';
+    $('iFolder').textContent = s && s.mission ? s.mission.folder.split('/').pop() : '—';
+    $('iFolder').title = s && s.mission ? s.mission.folder : '';
+    $('iOperator').textContent = s && s.mission ? s.mission.operator : '—';
+    $('iPack').textContent = s && s.mission && s.mission.pack_id ? s.mission.pack_id : '—';
+    $('iAlt').textContent = s && s.config ? s.config.takeoff_alt + ' m' : '—';
+    $('iGateCh').textContent = s && s.config ? (s.config.rc_gate_channel ? 'CH ' + s.config.rc_gate_channel : s.config.sim ? 'SIM' : 'NOT SET') : '—';
+    $('iConsoles').textContent = s && s.consoles ? s.consoles.map(c => c.operator).join(', ') || '—' : '—';
+
+    renderProgress(s);
+  }
+
+  // Lists only re-render when their content changes, so buttons inside stay clickable.
+  const last = {};
+  const changed = (k, v) => { const j = JSON.stringify(v); if (last[k] === j) return false; last[k] = j; return true; };
+  M.on(() => {
+    render();
+    const s = M.state;
+    if (changed('stages', s && [s.stage, s.held, s.total, s.marks, s.abort, s.config && s.config.takeoff_alt])) renderStages(s);
+    if (changed('checks', s && [s.checks, s.stage, s.pic, M.isPIC()])) renderChecks(s);
+    if (changed('events', s && s.events)) renderEvents(s);
+    if (changed('motors', s && [s.motors, s.stage, (s.checks || []).find(c => c.id === 'motor_health')])) renderMotors(s);
   });
-  el('seqProgress').textContent = `${Object.values(stepStates).filter(s=>s==='complete').length}/${SEQUENCE.length}`;
-}
- 
-function renderGoNogo() {
-  const grid = el('gonoGrid'); grid.innerHTML = '';
-  computeGoNogo().forEach(g => {
-    const div = document.createElement('div'); div.className = 'gono-item';
-    div.innerHTML = `<span class="gono-name">${g.name}</span><span class="gono-chip ${g.state}">${g.state==='un'?'--':g.state.toUpperCase()}</span>`;
-    grid.appendChild(div);
+
+  $('lsCreate').onclick = UI.openCreate;
+  $('lsGo').onclick = UI.go;
+  $('lsHold').onclick = UI.holdOrResume;
+  $('lsAbort').onclick = UI.abort;
+  $('lsClose').onclick = UI.close;
+  $('lsClaim').onclick = () => UI.act('mission_claim_pic', {}, 'You are now pilot in command');
+  $('checks').addEventListener('click', e => {
+    const b = e.target.closest('.ls-manual-btn');
+    if (b) UI.act('mission_manual', { key: b.dataset.key, value: b.dataset.on === '1' });
   });
-}
- 
-// ── Mission Timeline ──────────────────────────────────────
-function haversineM(lat1, lon1, lat2, lon2) {
-  const R = 6371000, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
- 
-function buildTimeline() {
-  try {
-    const raw = localStorage.getItem('airsent_mission_v1');
-    let wps = null;
- 
-    if (raw) {
-      const mission = JSON.parse(raw);
-      if (mission.waypoints && mission.waypoints.length) wps = mission.waypoints;
-    }
- 
-    // Demo fallback — show a representative mission even if nothing planned
-    if (!wps) {
-      wps = [
-        { id:1, lat:33.4136, lon:-111.9196, alt:0,  cmd:'TAKEOFF',  speed:3  },
-        { id:2, lat:33.4150, lon:-111.9180, alt:30, cmd:'WAYPOINT', speed:8  },
-        { id:3, lat:33.4165, lon:-111.9165, alt:30, cmd:'WAYPOINT', speed:8  },
-        { id:4, lat:33.4155, lon:-111.9145, alt:25, cmd:'WAYPOINT', speed:6  },
-        { id:5, lat:33.4140, lon:-111.9160, alt:25, cmd:'LOITER_UNLIM', speed:0 },
-        { id:6, lat:33.4136, lon:-111.9196, alt:0,  cmd:'RTL',      speed:8  },
-      ];
-      el('mtlSub').textContent = 'Demo mission — plan yours in Mission Planner';
-    }
- 
-    // Compute cumulative distances
-    let totalDist = 0;
-    const dists = [0];
-    for (let i = 1; i < wps.length; i++) {
-      totalDist += haversineM(wps[i-1].lat, wps[i-1].lon, wps[i].lat, wps[i].lon);
-      dists.push(totalDist);
-    }
- 
-    if (raw && JSON.parse(raw)?.waypoints?.length) {
-      el('mtlSub').textContent = `${wps.length} waypoints · ${(totalDist/1000).toFixed(2)} km total`;
-    }
- 
-    // Render nodes on track
-    const track = el('mtlTrack');
-    // Remove old nodes (keep progress line)
-    track.querySelectorAll('.mtl-node-wrap').forEach(n => n.remove());
- 
-    const cmdIcons = { TAKEOFF:'▲', WAYPOINT:'●', RTL:'⌂', LAND:'▼', LOITER_UNLIM:'↻', LOITER_TURNS:'↻', LOITER_TIME:'↻' };
-    const cmdColors = { TAKEOFF:'var(--green)', WAYPOINT:'var(--cyan)', RTL:'var(--amber)', LAND:'var(--red)', LOITER_UNLIM:'var(--purple)', LOITER_TURNS:'var(--purple)', LOITER_TIME:'var(--purple)' };
-    const cmdClass  = { TAKEOFF:'takeoff', WAYPOINT:'waypoint', RTL:'rtl', LAND:'land', LOITER_UNLIM:'loiter', LOITER_TURNS:'loiter', LOITER_TIME:'loiter' };
- 
-    wps.forEach((wp, i) => {
-      const pct = totalDist > 0 ? (dists[i] / totalDist) * 100 : (i / Math.max(wps.length-1, 1)) * 100;
-      const wrap = document.createElement('div');
-      wrap.className = 'mtl-node-wrap';
-      wrap.style.cssText = `position:absolute;left:${pct}%;top:0;transform:translateX(-50%)`;
-      const node = document.createElement('div');
-      node.className = 'mtl-node pending';
-      node.style.borderColor = cmdColors[wp.cmd] || 'var(--cyan)';
-      node.id = `mtl-node-${wp.id}`;
-      const label = document.createElement('div');
-      label.className = 'mtl-node-label';
-      label.id = `mtl-label-${wp.id}`;
-      label.innerHTML = `${cmdIcons[wp.cmd]||'●'}<br>WP${wp.id}`;
-      wrap.appendChild(node); wrap.appendChild(label);
-      track.appendChild(wrap);
-    });
- 
-    // Event list
-    const evList = el('mtlEvents'); evList.innerHTML = '';
-    wps.forEach((wp, i) => {
-      const row = document.createElement('div');
-      row.className = `mtl-event-row ${cmdClass[wp.cmd]||'waypoint'}`;
-      row.id = `mtl-ev-${wp.id}`;
-      const legDist = i > 0 ? `${haversineM(wps[i-1].lat,wps[i-1].lon,wp.lat,wp.lon).toFixed(0)}m` : '—';
-      row.innerHTML = `<span class="mtl-ev-icon">${cmdIcons[wp.cmd]||'●'}</span><span class="mtl-ev-label">WP${wp.id} · ${wp.cmd}</span><span class="mtl-ev-detail">Alt ${wp.alt}m · ${wp.speed||8}m/s</span><span class="mtl-ev-dist">${legDist}</span>`;
-      evList.appendChild(row);
-    });
- 
-  } catch(e) { el('mtlSub').textContent='Error reading mission'; }
-}
- 
-function updateTimelineProgress(pct) {
-  const line = el('mtlProgressLine');
-  if (line) line.style.width = pct + '%';
-}
- 
-// ── Seq state machine ─────────────────────────────────────
-function setSeqState(s) {
-  seqState = s;
-  el('mainClock').className  = `clock ${s==='abort'?'abort':s==='launch'?'launch':s==='hold'?'warning':'nominal'}`;
-  el('statusBadge').className  = `status-badge ${s}`;
-  el('statusBadge').textContent = {standby:'STANDBY',counting:'COUNTING',hold:'HOLD',abort:'ABORT',launch:'LIFTOFF'}[s]||s.toUpperCase();
-  el('clockSign').className = `clock-sign${s==='counting'||s==='hold'?' active':''}`;
-  if(s==='launch') el('clockSign').textContent = 'T+';
-  else el('clockSign').textContent = 'T−';
-  el('btnStart').disabled  = s !== 'standby';
-  el('btnHold').disabled   = s !== 'counting';
-  el('btnAbort').disabled  = s === 'standby' || s === 'launch';
-  el('btnAbort').style.display = s === 'abort' ? 'none' : '';
-  var br = document.getElementById('btnReset');
-  if (br) br.style.display = s === 'abort' ? '' : 'none';
-  // Only broadcast non-standby states automatically
-  // Standby is broadcast explicitly by resetSequencer to avoid overwriting active sessions
-  if (s !== 'standby') broadcastState();
-}
- 
-function abortSequence(reason) {
-  if (isActual) return;
-  clearInterval(countdownTimer); clearTimeout(seqTimer);
-  setSeqState('abort');
-  el('abortReason').textContent = `ABORT: ${reason}`;
-  el('abortReason').style.display = 'block';
-  SEQUENCE.forEach(s => { if(stepStates[s.id]==='active') stepStates[s.id]='failed'; });
-  renderSeq();
-  broadcastState({ reason });
-  // reset requires operator authorization — see btnReset
-}
- 
-function triggerLaunch() {
-  if (isActual) return;
-  clearInterval(countdownTimer);
-  setSeqState('launch');
-  el('mainClock').textContent = '00:00';
-  SEQUENCE.forEach(s => { if(stepStates[s.id]==='pending') stepStates[s.id]='skipped'; });
-  renderSeq();
-  const flash = el('launchFlash');
-  flash.style.display = 'block';
-  setTimeout(()=>flash.style.display='none', 1200);
-  launchElapsed = 0;
-  countdownTimer = setInterval(() => {
-    launchElapsed++;
-    el('mainClock').textContent = `${pad(Math.floor(launchElapsed/60))}:${pad(launchElapsed%60)}`;
-    broadcastState();
-  }, 1000);
-}
- 
-function runStepAt(t) {
-  const step = SEQUENCE.find(s => s.triggerAt === t);
-  if (!step) return;
-  stepStates[step.id] = 'active';
-  renderSeq();
-  seqTimer = setTimeout(() => {
-    const passed = step.check();
-    stepStates[step.id] = passed ? 'complete' : 'failed';
-    renderSeq();
-    if (!passed && step.id !== 'arm' && step.id !== 'mode' && step.id !== 'takeoff') {
-      abortSequence(`${step.name} — check failed`);
-    }
-  }, step.duration * 1000);
-}
- 
-function _runTick() {
-  if (isActual) return;
-  if (seqState !== 'counting') return;
-  remainingSeconds--;
-  if (remainingSeconds < 0) { triggerLaunch(); return; }
-  const m = Math.floor(remainingSeconds/60), s = remainingSeconds%60;
-  el('mainClock').textContent = `${pad(m)}:${pad(s)}`;
-  const pct = ((totalSeconds-remainingSeconds)/totalSeconds)*100;
-  el('progressFill').style.width = pct+'%';
-  el('progressFill').style.background = remainingSeconds < 15 ? 'var(--amber)' : remainingSeconds < 5 ? 'var(--green)' : 'var(--cyan)';
-  updateTimelineProgress(pct);
-  // Only run sequence steps at or after the handover point
-  if (remainingSeconds <= handoverSeconds) {
-    runStepAt(remainingSeconds);
-  }
- 
-  // Handover check
-  if (!handoverTriggered && remainingSeconds <= handoverSeconds) {
-    handoverTriggered = true;
-    el('handoverBadge').style.display = 'block';
-    // Show on seq list — add a visual note
-    const note = document.createElement('div');
-    note.style.cssText = 'padding:6px 14px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--amber);border-left:2px solid var(--amber);background:rgba(255,184,0,.06);font-family:var(--mono)';
-    note.textContent = `⚡ T−${pad(Math.floor(remainingSeconds/60))}:${pad(remainingSeconds%60)} — VEHICLE HANDOVER`;
-    el('seqList')?.prepend(note);
-  }
- 
-  broadcastState();
-}
- 
-function startCountdown() {
-  if (isActual) return;
-  totalSeconds = parseInt(el('handoffInput').value) || 180;
-  remainingSeconds = totalSeconds;
-  buildSequence(); // compute triggerAt values relative to current handoverSeconds
-  el('abortReason').style.display = 'none';
-  SEQUENCE.forEach(s => stepStates[s.id] = 'pending');
-  renderSeq();
-  setSeqState('counting');
-  countdownTimer = setInterval(_runTick, 1000);
-}
- 
-function holdSequencer() {
-  if (isActual) return;
-  heldAt = remainingSeconds;
-  clearInterval(countdownTimer); clearTimeout(seqTimer);
-  setSeqState('hold');
-  SEQUENCE.forEach(s => { if(stepStates[s.id]==='active') stepStates[s.id]='pending'; });
-  renderSeq();
-}
- 
-function resumeSequencer() {
-  if (isActual) return;
-  remainingSeconds = heldAt;
-  setSeqState('counting');
-  countdownTimer = setInterval(_runTick, 1000);
-}
- 
-function resetSequencer() {
-  if (isActual) return;
-  clearInterval(countdownTimer); clearTimeout(seqTimer);
-  totalSeconds = parseInt(el('handoffInput').value) || 180;
-  remainingSeconds = totalSeconds;
-  buildSequence(); // recompute so sidebar shows correct T-minus times
-  handoverTriggered = false;
-  launchElapsed = 0;
-  const m = Math.floor(totalSeconds/60), s = totalSeconds%60;
-  el('mainClock').textContent = `${pad(m)}:${pad(s)}`;
-  el('progressFill').style.width = '0%';
-  el('progressFill').style.background = 'var(--cyan)';
-  el('abortReason').style.display = 'none';
-  if(el('handoverBadge')) el('handoverBadge').style.display = 'none';
-  SEQUENCE.forEach(s => stepStates[s.id] = 'pending');
-  el('clockSign').textContent = 'T−';
-  updateTimelineProgress(0);
-  updateHandoverMarker();
-  renderSeq();
-  setSeqState('standby');
-}
- 
-// ── Telemetry display ─────────────────────────────────────
-function updateTelemetry(d) {
-  function sv(id, val, cls) { const e=el(id); if(!e) return; e.textContent=val; if(cls!==undefined) e.className='t-val '+(cls||''); }
-  const gpsOk = d.fix_type && d.fix_type !== 'NO FIX';
-  sv('tv-fix',  d.fix_type||'--', gpsOk?'g':'r');
-  sv('tv-sats', d.sats!=null?`${d.sats} sats`:'--', d.sats>=8?'g':d.sats>=5?'a':'r');
-  sv('tv-hdop', d.hdop!=null?d.hdop.toFixed(2):'--', d.hdop<1.5?'g':'a');
-  sv('tv-ekf',  d.ekf_healthy!==false?'HEALTHY':'DEGRADED', d.ekf_healthy!==false?'g':'r');
-  sv('tv-volt', d.voltage?`${d.voltage.toFixed(1)} V`:'--', d.voltage>14?'g':d.voltage>12?'a':'r');
-  sv('tv-batt', d.battery!=null?`${Math.round(d.battery)}%`:'--', d.battery>50?'g':d.battery>25?'a':'r');
-  sv('tv-curr', d.current!=null?`${d.current.toFixed(1)} A`:'--', 'a');
-  if(d.roll!==undefined){sv('tv-roll',`${r2d(d.roll)>=0?'+':''}${r2d(d.roll).toFixed(1)}°`,Math.abs(r2d(d.roll))<15?'':'a');sv('tv-pitch',`${r2d(d.pitch||0)>=0?'+':''}${r2d(d.pitch||0).toFixed(1)}°`,Math.abs(r2d(d.pitch||0))<15?'':'a');}
-  sv('tv-hdg',  d.heading!=null?`${d.heading}°`:'--', 'c');
-  sv('tv-imu',  d.sensors_health?(!!(d.sensors_health&0x3F)?'NOMINAL':'FAULT'):d.roll!==undefined?'NOMINAL':'--', d.sensors_health?!!(d.sensors_health&0x3F)?'g':'r':'');
-  sv('tv-baro', d.alt!=null?`${d.alt.toFixed(1)} m`:'--', 'c');
-  sv('tv-mag',  d.sensors_health?(!!(d.sensors_health&0x100)?'CAL':'FAULT'):'-', d.sensors_health?!!(d.sensors_health&0x100)?'g':'r':'');
-  sv('tv-rssi', d.rssi!=null?`${d.rssi.toFixed(0)}%`:'--', d.rssi>60?'g':d.rssi>30?'a':'r');
-  const vm=d.vib_x!=null?Math.sqrt(d.vib_x**2+(d.vib_y||0)**2+(d.vib_z||0)**2):null;
-  sv('tv-vib',  vm!=null?(vm<15?'LOW':vm<30?'MED':'HIGH'):'--', vm!=null?vm<15?'g':vm<30?'a':'r':'');
-  sv('tv-cpu',  d.cpu!=null?`${Math.round(d.cpu)}%`:'--', d.cpu<70?'':'a');
-  sv('tv-mode', d.flight_mode||'--', 'c');
-  el('telemAge').textContent = now();
-  if(d.flight_mode) el('hVehicle').textContent = d.flight_mode;
-  el('hLink').textContent='LINKED'; el('hLink').className='tb-val g';
-  el('hArmed').textContent=d.armed?'ARMED':'DISARMED'; el('hArmed').className='tb-val '+(d.armed?'r':'a');
-  if(d.battery!=null){el('hBatt').textContent=`${Math.round(d.battery)}% · ${(d.voltage||0).toFixed(1)}V`;el('hBatt').className='tb-val '+(d.battery>50?'g':d.battery>25?'a':'r');}
-  if(d.fix_type){el('hGps').textContent=d.fix_type;el('hGps').className='tb-val '+(gpsOk?'g':'r');}
-  renderGoNogo();
-}
- 
-// ── Input sync ────────────────────────────────────────────
-function updateHandoverMarker() {
-  const marker = el('handoverMarker'); if (!marker) return;
-  const pct = totalSeconds > 0 ? ((totalSeconds - handoverSeconds) / totalSeconds) * 100 : 50;
-  marker.style.left = Math.max(0, Math.min(100, pct)) + '%';
-}
- 
-function syncHandoff() {
-  if (isActual) return;
-  const m = parseInt(el('cfgMins')?.value) || 0;
-  const s = parseInt(el('cfgSecs')?.value) || 0;
-  const total = Math.max(10, m*60 + s);
-  el('handoffInput').value = total;
-  try { localStorage.setItem(LS_HANDOFF, total); } catch(e) {}
-  // Ensure handover <= total
-  if (handoverSeconds > total) {
-    handoverSeconds = Math.max(10, total - 10);
-    if(el('cfgHandoverMins')) el('cfgHandoverMins').value = Math.floor(handoverSeconds/60);
-    if(el('cfgHandoverSecs')) el('cfgHandoverSecs').value = handoverSeconds % 60;
-  }
-  if (seqState === 'standby') { buildSequence(); renderSeq(); resetSequencer(); }
-  else updateHandoverMarker();
-}
- 
-function syncHandover() {
-  if (isActual) return;
-  const m = parseInt(el('cfgHandoverMins')?.value) || 0;
-  const s = parseInt(el('cfgHandoverSecs')?.value) || 0;
-  handoverSeconds = Math.max(5, m*60 + s);
-  try { localStorage.setItem(LS_HANDOVER, handoverSeconds); } catch(e) {}
-  updateHandoverMarker();
-  if (seqState === 'standby') { buildSequence(); renderSeq(); } // update sidebar labels live
-}
- 
-el('cfgMins').addEventListener('change', syncHandoff);
-el('cfgSecs').addEventListener('change', syncHandoff);
-el('cfgHandoverMins').addEventListener('change', syncHandover);
-el('cfgHandoverSecs').addEventListener('change', syncHandover);
-el('handoffInput').addEventListener('change', () => {
-  if (isActual) return;
-  try { localStorage.setItem(LS_HANDOFF, el('handoffInput').value); } catch(e) {}
-  if (seqState === 'standby') resetSequencer();
-});
- 
-// ── Buttons ───────────────────────────────────────────────
-el('btnStart').addEventListener('click', () => { if(isViewerMode) return; if(seqState==='standby') startCountdown(); });
-el('btnHold').addEventListener('click',  () => { if(isViewerMode) return; if(seqState==='counting') holdSequencer(); else if(seqState==='hold') resumeSequencer(); });
-el('btnAbort').addEventListener('click', () => { if(isViewerMode) return; if(seqState!=='standby') abortSequence('Manual abort by operator'); });
- 
-// ── Command polling (handles same-tab dashboard buttons) ──
-function processCmd() {
-  if (isActual) return;
-  if (isViewerMode) return;
-  try {
-    const raw = localStorage.getItem(LS_CMD); if (!raw) return;
-    const cmd = JSON.parse(raw);
-    if (!cmd || cmd.ts <= lastCmdTs) return; // already processed
-    lastCmdTs = cmd.ts;
-    if (Date.now() - cmd.ts > 5000) return; // stale
-    if (cmd.cmd === 'start'  && seqState === 'standby')  startCountdown();
-    if (cmd.cmd === 'hold'   && seqState === 'counting')  holdSequencer();
-    if (cmd.cmd === 'resume' && seqState === 'hold')      resumeSequencer();
-    if (cmd.cmd === 'abort'  && seqState !== 'standby')   abortSequence('Command from dashboard');
-    if (cmd.cmd === 'reset')  resetSequencer();
-  } catch(e) {}
-}
-setInterval(processCmd, 300); // poll every 300ms — catches same-tab commands
- 
-var RESET_PASSWORD = 'airsent';
-function showResetModal() {
-  if (isActual) return;
-  if (isViewerMode) return;
-  var m = document.getElementById('resetModal');
-  if (m) { m.style.display = 'flex'; }
-  var inp = document.getElementById('resetPwdInput');
-  if (inp) { inp.value = ''; inp.focus(); }
-  var err = document.getElementById('resetErrMsg');
-  if (err) err.textContent = '';
-}
-function hideResetModal() {
-  var m = document.getElementById('resetModal');
-  if (m) m.style.display = 'none';
-}
-document.getElementById('btnReset').addEventListener('click', showResetModal);
-document.getElementById('resetConfirmBtn').addEventListener('click', function() {
-  var inp = document.getElementById('resetPwdInput');
-  if (!inp) return;
-  if (inp.value.trim() === RESET_PASSWORD) { hideResetModal(); resetSequencer(); }
-  else {
-    var err = document.getElementById('resetErrMsg');
-    if (err) err.textContent = 'INCORRECT PASSWORD';
-    inp.value = ''; inp.focus();
-  }
-});
-document.getElementById('resetCancelBtn').addEventListener('click', hideResetModal);
-document.getElementById('resetPwdInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') document.getElementById('resetConfirmBtn').click();
-  if (e.key === 'Escape') hideResetModal();
-});
- 
-// ── WebSocket ─────────────────────────────────────────────
-function connectWs() {
-  ws = new WebSocket(window.airsentApiUrl('/telem', true));
-  ws.onopen = () => { el('hLink').textContent='LINKED'; el('hLink').className='tb-val g'; };
-  ws.onmessage = e => { try{telemetry=JSON.parse(e.data);updateTelemetry(telemetry);}catch(err){} };
-  ws.onclose = () => { el('hLink').textContent='OFFLINE'; el('hLink').className='tb-val r'; setTimeout(connectWs,3000); };
-  ws.onerror = () => { ws=null; };
-}
- 
-function runDemo() {
-  el('hLink').textContent='DEMO'; el('hLink').className='tb-val c';
-  function rnd(a,b){return Math.random()*(b-a)+a;}
-  setInterval(()=>{
-    telemetry={fix_type:'RTK FIX',sats:Math.floor(rnd(17,22)),hdop:rnd(0.5,1.1),lat:33.4136,lon:-111.9196,roll:rnd(-0.04,0.04),pitch:rnd(-0.03,0.03),yaw:2.2,sensors_health:0x201FF,ekf_healthy:true,ekf_compass_variance:rnd(0.01,0.04),alt:rnd(0,0.3),voltage:rnd(15.5,16.0),current:rnd(4,6),battery:rnd(70,78),rssi:rnd(82,91),rc_throttle:1000,vib_x:rnd(0.5,2),vib_y:rnd(0.5,2),vib_z:rnd(1,4),cpu:rnd(28,38),flight_mode:'STABILIZE',armed:false,heading:Math.floor(rnd(130,145))};
-    updateTelemetry(telemetry);
-  }, 1000);
-}
- 
-// ── Init ──────────────────────────────────────────────────
-setInterval(()=>el('hClock').textContent=now(), 1000);
- 
-// Restore saved config
-try {
-  const h = localStorage.getItem(LS_HANDOFF);
-  if (h) {
-    const t = parseInt(h);
-    el('handoffInput').value = t;
-    if (el('cfgMins')) el('cfgMins').value = Math.floor(t/60);
-    if (el('cfgSecs')) el('cfgSecs').value = t % 60;
-  }
-  const hv = localStorage.getItem(LS_HANDOVER);
-  if (hv) {
-    handoverSeconds = parseInt(hv);
-    if (el('cfgHandoverMins')) el('cfgHandoverMins').value = Math.floor(handoverSeconds/60);
-    if (el('cfgHandoverSecs')) el('cfgHandoverSecs').value = handoverSeconds % 60;
-  }
-} catch(e) {}
- 
-// Restore active state from localStorage if it exists, else fresh start
-(function() {
-  if (isActual) return;
-  try {
-    const raw = localStorage.getItem(LS_STATE);
-    if (raw) {
-      const d = JSON.parse(raw);
-      if (d.state && d.state !== 'standby' && Date.now() - d.ts < 600000) {
-        totalSeconds    = d.total || 180;
-        remainingSeconds = d.remaining || totalSeconds;
-        heldAt          = d.heldAt || 0;
-        launchElapsed   = d.launchElapsed || 0;
-        handoverTriggered = d.handoverTriggered || false;
- 
-        if (d.state === 'counting') {
-          const away = Math.floor((Date.now() - d.ts) / 1000);
-          remainingSeconds = Math.max(0, d.remaining - away);
-        }
- 
-        const m = Math.floor(remainingSeconds/60), s = remainingSeconds%60;
-        el('mainClock').textContent = `${pad(m)}:${pad(s)}`;
-        el('progressFill').style.width = `${((totalSeconds-remainingSeconds)/totalSeconds)*100}%`;
-        if (handoverTriggered && el('handoverBadge')) el('handoverBadge').style.display = 'block';
- 
-        SEQUENCE.forEach(s => stepStates[s.id] = 'pending');
-        renderSeq();
-        setSeqState(d.state);
- 
-        if (d.state === 'counting' && remainingSeconds > 0) {
-          countdownTimer = setInterval(_runTick, 1000);
-        } else if (d.state === 'launch') {
-          countdownTimer = setInterval(() => {
-            launchElapsed++;
-            el('mainClock').textContent = `T+${pad(Math.floor(launchElapsed/60))}:${pad(launchElapsed%60)}`;
-            broadcastState();
-          }, 1000);
-        }
-        return;
-      }
-    }
-  } catch(e) {}
-  resetSequencer();
+  renderStages(null); renderChecks(null); renderEvents(null); renderMotors(null); render();
 })();
- 
-buildSequence(); // initial build so sidebar shows correct T-minus labels
-renderGoNogo();
-buildTimeline();
- 
-window.airsentRenderSharedCountdown = function(d) {
-  if (totalSeconds !== d.total || handoverSeconds !== d.handoverAt) {
-    totalSeconds = d.total; handoverSeconds = d.handoverAt; buildSequence(); renderSeq(); updateHandoverMarker();
-  }
-  updateTimelineProgress(100 * (d.total - d.remaining) / d.total);
-};
-renderSeq();
-// Rebuild timeline when mission changes in another tab
-window.addEventListener('storage', e => {
-  if (e.key === 'airsent_mission_v1') buildTimeline();
-  if (e.key === LS_CMD) processCmd();
-});
- 
-if(isActual) connectWs(); else runDemo();
 </script>
-<script src="shared-countdown.js?v=sitl-1"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
 </body>
