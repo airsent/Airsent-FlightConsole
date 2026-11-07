@@ -37,7 +37,7 @@ class HealthTelemetry:
     if present&mask!=mask:return 'not_reported'
     if enabled&mask!=mask:return 'disabled'
     return 'ok' if healthy&mask==mask else 'fault'
-   sensors={'source':'SYS_STATUS','age':age,'imu':sensor(3),'mag':sensor(4),'baro':sensor(8),'outputs':sensor(32768),'gps':sensor(32)}
+   sensors={'source':'SYS_STATUS','age':age,'imu':sensor(3),'mag':sensor(4),'baro':sensor(8),'outputs':sensor(32768),'gps':sensor(32),'prearm':sensor(268435456)}
    power={'source':None,'age':None,'voltage':None,'current':None,'battery':None}
    if connected:
     for source in ('BATTERY_STATUS','SYS_STATUS'):

@@ -1,0 +1,26 @@
+{
+  "_about": "Approved Pixhawk configuration for the Airsent quad (ArduCopter 4.6, Pixhawk 6C, T-Motor ALPHA 40A, Tattu 6S 10000 mAh, Holybro PM07). The launch sequencer HOLDS at the vehicle handover if any live value differs. Change a value here only on purpose, commit it, and redeploy to the Jetson.",
+  "params": {
+    "FRAME_CLASS":      {"value": 1,      "why": "Quad"},
+    "ARMING_CHECK":     {"value": 1,      "why": "All ArduPilot arming checks enabled"},
+    "DISARM_DELAY":     {"min": 15, "max": 60, "why": "The sequencer arms at T-10; ArduPilot must not auto-disarm before T-0"},
+    "MOT_PWM_TYPE":     {"value": 0,      "why": "Normal PWM (ALPHA ESCs are PWM-only)"},
+    "MOT_PWM_MIN":      {"value": 1100,   "why": "ALPHA 40A fixed throttle range"},
+    "MOT_PWM_MAX":      {"value": 1940,   "why": "ALPHA 40A fixed throttle range"},
+    "BATT_MONITOR":     {"value": 4,      "why": "PM07 analog voltage and current"},
+    "BATT_VOLT_MULT":   {"min": 17.0, "max": 19.5, "why": "PM07 divider 18.182, allows calibration"},
+    "BATT_AMP_PERVLT":  {"min": 30.0, "max": 43.0, "why": "PM07 36.364 A/V, allows calibration"},
+    "BATT_CAPACITY":    {"value": 10000,  "why": "Tattu Plus 10000 mAh"},
+    "BATT_LOW_VOLT":    {"value": 21.6,   "why": "3.6 V/cell low failsafe"},
+    "BATT_CRT_VOLT":    {"value": 21.0,   "why": "3.5 V/cell critical failsafe"},
+    "BATT_FS_LOW_ACT":  {"value": 2,      "why": "Low battery: RTL"},
+    "BATT_FS_CRT_ACT":  {"value": 1,      "why": "Critical battery: land"},
+    "FS_THR_ENABLE":    {"value": 1,      "why": "RC loss: RTL"},
+    "FS_GCS_ENABLE":    {"in": [1, 5],    "why": "Console/Jetson loss: RTL (or SmartRTL/land)"},
+    "FS_EKF_ACTION":    {"value": 1,      "why": "Position estimate failure: land"},
+    "FS_CRASH_CHECK":   {"value": 1,      "why": "Disarm on crash"},
+    "FENCE_ENABLE":     {"value": 1,      "why": "Geofence and max altitude on"},
+    "FENCE_ALT_MAX":    {"min": 10, "max": 120, "why": "Max altitude, Part 107 limit"},
+    "FENCE_ACTION":     {"in": [1, 4],    "why": "Fence breach: RTL (or brake)"}
+  }
+}

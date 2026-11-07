@@ -45,6 +45,9 @@ document.addEventListener('click', function(e) {
 });
 
 function _updateFaultCounter() {
+  // The shared fault UI (mission-ui.js) owns the panel; it merges these console-side
+  // alerts with the Jetson's fault list.
+  if (typeof window.airsentFaultsLocal === 'function') { window.airsentFaultsLocal(_faultMap); return; }
   const countEl   = document.getElementById('faultCountNum');
   const counter   = document.getElementById('faultCounter');
   const list      = document.getElementById('faultPanelList');

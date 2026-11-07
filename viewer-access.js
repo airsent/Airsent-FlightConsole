@@ -9,7 +9,7 @@
     'parameters.html': '#btnWriteAll,#btnLoadFile,#btnResetMod,#dInput,.d-option,#dBtnSet,#dBtnReset',
     'preflight.html': '#btnClearFail,#btnReset,#btnResetHard,.check-item:not(.auto)',
     'failsafe.html': 'input,select,textarea,.fs-card-activation,#fsAutoToggle,#fsEditDraft,#fsTestDraft,#fsDiscardDraft,#fsAck,button[type="submit"],[data-policy-system]',
-    'launch.html': '#btnStart,#btnHold,#btnAbort,#btnReset,#cfgMins,#cfgSecs,#cfgHandoverMins,#cfgHandoverSecs,#handoffInput',
+    'launch.html': '#lsCreate,#lsGo,#lsHold,#lsAbort,#lsClose,#lsClaim,.ls-manual-btn',
     'actuators.html': '.test-btn,#statusSelect,#flightModeSelect'
   };
   const selector = rules[page] || '';
