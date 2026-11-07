@@ -247,3 +247,28 @@ class ASCWiring(unittest.TestCase):
         self.assertIn(p['asc']['state'], ('standby', 'watching', 'acting'))
         self.assertLess(len(json.dumps(p['asc'])), 2500)
         self.assertNotIn('asc', srv.build_telemetry_payload(include_mission=False))
+
+
+class StreamRates(unittest.TestCase):
+    def test_fast_link_sets_per_message_rates(self):
+        fc = FakePixhawk()
+        old = srv.PIXHAWK_BAUD
+        try:
+            srv.PIXHAWK_BAUD = 921600
+            srv.configure_streams(fc)
+            reqs = [c for c in fc.commands if c[0] == 511]          # MAV_CMD_SET_MESSAGE_INTERVAL
+            self.assertEqual(len(reqs), len(srv.FAST_STREAMS))
+            self.assertIn((511, 30, 33333), reqs)                    # ATTITUDE (id 30) every 33 ms = 30 Hz
+        finally:
+            srv.PIXHAWK_BAUD = old
+
+    def test_slow_link_keeps_the_old_request(self):
+        fc = FakePixhawk()
+        fc.mav.request_data_stream_send = lambda *a: fc.commands.append(('stream',) + a[2:])
+        old = srv.PIXHAWK_BAUD
+        try:
+            srv.PIXHAWK_BAUD = 57600
+            self.assertIn('10 Hz', srv.configure_streams(fc))
+            self.assertEqual(fc.commands, [('stream', srv.mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1)])
+        finally:
+            srv.PIXHAWK_BAUD = old
