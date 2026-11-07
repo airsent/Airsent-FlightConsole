@@ -1,12 +1,19 @@
 /* Server journal is authoritative for real console history. Demo/SITL stay separate. */
 (() => {
-  if (!['operator','viewer'].includes(localStorage.getItem('airsentMode')) || window.airsentSimulation || new URLSearchParams(location.search).get('trial') === 'demo') return;
+  const mode=(localStorage.getItem('airsentMode')||'demo').toLowerCase();
+  // Every real console (operator / actual / real / viewer) shares one history. Demo and SITL stay separate.
+  if (!['operator','actual','real','viewer'].includes(mode) || window.airsentSimulation || new URLSearchParams(location.search).get('trial') === 'demo') return;
+  const canNote=mode!=='viewer';
   let ws, timer, ready=false;
   const records=new Map();
   const report=()=>window.dispatchEvent(new CustomEvent('airsent-events', {detail:{events:[...records.values()].sort((a,b)=>a.id-b.id),ready}}));
   window.AirsentEvents={get ready(){return ready},note(text){
-    if(localStorage.getItem('airsentMode')!=='operator'||!ready||ws?.readyState!==1)return false;
+    if(!canNote||!ready||ws?.readyState!==1)return false;
     ws.send(JSON.stringify({type:'operator_note',id:crypto.randomUUID(),text}));return true;
+  },refresh(){
+    // Reload the whole shared history from the server.
+    records.clear();ready=false;report();
+    try{ws?.close();}catch{}
   }};
   function connect(){
     const url=new URL('/events',location.origin);url.protocol=location.protocol==='https:'?'wss:':'ws:';
