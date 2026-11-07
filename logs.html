@@ -86,7 +86,7 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
   </section>
   <section class="col"><div class="detail" id="detail"><div class="empty">Select a mission to see its summary, charts, events and files.</div></div></section>
 </div>
-<script src="mission-client.js?v=4"></script>
+<script src="mission-client.js?v=5"></script>
 <script src="mission-ui.js?v=3"></script>
 <script>
 (() => {
@@ -174,12 +174,47 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
       ${charts.length ? `<h3>CHARTS</h3><div class="charts">${charts.map(f => `<div class="ph" data-chart="${esc(f.path)}">loading ${esc(f.path.split('/').pop())}…</div>`).join('')}</div>` : ''}
       <h3>EVENTS</h3><div class="filters">${['all', 'warning', 'critical', 'commands'].map(k => `<button class="btn${evFilter === k ? ' on' : ''}" data-ev="${k}">${k.toUpperCase()}</button>`).join('')}</div>
       <div class="ev"><table id="evTable"></table></div>
+      <h3>RECORDINGS</h3><div id="recBox">${recordingsHtml()}</div>
       <h3>FILES</h3><table><tr><th>FILE</th><th>SIZE</th><th></th></tr>${(detail.files || []).map(f => `<tr><td>${esc(f.path)}<div class="prog"><i data-prog="${esc(f.path)}"></i></div></td><td>${size(f.size)}</td>
         <td><button class="btn" data-dl="${esc(f.path)}" data-size="${f.size}">⤓ DOWNLOAD</button></td></tr>`).join('')}</table>
       <div class="note">Downloads come from the Jetson in chunks over the console link. Large files (mavlink.tlog) can take a while on cellular.</div>`;
     renderEvents();
     charts.forEach(f => loadChart(f.path));
   }
+
+  // Pixhawk .bin + camera video for the selected mission
+  function recordingsHtml() {
+    const files = detail.files || [], has = p => files.find(f => f.path === p);
+    const m = missions.find(x => x.folder === selected) || {};
+    const bl = (M() && M().binLog) || {}, mine = bl.folder === selected;
+    const bin = has('pixhawk.bin'), part = has('pixhawk.bin.part');
+    let binTxt;
+    if (mine && (bl.state === 'listing' || bl.state === 'downloading'))
+      binTxt = `<span style="color:var(--amber)">${esc(bl.msg || 'Downloading')} ${bl.pct != null ? '— ' + bl.pct.toFixed(0) + '%' : ''}</span>`;
+    else if (bin) binTxt = `<span style="color:var(--green)">✓ pixhawk.bin saved (${size(bin.size)})</span>`;
+    else if (mine && bl.state === 'error') binTxt = `<span style="color:#ff5c7a">${esc(bl.msg)}</span>`;
+    else binTxt = `<span style="color:var(--muted)">${part ? 'Partial download only' : m.recording ? 'Downloaded automatically after landing' : 'Not downloaded'}</span>`;
+    const busy = bl.state === 'listing' || bl.state === 'downloading';
+    const vid = (name, label) => {
+      const f = files.find(x => x.path.startsWith('video/' + name + '.'));
+      return `<tr><td>${label}</td><td>${f ? `<span style="color:var(--green)">✓ ${esc(f.path)} (${size(f.size)})</span>`
+        : `<span style="color:var(--muted)">${m.recording ? 'recording…' : 'no video'}</span>`}</td><td></td></tr>`;
+    };
+    return `<table><tr><td>PIXHAWK LOG (.bin)</td><td>${binTxt}</td><td>${bin || m.recording ? '' :
+      `<button class="btn" id="btnBin" ${busy ? 'disabled' : ''}>${part ? 'RETRY' : 'GET FROM PIXHAWK'}</button>`}</td></tr>
+      ${vid('front', 'FRONT CAMERA')}${vid('down', 'DOWN CAMERA')}</table>
+      <div class="note">The newest Pixhawk log is the flight that just landed — use GET FROM PIXHAWK only for the latest mission. Videos are large; for long flights copying them off the Jetson SSD is faster than downloading here.</div>`;
+  }
+  let lastBinState = '';
+  setInterval(() => {
+    const bl = (M() && M().binLog) || {}, box = $('recBox');
+    const key = bl.state + ':' + Math.floor(bl.pct || 0) + ':' + bl.folder;
+    if (key === lastBinState) return;
+    const finished = /listing|downloading/.test(lastBinState.split(':')[0]) && bl.state === 'done';
+    lastBinState = key;
+    if (finished && bl.folder === selected) { select(selected); return; }
+    if (box && detail) box.innerHTML = recordingsHtml();
+  }, 1000);
 
   function renderEvents() {
     const t = $('evTable'); if (!t || !detail) return;
@@ -217,6 +252,13 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
       const txt = JSON.stringify({ mission: selected, summary: detail.summary, events: (detail.events || []).filter(x => x.level !== 'info').slice(-150) }, null, 1);
       try { await navigator.clipboard.writeText(txt); toast('✓ Summary copied — paste it into an AI chat to analyse the flight'); }
       catch { toast('Copy failed — your browser blocked the clipboard', 'err'); }
+      return;
+    }
+    if (e.target.id === 'btnBin') {
+      e.target.disabled = true;
+      const r = await call('bin_download', { folder: selected });
+      toast(r.ok ? '✓ ' + r.msg : r.msg, r.ok ? '' : 'alert');
+      if (!r.ok) e.target.disabled = false;
       return;
     }
     const dl = e.target.closest('[data-dl]'); if (!dl) return;

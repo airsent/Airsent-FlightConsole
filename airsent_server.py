@@ -7,6 +7,8 @@ from golden_params import GoldenParams
 from vehicle_mission import VehicleMission, MissionBusy
 from param_store import ParamStore
 from asc import ASC
+from pixhawk_log import LogDownloader
+from video_record import FrontRecorder, DownRecorder
 from collections import deque
 import asyncio
 import websockets
@@ -631,6 +633,8 @@ def mavlink_reader():
                         ack_cond.notify_all()
                 elif t.startswith('MISSION_'):
                     vehicle_mission.observe(msg)
+                elif t in ('LOG_ENTRY', 'LOG_DATA'):
+                    bin_log.observe(msg)
                 if _now - last_mav_report > 5:
                     last_mav_report = _now
                     print(f"[MAV] alive {t} mode={telem.get('flight_mode')} sats={telem.get('sats')} rssi={telem.get('rssi')}")
@@ -1204,6 +1208,68 @@ def failsafe_payload(now):
 
 ASC_STATE_FILE = os.path.expanduser('~/.local/share/airsent/asc.json')
 asc_engine = ASC(MISSION_ROOT, real=not SIM_MODE)
+
+# ── Recording that follows the ASC session: Pixhawk .bin after landing + camera video ──
+BIN_AUTO = os.environ.get('AIRSENT_BIN_DOWNLOAD', '1') != '0'
+BIN_DELAY_S = float(os.environ.get('AIRSENT_BIN_DELAY_S', '5'))
+RECORD_VIDEO = os.environ.get('AIRSENT_RECORD_VIDEO', '1') != '0'
+FRONT_REC_KBPS = int(os.environ.get('AIRSENT_FRONT_REC_KBPS', '6000'))
+VIDEO_MIN_GB = float(os.environ.get('AIRSENT_VIDEO_MIN_GB', '10'))
+bin_log = LogDownloader()
+front_rec = FrontRecorder()
+front_enc_fails = [0]
+front_enc_ok = [True]          # set False if the OAK-D refuses the encoder node; camera then runs without it
+
+def _downcam_frame():
+    with downcam_lock:
+        return downcam_raw['frame']
+
+down_rec = DownRecorder(_downcam_frame, fps=float(os.environ.get('AIRSENT_DOWN_REC_FPS', '10')))
+asc_engine.extra_bytes = lambda: front_rec.total_bytes + down_rec.total_bytes
+_rec_state = {'folder': None, 'bin_at': None, 'bin_folder': None}
+
+def _mav_now():
+    with mav_lock:
+        return mav_conn
+
+def recording_tick(now):
+    """Called by asc_loop: start/stop video with the ASC session; queue the .bin download after it."""
+    sess = asc_engine.session
+    folder = sess['folder'] if sess else None
+    low_disk = asc_disk[0] is not None and asc_disk[0] < VIDEO_MIN_GB
+    vdir = os.path.join(folder, 'video') if (folder and RECORD_VIDEO and not low_disk) else None
+    front_rec.set_folder(vdir)
+    down_rec.set_folder(vdir)
+    if _rec_state['folder'] and not folder:
+        _rec_state['bin_folder'], _rec_state['bin_at'] = _rec_state['folder'], now + BIN_DELAY_S
+    _rec_state['folder'] = folder
+    if folder:
+        _rec_state['bin_at'] = None
+    if _rec_state['bin_at'] and now >= _rec_state['bin_at']:
+        _rec_state['bin_at'] = None
+        if BIN_AUTO and not telem.get('armed') and _mav_now() is not None:
+            ok, msg = bin_log.start(_mav_now, _rec_state['bin_folder'], lambda: bool(telem.get('armed')))
+            log_mavlink(f"[BIN] {msg}")
+
+def recording_payload():
+    return {'bin_log': bin_log.snapshot(), 'video': {'front': front_rec.snapshot(), 'down': down_rec.snapshot(),
+                                                      'enabled': RECORD_VIDEO, 'front_encoder': front_enc_ok[0]}}
+
+def bin_download(cmd):
+    if telem.get('armed'):
+        return {'ok': False, 'msg': 'Disarm first — the Pixhawk log is downloaded on the ground'}
+    if _mav_now() is None:
+        return {'ok': False, 'msg': 'Pixhawk not connected'}
+    try:
+        folder = _mission_path(cmd.get('folder'))
+    except ValueError as e:
+        return {'ok': False, 'msg': str(e)}
+    if not os.path.isdir(folder):
+        return {'ok': False, 'msg': 'Mission folder not found'}
+    if asc_engine.session and os.path.realpath(asc_engine.session['folder']) == os.path.realpath(folder):
+        return {'ok': False, 'msg': 'This mission is still recording'}
+    ok, msg = bin_log.start(_mav_now, folder, lambda: bool(telem.get('armed')), cmd.get('log_id'))
+    return {'ok': ok, 'msg': msg, 'bin_log': bin_log.snapshot()}
 asc_disk = [None]
 try:
     asc_engine.act_enabled = bool(json.load(open(ASC_STATE_FILE)).get('act_enabled', True))
@@ -1250,6 +1316,7 @@ def asc_loop():
             actions = asc_engine.tick(s, t0, mission=mission_cache.get('mission'),
                                       extras={'vps': vps_relay_state['telem'] or SIM_MODE, 'disk': asc_disk[0],
                                               'fence_alt': fence.get('FENCE_ALT_MAX'), 'fence_radius': fence.get('FENCE_RADIUS')})
+            recording_tick(t0)
             for kind, name, reason in actions:
                 with mav_lock:
                     mav = mav_conn
@@ -1309,7 +1376,7 @@ def mission_loop():
 
 
 # ── Command WebSocket handler ─────────────────────
-SLOW_ACTIONS = {'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
+SLOW_ACTIONS = {'bin_download', 'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
 # Reads and joystick input: kept out of the shared events journal by the relay.
 QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
 param_changes = {'rev': 0, 'values': {}, 'by': None}      # last confirmed parameter write, for every console
@@ -1484,6 +1551,8 @@ def _process_command(raw):
         elif action == 'motor_test':
             return motor_test(mav, cmd)
 
+        elif action == 'bin_download':
+            return bin_download(cmd)
         elif action in ('log_list', 'log_detail', 'log_file'):
             return mission_files(action, cmd)
 
@@ -1736,6 +1805,7 @@ def build_telemetry_payload(include_mission=True):
         if send_defs:
             _asc_defs_sent[0] = now
         payload['asc'] = asc_engine.snapshot(with_defs=send_defs)
+        payload.update(recording_payload())
         payload['mission'] = mission_cache['mission']
         payload['faults'] = mission_cache['faults']
     return payload
@@ -1873,6 +1943,22 @@ def cam_capture_thread():
                 colorOut = colorCam.requestOutput((1280,720), dai.ImgFrame.Type.NV12, fps=30)
                 colorQueue = colorOut.createOutputQueue(maxSize=1, blocking=False)
 
+                # Mission video: the OAK-D encodes H.265 on the camera itself (no Jetson CPU).
+                encQueue = None
+                enc_used = RECORD_VIDEO and front_enc_ok[0]
+                if enc_used:
+                    try:
+                        venc = pipeline.create(dai.node.VideoEncoder)
+                        venc.setDefaultProfilePreset(30, dai.VideoEncoderProperties.Profile.H265_MAIN)
+                        venc.setBitrateKbps(FRONT_REC_KBPS)
+                        venc.setKeyframeFrequency(30)
+                        colorOut.link(venc.input)
+                        encQueue = venc.bitstream.createOutputQueue(maxSize=30, blocking=False)
+                    except Exception as e:
+                        print(f"[CAM] H.265 recorder not available: {e} — front video will not be recorded")
+                        front_enc_ok[0] = False
+                        enc_used = False
+
                 leftCam = pipeline.create(dai.node.Camera)
                 leftCam.build(dai.CameraBoardSocket.CAM_B)
                 leftOut = leftCam.requestOutput((640,480), dai.ImgFrame.Type.GRAY8)
@@ -1901,8 +1987,17 @@ def cam_capture_thread():
                     nnIn = nn.input.createInputQueue()
                 nnQueue = nn.out.createOutputQueue(maxSize=1, blocking=False)
 
-                pipeline.start()
-                print("[CAM] Pipeline started — color + stereo depth + YOLOv8n")
+                try:
+                    pipeline.start()
+                except Exception:
+                    if enc_used:                       # twice in a row with the encoder -> run without it
+                        front_enc_fails[0] += 1
+                        if front_enc_fails[0] >= 2:
+                            front_enc_ok[0] = False
+                            print("[CAM] Pipeline keeps failing with the H.265 recorder — running without it")
+                    raise
+                front_enc_fails[0] = 0
+                print("[CAM] Pipeline started — color + stereo depth + YOLOv8n" + (" + H.265 recorder" if encQueue else ""))
 
                 # Color frames -> cam_color_buf on their own thread so the
                 # video stream never waits on depth / proximity / YOLO.
@@ -1940,6 +2035,22 @@ def cam_capture_thread():
                             except Exception as _e:
                                 print(f"[NN-FEED] {_e}")
                 threading.Thread(target=_color_reader, daemon=True).start()
+
+                def _enc_reader(q=encQueue, stop=color_stop):
+                    while q is not None and not stop.is_set():
+                        try:
+                            pk = q.tryGet()
+                        except Exception:
+                            break
+                        if pk is None:
+                            time.sleep(0.005)
+                            continue
+                        try:
+                            front_rec.packet(pk.getData())
+                        except Exception as _e:
+                            print(f"[VIDEO] front: {_e}")
+                if encQueue is not None:
+                    threading.Thread(target=_enc_reader, daemon=True).start()
 
                 frame_counter = 0
                 while True:
@@ -2586,6 +2697,7 @@ if __name__ == "__main__":
     if not SIM_MODE:
         threading.Thread(target=thermal_monitor,        daemon=True).start()
         threading.Thread(target=downcam_capture_thread, daemon=True).start()
+        down_rec.start()                                                     # mission video (down cam)
         threading.Thread(target=cam_capture_thread,     daemon=True).start()
         threading.Thread(target=cam_rtmp_thread,        daemon=True).start()
         threading.Thread(target=downcam_rtmp_thread,    daemon=True).start()  # ← NEW

@@ -6,15 +6,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TARGET="${AIRSENT_SERVER_DIR:-$HOME}"
 FILES="airsent_server.py asc.py mission_engine.py golden_params.py golden_params.json param_store.py
-       vehicle_mission.py health_telemetry.py pilot_settings.py datalink_telemetry.py"
+       vehicle_mission.py health_telemetry.py pilot_settings.py datalink_telemetry.py
+       pixhawk_log.py video_record.py"
 
 if [ "$(hostname)" = "Console-sfo3" ]; then echo "This is the VPS — run deploy/deploy_vps.sh here instead."; exit 1; fi
 git pull --ff-only
 for f in $FILES; do cp "$f" "$TARGET/"; done
 echo "Copied to $TARGET: $(echo $FILES | tr '\n' ' ')"
-python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py"
+python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py" "$TARGET/pixhawk_log.py" "$TARGET/video_record.py"
+command -v ffmpeg >/dev/null || echo "⚠ ffmpeg is not installed — videos stay as raw .h265/.mjpeg. Fix: sudo apt install -y ffmpeg"
 sudo systemctl restart airsent-server
 echo "Restarted airsent-server — waiting 12 s for the Pixhawk link…"
 sleep 12
-journalctl -u airsent-server -n 60 --no-pager | grep -E "Pixhawk connected|Streams @|Command relay connected|Telemetry relay connected|Traceback|Error|error" | tail -12
+journalctl -u airsent-server -n 60 --no-pager | grep -E "H.265 recorder|Pixhawk connected|Streams @|Command relay connected|Telemetry relay connected|Traceback|Error|error" | tail -12
 systemctl is-active --quiet airsent-server && echo "✓ airsent-server is running" || { echo "✗ airsent-server is NOT running"; exit 1; }

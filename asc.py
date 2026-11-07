@@ -519,7 +519,10 @@ class ASC:
                       'asc/focus.jsonl.gz': 'detail while a check was not OK',
                       'asc/params_start.json': 'every Pixhawk parameter at the start',
                       'asc/mavlink.tlog': 'every MAVLink message from the Pixhawk (MAVExplorer)',
-                      'asc/charts/*.png': 'flight charts'},
+                      'asc/charts/*.png': 'flight charts',
+                      'video/front.mp4': 'front camera video, H.265 (raw front.h265 if it could not be packed)',
+                      'video/down.mp4': 'down camera video (raw down.mjpeg if it could not be packed)',
+                      'pixhawk.bin': 'the Pixhawk DataFlash log, downloaded after landing (Mission Planner / MAVExplorer)'},
         }
         self.rec.write('summary.json', summary)
         self.rec.close()
@@ -530,6 +533,12 @@ class ASC:
         self.action = None
         for st in self.state.values():
             st.update(level=OK, raised=False)
+
+    def _extra(self):
+        try:
+            return int(getattr(self, 'extra_bytes', lambda: 0)() or 0)
+        except Exception:
+            return 0
 
     @property
     def tlog_path(self):
@@ -775,7 +784,7 @@ class ASC:
             'triggered': [dict(f, age=round(now - f['t'], 1)) for f in self.triggered if now - f['t'] < 120][:5],
             'live': self.live(),
             'flight': {'since': self.session['start'], 'dist_m': round(self.session['dist_m'], 1),
-                       'flying_s': round(self.session['flying_s'], 1), 'rec_mb': round(self.session['rec_bytes'] / 1e6, 1)} if self.session else None,
+                       'flying_s': round(self.session['flying_s'], 1), 'rec_mb': round((self.session['rec_bytes'] + self._extra()) / 1e6, 1)} if self.session else None,
             **({'defs': self.defs()} if with_defs else {}),
             'boot': self.boot,
             'events': [{'seq': e['seq'], 't': round(e['t'], 1), 'level': e['level'], 'msg': e['msg']}
