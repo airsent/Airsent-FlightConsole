@@ -5,6 +5,7 @@
 <script src="demo-isolation.js?v=viewer-1"></script>
 <script src="viewer-access.js?v=shared-2"></script>
 <script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -175,22 +176,14 @@ body.dashboard-fixed .left-column{grid-template-rows:calc(126px * var(--dashboar
   <span class="top-static-label">FLIGHT MODE:</span>
  
   <select id="flightModeSelect" class="top-select flightmode-select">
-    <option>STABILIZE</option>
-    <option>ALTHOLD</option>
-    <option selected>POSHOLD</option>
-    <option>LOITER</option>
-    <option>AUTO</option>
-    <option>GUIDED</option>
-    <option>RTL</option>
-    <option>LAND</option>
-    <option>BRAKE</option>
-    <option>SPORT</option>
-    <option>ACRO</option>
-    <option>DRIFT</option>
-    <option>FLIP</option>
-    <option>AUTOTUNE</option>
-    <option>THROW</option>
-    <option>SMART_RTL</option>
+    <option selected value="LOITER">LOITER</option>
+    <option value="GUIDED">GUIDED</option>
+    <option value="AUTO">AUTO</option>
+    <option value="RTL">RTL</option>
+    <option value="LAND">LAND</option>
+    <option value="ALTHOLD">ALT HOLD</option>
+    <!-- shows a mode set from the RC (e.g. STABILIZE); not selectable from the console -->
+    <option value="" data-rc-only disabled hidden></option>
   </select>
 </div>
  

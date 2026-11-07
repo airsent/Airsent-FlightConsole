@@ -723,8 +723,10 @@ function applyTelemetry(data) {
         "AUTOTUNE":"AUTOTUNE","THROW":"THROW","SMART_RTL":"SMART_RTL","SMARTRTL":"SMART_RTL"
       };
       const opt = MODE_OPT[String(data.flight_mode).toUpperCase()] || data.flight_mode;
-      const exists = Array.from(modeSelect.options).some(o => o.value === opt);
+      const exists = Array.from(modeSelect.options).some(o => o.value === opt && !o.hasAttribute('data-rc-only'));
+      const rcOnly = modeSelect.querySelector('option[data-rc-only]');
       if (exists) modeSelect.value = opt;
+      else if (rcOnly) { rcOnly.value = opt; rcOnly.textContent = opt + ' (RC)'; modeSelect.value = opt; }
       modeSelect.classList.remove("blink-red");
     }
   }
