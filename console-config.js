@@ -1,5 +1,5 @@
-// Replace YOUR_CARTO_BASEMAP_KEY with your domain-restricted CARTO basemaps key.
-// Keep the configured deployment copy separate from this public example.
+// Deployment secrets (the CARTO map key) live in console-local.js on the server,
+// which is git-ignored and never overwritten by a deploy. See console-local.example.js.
 // Use an absolute URL here only if the API is hosted on a different domain.
 window.AIRSENT_CONFIG = {
   apiBase: location.origin,
@@ -7,6 +7,7 @@ window.AIRSENT_CONFIG = {
   mapAttribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>",
   mapMaxZoom: 20,
 };
+Object.assign(window.AIRSENT_CONFIG, window.AIRSENT_LOCAL || {});
 window.airsentSimulation = localStorage.getItem('airsentMode') === 'simulation' || (['localhost','127.0.0.1'].includes(location.hostname) && localStorage.getItem('airsentSITL') === '1');
 if (window.airsentSimulation) {
   document.addEventListener('DOMContentLoaded', () => {
