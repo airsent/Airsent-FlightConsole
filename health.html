@@ -5,6 +5,7 @@
 <script src="viewer-access.js?v=shared-2"></script>
 <script src="shared-state.js?v=1"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
+<script src="health-model.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — System Health</title>
@@ -357,7 +358,7 @@ body {
 
     <div class="nd" id="node-baro">
       <div class="nd-hd"><div class="nd-name">Barometer</div><div class="nd-sub">I2C · MS5611</div></div>
-      <div class="nd-bd"><div class="nd-row"><span class="nd-key">AGL</span><span class="nd-data" id="nd-baro">-- m</span></div></div>
+      <div class="nd-bd"><div class="nd-row"><span class="nd-key">REL ALT</span><span class="nd-data" id="nd-baro">-- m</span></div></div>
       <div class="nd-badge" id="nc-baro">OFFLINE</div>
     </div>
 
@@ -368,8 +369,8 @@ body {
     </div>
 
     <div class="nd" id="node-esc">
-      <div class="nd-hd"><div class="nd-name">ESC / Motors</div><div class="nd-sub">PWM · DSHOT</div></div>
-      <div class="nd-bd"><div class="nd-row"><span class="nd-key">PWM</span><span class="nd-data" id="nd-esc">--/--/--/-- μs</span></div></div>
+      <div class="nd-hd"><div class="nd-name">ESC / Motors</div><div class="nd-sub">PWM (µs) · Datalink</div></div>
+      <div class="nd-bd"><div class="nd-row"><span class="nd-key">PWM</span><span class="nd-data" id="nd-esc">--/--/--/-- μs</span></div><div class="nd-row"><span class="nd-key">LIVE ESC</span><span class="nd-data" id="nd-esc-live">--</span></div></div>
       <div class="nd-badge" id="nc-esc">OFFLINE</div>
     </div>
 
@@ -392,7 +393,7 @@ body {
         <div class="nd-cell"><span class="nd-cell-k">EKF</span><span class="nd-cell-v" id="fc-ekf">--</span></div>
         <div class="nd-cell"><span class="nd-cell-k">BARO</span><span class="nd-cell-v" id="fc-baro">--</span></div>
         <div class="nd-cell"><span class="nd-cell-k">MAG</span><span class="nd-cell-v" id="fc-mag-c">--</span></div>
-        <div class="nd-cell"><span class="nd-cell-k">I/O</span><span class="nd-cell-v" id="fc-io">--</span></div>
+        <div class="nd-cell"><span class="nd-cell-k">OUTPUT</span><span class="nd-cell-v" id="fc-io">--</span></div>
         <div class="nd-cell"><span class="nd-cell-k">RC</span><span class="nd-cell-v" id="fc-rc">--</span></div>
       </div>
       <div class="nd-badge ok" id="nc-fc">NOMINAL</div>
@@ -406,7 +407,7 @@ body {
         <div class="nd-cell"><span class="nd-cell-k">GPU</span><span class="nd-cell-v" id="jt-gpu">--%</span></div>
         <div class="nd-cell"><span class="nd-cell-k">RAM</span><span class="nd-cell-v" id="jt-ram">--%</span></div>
         <div class="nd-cell"><span class="nd-cell-k">TEMP</span><span class="nd-cell-v" id="jt-temp">--°C</span></div>
-        <div class="nd-cell"><span class="nd-cell-k">EKF</span><span class="nd-cell-v" id="jt-ekf">--</span></div>
+        <div class="nd-cell"><span class="nd-cell-k">FC EKF</span><span class="nd-cell-v" id="jt-ekf">--</span></div>
         <div class="nd-cell"><span class="nd-cell-k">STATE</span><span class="nd-cell-v" id="jt-state">--</span></div>
       </div>
       <div class="nd-badge ok" id="nc-jetson">NOMINAL</div>
@@ -449,7 +450,7 @@ body {
     <!-- ═══ PAD TIER ═══ -->
 
     <!-- RTK Base — pad left -->
-    <div class="nd" id="node-rtkbase" style="left:27%;top:80%">
+    <div class="nd" id="node-rtkbase" style="left:27%;top:76%">
       <div class="nd-hd"><div class="nd-name">RTK Base Station</div><div class="nd-sub">USB · u-blox F9P</div></div>
       <div class="nd-bd">
         <div class="nd-row"><span class="nd-key">SATS</span><span class="nd-data" id="nd-rtkbase">--</span></div>
@@ -459,7 +460,7 @@ body {
     </div>
 
     <!-- Ground Computer — pad center hero -->
-    <div class="nd hero" id="node-pi" style="left:50%;top:79%;transform:translateX(-50%)">
+    <div class="nd hero" id="node-pi" style="left:50%;top:74%;transform:translateX(-50%)">
       <div class="nd-hd"><div class="nd-name">Ground Computer</div><div class="nd-sub">Pad Controller · NTRIP · Radio Bridge</div></div>
       <div class="nd-grid">
         <div class="nd-cell"><span class="nd-cell-k">CPU</span><span class="nd-cell-v" id="pi-cpu">--%</span></div>
@@ -473,9 +474,9 @@ body {
     </div>
 
     <!-- Cellular — pad right -->
-    <div class="nd" id="node-cellular" style="right:27%;top:80%">
-      <div class="nd-hd"><div class="nd-name">Cellular Link</div><div class="nd-sub">LTE · 4G/5G Modem</div></div>
-      <div class="nd-bd"><div class="nd-row"><span class="nd-key">RSSI</span><span class="nd-data" id="nd-cellular">-- dBm</span></div></div>
+    <div class="nd" id="node-cellular" style="right:27%;top:76%">
+      <div class="nd-hd"><div class="nd-name">Network / Data Link</div><div class="nd-sub" id="nd-network-type">Wi-Fi · Ethernet · Cellular</div></div>
+      <div class="nd-bd"><div class="nd-row"><span class="nd-key">STRENGTH</span><span class="nd-data" id="nd-cellular">--</span></div></div>
       <div class="nd-badge" id="nc-cellular">OFFLINE</div>
     </div>
 
@@ -497,7 +498,7 @@ body {
 
 <script>
 const airsentMode=(localStorage.getItem("airsentMode")||localStorage.getItem("mode")||"demo").toLowerCase();
-const isActual=airsentMode==="actual"||airsentMode==="operator"||airsentMode==="viewer"||airsentMode==="real";
+const isActual=airsentMode==='simulation'||airsentMode==="actual"||airsentMode==="operator"||airsentMode==="viewer"||airsentMode==="real";
 let faultCount=0;
 const pad=n=>String(n).padStart(2,"0");
 const now=()=>{const d=new Date();return`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;};
@@ -663,7 +664,7 @@ function setState(id,state){
 function setBadge(id,state,text){
   const b=el('nc-'+id);if(!b)return;
   b.className='nd-badge'+(state!=='off'?' '+state:'');
-  b.innerHTML=text||{ok:'NOMINAL',warn:'WARN',err:'FAULT',off:'OFFLINE'}[state]||'OFFLINE';
+  b.textContent=text||{ok:'NOMINAL',warn:'WARN',err:'FAULT',off:'OFFLINE'}[state]||'OFFLINE';
 }
 function setNode(id,state,detail,badge){
   setState(id,state);
@@ -683,7 +684,7 @@ function addLog(msg,cat){
 function firstNum(d, keys){
   for(const k of keys){
     const v=d[k];
-    if(v!==undefined&&v!==null&&v!==''&&!Number.isNaN(Number(v)))return Number(v);
+    if(typeof v==='number'&&Number.isFinite(v))return v;
   }
   return null;
 }
@@ -712,19 +713,21 @@ function setCameraStatus(id,live){
 function applyData(d){
   txt('hUpd',now());
 
-  const pxOk=d.pixhawk_connected!==false;
+  const h=window.AirsentHealthModel.model(isActual?d:{...d,telemetry_age:0,pixhawk_connected:true,sensor_health:{age:0,imu:'ok',mag:'ok',baro:'ok',outputs:'ok'},rc_signal:{source:'RC_CHANNELS',input_present:true,age:0,health_age:0,percent:d.rssi},network_link:{type:'cellular',technology:'lte',connected:true,age:0,percent:75}});
+  if(isActual&&!h.feed){setDisconnected();return;}
+  const pxOk=h.px;
 
   /* GPS — comes through FC, offline when FC disconnected */
   const gpsOk=pxOk&&d.fix_type&&d.fix_type!=='NO FIX';
   const gpsSt=gpsOk?'ok':(pxOk&&d.sats>0)?'warn':'off';
   setState('rtkgps',gpsSt);
   setBadge('rtkgps',gpsSt,d.fix_type||'OFFLINE');
-  txt('nd-fix',d.fix_type||'--');cls('nd-fix',gpsOk?'info':'');
-  txt('nd-sats',d.sats!=null?d.sats:'--');cls('nd-sats',d.sats>=10?'ok':'warn');
-  txt('nd-hdop',d.hdop!=null?d.hdop.toFixed(2):'--');cls('nd-hdop',(d.hdop!=null&&d.hdop<1.5)?'ok':'warn');
+  txt('nd-fix',pxOk?d.fix_type||'--':'--');cls('nd-fix',gpsOk?'info':'');
+  txt('nd-sats',pxOk&&Number.isFinite(d.sats)?d.sats:'--');cls('nd-sats',d.sats>=10?'ok':'warn');
+  txt('nd-hdop',pxOk&&Number.isFinite(d.hdop)?d.hdop.toFixed(2):'--');cls('nd-hdop',(d.hdop!=null&&d.hdop<1.5)?'ok':'warn');
 
   /* Attitude / FC internals */
-  const imuOk=pxOk&&d.roll!==undefined;
+  const imuOk=h.state('imu')==='ok';
   const ekfOk=pxOk&&d.ekf_healthy===true;
 
   if(!pxOk){
@@ -733,57 +736,65 @@ function applyData(d){
       const e=el(id);if(e){e.textContent='--';e.className='nd-cell-v';}
     });
   } else {
-    el('fc-imu').textContent=imuOk?'OK':'FAULT';el('fc-imu').className='nd-cell-v '+(imuOk?'ok':'err');
+    el('fc-imu').textContent=h.reported('imu')?(imuOk?'OK':'FAULT'):'--';el('fc-imu').className='nd-cell-v '+h.state('imu');
     el('fc-ekf').textContent=ekfOk?'OK':'DEG';el('fc-ekf').className='nd-cell-v '+(ekfOk?'ok':'warn');
-    el('fc-io').textContent='OK';el('fc-io').className='nd-cell-v ok';
-    const baroOkCell=d.alt!=null;
-    el('fc-baro').textContent=baroOkCell?'OK':'OFF';el('fc-baro').className='nd-cell-v '+(baroOkCell?'ok':'err');
-    const magOkCell=d.yaw!=null;
-    el('fc-mag-c').textContent=magOkCell?'OK':'FAULT';el('fc-mag-c').className='nd-cell-v '+(magOkCell?'ok':'err');
-    const rssiCell=d.rssi,rcOkCell=rssiCell!=null&&rssiCell>20;
+    el('fc-io').textContent=h.reported('outputs')?(h.state('outputs')==='ok'?'OK':'FAULT'):'--';el('fc-io').className='nd-cell-v '+h.state('outputs');
+    const baroOkCell=h.state('baro')==='ok';
+    el('fc-baro').textContent=h.reported('baro')?(baroOkCell?'OK':'FAULT'):'--';el('fc-baro').className='nd-cell-v '+h.state('baro');
+    const magOkCell=h.state('mag')==='ok';
+    el('fc-mag-c').textContent=h.reported('mag')?(magOkCell?'OK':'FAULT'):'--';el('fc-mag-c').className='nd-cell-v '+h.state('mag');
+    const rcOkCell=h.rcConnected;
     el('fc-rc').textContent=rcOkCell?'OK':'OFF';el('fc-rc').className='nd-cell-v '+(rcOkCell?'ok':'warn');
   }
 
   /* Magnetometer — heading derived from yaw (degrees) */
-  const magOk=pxOk&&d.yaw!==undefined;
-  const magSt=!pxOk?'off':magOk?'ok':'err';
-  setState('mag',magSt);setBadge('mag',magSt);
-  txt('nd-mag',(pxOk&&d.yaw!==undefined)?`${Math.round(((d.yaw)+360)%360)}°`:'--°');cls('nd-mag',magOk?'ok':magSt==='err'?'err':'');
+  const magOk=h.state('mag')==='ok';
+  const magSt=!pxOk?'off':h.state('mag');
+  setState('mag',magSt);setBadge('mag',magSt,pxOk&&!h.reported('mag')?'NOT REPORTED':undefined);
+  txt('nd-mag',(pxOk&&Number.isFinite(d.yaw))?`${Math.round(((d.yaw)+360)%360)}°`:'--°');cls('nd-mag',magOk?'ok':magSt==='err'?'err':'');
 
   /* Barometer */
-  const baroOk=pxOk&&d.alt!==undefined;
-  const baroSt=!pxOk?'off':baroOk?'ok':'off';
+  const baroOk=h.state('baro')==='ok';
+  const baroSt=!pxOk?'off':h.state('baro');
   setState('baro',baroSt);setBadge('baro',baroSt);
-  txt('nd-baro',(pxOk&&d.alt!==undefined)?`${d.alt.toFixed(1)} m`:'-- m');
+  txt('nd-baro',(pxOk&&Number.isFinite(d.alt))?`${d.alt.toFixed(1)} m`:'-- m');
 
-  /* RC */
-  const rssi=d.rssi,rcOk=pxOk&&rssi!=null&&rssi>20;
-  const rcSt=!pxOk?'off':rcOk?'ok':rssi!=null?'warn':'off';
-  setState('rc',rcSt);setBadge('rc',rcSt);
-  txt('nd-rc',rssi!=null?`${rssi.toFixed(0)}%`:'--');cls('nd-rc',rcSt==='ok'?'ok':rcSt==='warn'?'warn':'');
+  /* RC connection is independent of whether RSSI is available. */
+  const rcSt=!pxOk?'off':h.rcConnected?'ok':h.rcFresh?'warn':'off';
+  setState('rc',rcSt);setBadge('rc',rcSt,h.rcConnected?'CONNECTED':'DISCONNECTED');
+  txt('nd-rc',h.rcPercent!==null?`${Math.round(h.rcPercent)}%`:'--');cls('nd-rc',rcSt==='ok'?'ok':'warn');
 
-  /* ESC */
-  const escOk=pxOk&&d.m1!=null&&d.m1>0;
-  setState('esc',escOk?'ok':'off');setBadge('esc',escOk?'ok':'off');
-  txt('nd-esc',escOk?`${Math.floor(d.m1)}/${Math.floor(d.m2||0)}/${Math.floor(d.m3||0)}/${Math.floor(d.m4||0)} μs`:'--/--/--/-- μs');
+  /* ESC measurements are not inferred from command PWM. */
+  setState('esc',h.escCount===4?'ok':h.escCount?'warn':'off');
+  setBadge('esc',h.escCount===4?'ok':h.escCount?'warn':'off',h.escCount===4?'4 ESCS LIVE':h.escCount?`${h.escCount}/4 LIVE`:'NO ESC DATA');
+  txt('nd-esc',pxOk?[1,2,3,4].map(i=>Number.isFinite(d['m'+i])?Math.round(d['m'+i]):'--').join('/'):'--/--/--/--');
+  txt('nd-esc-live',`${h.escCount}/4`);el('node-esc').title=h.escError||'Measured Datalink telemetry; PWM is only the requested output';
 
-  /* Power */
-  const volt=pxOk?(d.voltage||0):0;
-  const batt=(pxOk&&d.battery!=null)?Math.round(d.battery):null;
-  const pwrSt=!pxOk?'off':volt>13?'ok':volt>10?'warn':volt>0?'err':'off';
-  setState('power',pwrSt);setBadge('power',pwrSt);
-  txt('nd-volt',volt?`${volt.toFixed(1)} V`:'-- V');
-  cls('nd-volt',volt>14?'ok':volt>12?'warn':volt>0?'err':'');
-  txt('nd-curr',(pxOk&&d.current!=null)?`${d.current.toFixed(1)} A`:'-- A');
-  txt('nd-batt',batt!=null?`${batt}%`:'--%');
-  cls('nd-batt',batt!=null?(batt>50?'ok':batt>25?'warn':'err'):'');
+  /* Power values require valid, fresh measurements. */
+  const volt=h.voltage,batt=h.battery;
+  const pwrSt=!pxOk?'off':volt===null?'warn':batt!==null&&batt<=25?'err':'ok';
+  setState('power',pwrSt);setBadge('power',pwrSt,volt===null?'VOLTAGE UNKNOWN':pwrSt==='ok'?'REPORTED':'LOW BATTERY');
+  txt('nd-volt',volt!==null?`${volt.toFixed(1)} V`:'-- V');cls('nd-volt',volt!==null?'info':'warn');
+  txt('nd-curr',h.current!==null?`${h.current.toFixed(1)} A`:'-- A');
+  txt('nd-batt',batt!==null?`${Math.round(batt)}%`:'--%');cls('nd-batt',batt===null?'':batt>50?'ok':batt>25?'warn':'err');
 
-  /* LiDAR / Flow — connected to Jetson, not FC */
-  const rng=d.rangefinder,rngOk=rng!=null&&rng>0.05&&rng<12;
-  const fq=d.of_quality;
-  setState('lidar',rng!=null?(rngOk?'ok':'warn'):'off');setBadge('lidar',rng!=null?(rngOk?'ok':'warn'):'off');
-  txt('nd-lidar',rng!=null?`${rng.toFixed(2)} m`:'-- m');cls('nd-lidar',rngOk?'ok':'warn');
-  txt('nd-flow',fq!=null?`${Math.round(fq)}%`:'--%');cls('nd-flow',fq>50?'ok':'warn');
+  const rng=h.range,rngOk=rng!==null;
+  setState('lidar',rngOk?'ok':'off');setBadge('lidar',rngOk?'ok':'off',rngOk?'RANGE REPORTED':'NO RANGE DATA');
+  txt('nd-lidar',rngOk?`${rng.toFixed(2)} m`:'-- m');cls('nd-lidar',rngOk?'info':'');
+  txt('nd-flow',h.flow!==null?`${h.flow}%`:'--%');cls('nd-flow',h.flow===null?'':h.flow>50?'ok':'warn');
+  setState('cellular',h.network?'ok':'off');setBadge('cellular',h.network?'ok':'off',h.type);
+  txt('nd-network-type',h.network?d.network_link.type==='wifi'?d.network_link.ssid||'Wi-Fi':d.network_link.technology||h.type:'No fresh connection report');
+  txt('nd-cellular',h.strength);cls('nd-cellular',h.strength==='STRONG'?'ok':h.strength==='MODERATE'?'warn':h.strength==='WEAK'?'err':'');
+  if(isActual){
+    for(const id of ['pi','rtkbase']){setState(id,'warn');setBadge(id,'warn','NOT REPORTED');}
+    if(h.ground){
+      const g=h.ground;setState('pi','ok');setBadge('pi','ok','ONLINE');
+      setCellMetric('pi-cpu',Number.isFinite(g.cpu)?g.cpu:null,'%',70,85);setCellMetric('pi-ram',Number.isFinite(g.ram)?g.ram:null,'%',75,90);setCellMetric('pi-temp',Number.isFinite(g.temp)?g.temp:null,'°C',70,80);
+      for(const [id,key] of [['pi-ntrip','ntrip_connected'],['pi-radio','radio_connected'],['pi-pad','pad_ready']])txt(id,g[key]===true?'OK':g[key]===false?'OFF':'--');
+    }else ['pi-cpu','pi-ram','pi-temp','pi-ntrip','pi-radio','pi-pad'].forEach(id=>txt(id,'--'));
+    if(h.rtkBase){const base=h.rtkBase;const fixed=['RTK FIX','RTK FIXED','3D FIX'].includes(base.fix_type);setState('rtkbase',fixed?'ok':'warn');setBadge('rtkbase',fixed?'ok':'warn',base.fix_type||'NO FIX');txt('nd-rtkbase',Number.isFinite(base.sats)?base.sats:'--');txt('nd-rtkfix',base.fix_type||'--');}
+    else {txt('nd-rtkbase','--');txt('nd-rtkfix','--');}
+  }
 
   /* Cameras are updated by the WebRTC stream probe below. In demo mode only,
      telemetry can still light them up. */
@@ -801,7 +812,7 @@ function applyData(d){
   setCellMetric('jt-gpu',jtGpu,'%',75,90);
   setCellMetric('jt-ram',jtRam,'%',75,90);
   setCellMetric('jt-temp',jtTemp,'°C',70,80);
-  el('jt-ekf').textContent=ekfOk?'OK':'DEG';el('jt-ekf').className='nd-cell-v '+(ekfOk?'ok':'warn');
+  el('jt-ekf').textContent=!pxOk?'--':ekfOk?'OK':'DEG';el('jt-ekf').className='nd-cell-v '+(ekfOk?'ok':'warn');
   const jetsonSeen=[jtCpu,jtGpu,jtRam,jtTemp].some(v=>v!=null);
   setState('jetson',jetsonSeen?'ok':'warn');
 
@@ -828,7 +839,9 @@ function applyData(d){
 }
 
 function setDisconnected(){
-  ['rtkgps','mag','baro','rc','esc','power','lidar','fc','jetson','pi','rtkbase','cellular'].forEach(id=>setNode(id,'off','','OFFLINE'));
+  ['nd-mag','nd-baro','nd-rc','nd-esc','nd-esc-live','nd-volt','nd-curr','nd-batt','nd-lidar','nd-flow','nd-cellular','nd-fix','nd-sats','nd-hdop','jt-cpu','jt-gpu','jt-ram','jt-temp','jt-ekf','jt-state','pi-cpu','pi-ram','pi-temp','pi-ntrip','pi-radio','pi-pad','nd-rtkbase','nd-rtkfix'].forEach(id=>{txt(id,'--');el(id)?.classList.remove('ok','warn','err','info')});
+  ['hHealth','hEkf','hMode','hArmed'].forEach(id=>txt(id,'OFFLINE'));txt('hUpd','--:--:--');txt('hStatus','OFFLINE');
+  ['rtkgps','mag','baro','rc','esc','power','lidar','fc','jetson','pi','rtkbase','cellular'].forEach(id=>setNode(id,'off','','NO TELEMETRY'));
   ['fc-imu','fc-ekf','fc-io','fc-baro','fc-mag-c','fc-rc'].forEach(id=>{const e=el(id);if(e){e.textContent='--';e.className='nd-cell-v';}});
   if(!cameraLive.camfront)setCameraStatus('camfront',false);
   if(!cameraLive.camdown)setCameraStatus('camdown',false);
@@ -874,13 +887,26 @@ function runDemo(){
   },1000);
 }
 
-const camProbePeers={};
+const camProbePeers={},camProbeActivity={};
+setInterval(async()=>{
+ for(const [id,pc] of Object.entries(camProbePeers)){
+  if(!pc)continue;
+  try{
+   const stats=await pc.getStats();let received=0;
+   stats.forEach(row=>{if(row.type==='inbound-rtp'&&(row.kind==='video'||row.mediaType==='video'))received+=row.bytesReceived||0});
+   const now=Date.now(),last=camProbeActivity[id]||{bytes:0,seen:0};
+   if(received>last.bytes)last.seen=now;
+   last.bytes=received;camProbeActivity[id]=last;
+   setCameraStatus(id,last.seen>0&&now-last.seen<5000);
+  }catch{setCameraStatus(id,false)}
+ }
+},2000);
 function connectCameraProbe(id,path,preferH264){
-  if(!isActual)return;
+  if(!isActual||window.airsentSimulation)return;
   if(camProbePeers[id]){try{camProbePeers[id].close();}catch(_){} camProbePeers[id]=null;}
 
   const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  camProbePeers[id]=pc;
+  camProbePeers[id]=pc;camProbeActivity[id]={bytes:0,seen:0};
   const tr=pc.addTransceiver('video',{direction:'recvonly'});
 
   if(preferH264&&RTCRtpReceiver.getCapabilities&&tr.setCodecPreferences){
@@ -891,7 +917,6 @@ function connectCameraProbe(id,path,preferH264){
 
   pc.ontrack=ev=>{ try{ if(ev.receiver){ ev.receiver.jitterBufferTarget=0; if('playoutDelayHint' in ev.receiver) ev.receiver.playoutDelayHint=0; } }catch(_e){} 
     if(ev.track.kind!=='video')return;
-    setCameraStatus(id,true);
     ev.track.onended=()=>setCameraStatus(id,false);
   };
 
@@ -943,14 +968,18 @@ function connectCameraProbe(id,path,preferH264){
 
 /* ── Telemetry over the VPS relay (HTTPS/WSS), same as the dashboard.
       Jetson → VPS:9001 → relay → wss://console.airsent.tech/telem ── */
-let ws=null;
-function connectWs(){
-  ws=new WebSocket(window.airsentApiUrl("/telem", true));
-  ws.onopen=()=>addLog('Telemetry link established via VPS relay','ok');
-  ws.onmessage=e=>{try{applyData(JSON.parse(e.data));}catch(_){}};
-  ws.onclose=()=>{setDisconnected();addLog('Telemetry link lost — reconnecting in 3 s','fault');setTimeout(connectWs,3000);};
-  ws.onerror=()=>{ws=null;};
+let ws=null,lastHealthFrame=0,healthReconnect=null,healthStarted=0;
+function resetHealthSocket(socket){
+ if(ws!==socket)return;ws=null;lastHealthFrame=0;socket.onclose=socket.onmessage=socket.onerror=null;
+ try{socket.close()}catch{}setDisconnected();clearTimeout(healthReconnect);healthReconnect=setTimeout(connectWs,2000);
 }
+function connectWs(){
+ if(ws)return;const socket=ws=new WebSocket(window.airsentApiUrl('/telem',true));healthStarted=Date.now();
+ socket.onmessage=e=>{if(ws!==socket)return;try{const data=JSON.parse(e.data);if(!window.AirsentHealthModel.model(data).feed)return;applyData(data);lastHealthFrame=Date.now();}catch(error){console.warn('Invalid health frame',error.message)}};
+ socket.onopen=()=>addLog('Telemetry link established via VPS relay','ok');
+ socket.onclose=()=>resetHealthSocket(socket);socket.onerror=()=>resetHealthSocket(socket);
+}
+setInterval(()=>{if(!isActual||!ws)return;const now=Date.now();if(lastHealthFrame?now-lastHealthFrame>3500:now-healthStarted>7000)resetHealthSocket(ws)},750);
 
 setInterval(()=>txt('hClock',now()),1000);
 window.addEventListener('resize',fitStage);

@@ -1,5 +1,6 @@
 import os
 from pilot_settings import PilotSettings
+from health_telemetry import HealthTelemetry, gpu_percent
 from datalink_telemetry import start_monitor
 import asyncio
 import websockets
@@ -279,6 +280,7 @@ last_mav_report = 0.0
 
 mav_conn = None
 mav_lock = threading.Lock()
+health_telemetry = HealthTelemetry()
 pilot_settings = PilotSettings(os.environ.get("AIRSENT_PILOT_SETTINGS_FILE", os.path.expanduser("~/.config/airsent/pilot-settings.json")))
 
 mavlink_log = []
@@ -356,6 +358,9 @@ def read_ram_percent():
         return None
 
 def read_gpu_percent():
+    measured = gpu_percent()
+    if measured is not None:
+        return measured
     for path in (
         '/sys/devices/gpu.0/load',
         '/sys/devices/platform/host1x/gpu/load',
@@ -539,6 +544,8 @@ def mavlink_reader():
                 if _now - last_mav_report > 5:
                     last_mav_report = _now
                     print(f"[MAV] alive {t} mode={telem.get('flight_mode')} sats={telem.get('sats')} rssi={telem.get('rssi')}")
+                if t in ('SYS_STATUS','BATTERY_STATUS'):
+                    health_telemetry.observe(msg, _now)
                 if t == 'PARAM_VALUE':
                     pilot_settings.observe(msg)
                 elif t == 'ATTITUDE':
@@ -931,6 +938,12 @@ def build_telemetry_payload():
     heartbeat_age = now - last_mav_heartbeat if last_mav_heartbeat else None
     payload['pixhawk_connected'] = px_ok and heartbeat_age is not None and heartbeat_age < 5
     payload['pixhawk_heartbeat_age'] = round(heartbeat_age, 2) if heartbeat_age is not None else None
+    sensors,power = health_telemetry.snapshot(now,payload['pixhawk_connected'])
+    payload['sensor_health'] = sensors
+    payload['power_status'] = power
+    for key in ('voltage','current','battery'):
+        if power[key] is not None:payload[key] = power[key]
+    payload['sensor_ages'] = {key:now-_sensor_ts[key] if _sensor_ts[key]>0 else None for key in ('rangefinder','of','vib')}
     with rc_lock:
         payload['rc_signal'] = rc_monitor.snapshot(now, payload['pixhawk_connected'])
     # Keep legacy consumers from receiving a stale/default RSSI.
