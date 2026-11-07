@@ -722,9 +722,14 @@ function applyTelemetry(data) {
       const opt = MODE_OPT[String(data.flight_mode).toUpperCase()] || data.flight_mode;
       const exists = Array.from(modeSelect.options).some(o => o.value === opt);
       if (exists) modeSelect.value = opt;
+      modeSelect.classList.remove("blink-red");
     }
   }
-  if (data.armed !== undefined) setStatusSelect(data.armed ? "armed" : "disarmed");
+  if (data.armed !== undefined) {
+    setStatusSelect(data.armed ? "armed" : "disarmed");
+    const statusSelect=getEl("statusSelect");
+    if(statusSelect)statusSelect.dataset.confirmedValue=data.armed ? "armed" : "disarmed";
+  }
 
   // Sensor status
   setSensorStatus("sensorBattery",

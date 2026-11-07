@@ -14,16 +14,16 @@ class Socket:
   except StopIteration:raise StopAsyncIteration
 class AccessTests(unittest.IsolatedAsyncioTestCase):
  async def run_role(self,role):
-  target=Socket({});ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role,jetson={'cmd':target},browsers={'cmd':set()})
+  target=Socket({});ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role,jetson={'cmd':target},browsers={'cmd':set()},JOURNAL=type('Journal',(),{'append':lambda *a:None})())
   exec(compile(ast.Module(body=[node],type_ignores=[]),'relay.py','exec'),ns)
-  socket=Socket({'type':'command_auth','token':issue_token(role,'test-secret')},['test-only-command'])
+  socket=Socket({'type':'command_auth','token':issue_token(role,'test-secret')},['{"action":"test_only"}'])
   await ns['cmd_browser'](socket)
   return socket,target
  async def test_viewer_and_simulation_never_forward_to_real_drone(self):
   for role in ('viewer','simulation'):
    socket,target=await self.run_role(role);self.assertEqual(socket.closed['code'],1008);self.assertEqual(target.sent,[])
  async def test_verified_operator_forwarded_to_fake_target(self):
-  socket,target=await self.run_role('operator');self.assertIsNone(socket.closed);self.assertEqual(target.sent,['test-only-command'])
+  socket,target=await self.run_role('operator');self.assertIsNone(socket.closed);self.assertEqual(target.sent,['{"action":"test_only"}'])
  async def test_unsigned_first_command_rejected(self):
   ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role)
   exec(compile(ast.Module(body=[node],type_ignores=[]),'relay.py','exec'),ns)

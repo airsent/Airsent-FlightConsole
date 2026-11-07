@@ -268,6 +268,11 @@ function getCurrentClockTime() {
 }
  
 function prependEvent(text) {
+  if (window.AirsentEvents) {
+    // Commands/replies are recorded once by the relay, never invented by a tab.
+    if (!/^(DRONE:|CMD |MODE CMD |STATUS SET:)/i.test(String(text))) window.AirsentEvents.note(text);
+    return;
+  }
   sessionEventArchive.push({timestamp:new Date().toISOString(),time:getCurrentClockTime(),text:String(text).toUpperCase(),source:isRealMode?'telemetry / console':'demo / console'});
   if (eventLogPaused) return;
   eventLogData.unshift({
@@ -385,7 +390,7 @@ function executeFlightCommand(buttonEl) {
       case "EMERGENCY STOP": sent = sendCmd({ action: "disarm" });           break;
       default:               sent = false;
     }
-    setFlightCommandState(buttonEl, command);
+    // Actual aircraft state is rendered from telemetry on every device.
     prependEvent(sent ? `CMD SENT: ${command}` : `CMD FAILED: ${command}`);
     return;
   }
@@ -440,6 +445,11 @@ function sendModeCommand(modeName) {
 function bindTopbarControls() {
   if (telemetryEls.statusSelect) {
     telemetryEls.statusSelect.addEventListener("change", () => {
+      if (isRealMode) {
+        telemetryEls.statusSelect.value = telemetryEls.statusSelect.dataset.confirmedValue || 'disarmed';
+        updateStatusSelectClass();
+        return;
+      }
       updateStatusSelectClass();
       prependEvent(`STATUS SET: ${telemetryEls.statusSelect.options[telemetryEls.statusSelect.selectedIndex].text}`);
     });
@@ -659,6 +669,7 @@ function bindEventButtons() {
         () => {
           eventLogPaused = !eventLogPaused;
           telemetryEls.eventsPauseBtn.textContent = eventLogPaused ? "▶" : "⏸";
+          if (!eventLogPaused) window.dispatchEvent(new Event("airsent-events-resume"));
         }
       );
     });
@@ -666,6 +677,12 @@ function bindEventButtons() {
  
   if (telemetryEls.eventsResetBtn) {
     telemetryEls.eventsResetBtn.addEventListener("click", () => {
+      if (window.AirsentEvents) {
+        eventLogPaused = false;
+        telemetryEls.eventsPauseBtn.textContent = "⏸";
+        window.dispatchEvent(new Event('airsent-events-resume'));
+        return;
+      }
       openConfirm("Clear event log?", () => {
         eventLogData = isRealMode ? [...realModeEventLog] : [];
         renderEventLog();
@@ -1203,3 +1220,22 @@ renderEventLog();
  
 updateTelemetry();
 setInterval(updateTelemetry, 1000);
+
+// Refresh/reconnect rehydrates the same durable history for operators and viewers.
+let sharedEventSnapshot=[];
+function renderSharedEvents(){
+  if(eventLogPaused)return;
+  eventLogData=sharedEventSnapshot.slice(-8).reverse();
+  renderEventLog();
+}
+window.addEventListener('airsent-events', event=>{
+  sharedEventSnapshot=event.detail.events;
+  sessionEventArchive.splice(0,sessionEventArchive.length,...sharedEventSnapshot);
+  const button=document.getElementById('eventsDownloadBtn');
+  const title=eventLogPanel?.querySelector(".panel-title");
+  if(title){title.textContent=event.detail.ready?"EVENTS LOG · LIVE":"EVENTS LOG · OFFLINE";}
+  if(telemetryEls.eventsResetBtn)telemetryEls.eventsResetBtn.title="Resume shared history (saved events are retained)";
+  if(button)button.title=event.detail.ready?'Download shared event history':'History offline — showing last received records';
+  renderSharedEvents();
+});
+window.addEventListener('airsent-events-resume',renderSharedEvents);
