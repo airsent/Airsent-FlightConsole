@@ -75,6 +75,7 @@
     if (data && data.vehicle_mission) api.vehicleMission = data.vehicle_mission;
     if (data && data.failsafe_params) { api.failsafeParams = data.failsafe_params; api.failsafeAt = performance.now(); }
     if (data && data.failsafe_rules) api.failsafeRules = data.failsafe_rules;
+    if (data && data.asc) api.asc = data.asc;
     if (data && (data.mission || data.faults)) emit();
   }
   api.accept = accept;

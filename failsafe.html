@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
 <script src="console-navigation.js" defer></script>
 <script src="failsafe-activation.js?v=shared-1" defer></script>
-<script src="failsafe-onboard.js?v=1" defer></script>
+<script src="failsafe-onboard.js?v=2" defer></script>
 </head>
 <body class="failsafe-page">
 <div class="fs-shell" id="fsShell">
@@ -43,9 +43,9 @@
   <div class="bar-div"></div>
   <span class="bar-lbl">Source</span><span class="bar-val info" id="fsSource">TRIAL</span>
   <div class="bar-div"></div>
-  <span class="bar-lbl">Rules</span><span class="bar-val">20</span>
+  <span class="bar-lbl">Onboard</span><span class="bar-val" title="Pixhawk failsafes shown on this page">9</span>
   <div class="bar-div"></div>
-  <span class="bar-lbl">Commands</span><span class="bar-val">LOCKED</span>
+  <span class="bar-lbl">ASC</span><span class="bar-val">—</span>
 
   <div class="bar-right">
     <span class="bar-lbl">Updated&nbsp;</span><span class="bar-val" id="fsUpdated">--:--:--</span>
@@ -63,7 +63,7 @@
 <section class="fs-panel fs-policy" id="fsPopover" role="dialog" aria-label="Sensor and failsafe details" hidden><div class="fs-panel-head"><span id="fsMetricTitle">SENSOR DETAILS</span><button id="fsClose" type="button" aria-label="Close sensor details">×</button></div><div class="fs-policy-body"><div id="fsMetricExplanation" class="fs-metric-explanation"></div><div class="fs-selected-id" id="fsSelectedId">FS / 02</div><h1 id="fsTitle"></h1><span class="fs-state-tag">CONFIGURATION UNVERIFIED</span><div class="fs-detail-grid"><div><span class="fs-kicker">TRIGGER EVIDENCE</span><p id="fsTrigger"></p></div><div><span class="fs-kicker">POLICY OWNER</span><p id="fsOwner"></p></div></div><div class="fs-response-box"><span class="fs-kicker">PROTECTIVE ACTION OPTIONS · NOT ENABLED</span><h2 id="fsResponse" hidden></h2><div id="fsActions"></div><p id="fsCaveat"></p></div><div class="fs-recovery"><span class="fs-kicker">RECOVERY CONDITIONS</span><p id="fsRecovery"></p></div><div class="fs-observation"><span class="fs-kicker">AVAILABLE SENSOR EVIDENCE</span><p id="fsObservation">Waiting for dashboard data.</p></div><div class="fs-policy-bottom"><div><span class="fs-kicker">THRESHOLD</span><p>Not read from aircraft</p></div><button type="button" id="fsEditDraft">EDIT RESPONSE DRAFT</button></div></div></section>
 </main>
 <section class="fs-panel fs-incidents"><div class="fs-panel-head"><span>INCIDENT REVIEW <span class="fs-inline-muted">/ SIMULATED EVENTS</span></span><button type="button" id="fsRouteOpen">COMPARE RECOVERY ROUTES</button><label for="fsScenario">SCENARIO <select id="fsScenario"><option value="review">Configuration review</option><option value="link">5G link lost</option><option value="landing">Landing target lost</option><option value="battery">Critical battery</option></select></label></div><div class="fs-event-body"><div class="fs-event-time">T+00:00</div><div class="fs-event-copy" aria-live="polite"><strong id="fsEventTitle">Awaiting scenario</strong><p id="fsEventDetail"></p><span id="fsAckState"></span></div><button id="fsAck" disabled>ACKNOWLEDGE</button></div></section>
-<footer class="fs-footer"><span>LOCAL TRIAL · DASHBOARD TELEMETRY MIRROR · NO COMMANDS</span><span>Acknowledging an alert does not clear a failsafe or resume flight.</span></footer>
+<footer class="fs-footer"><span>ONBOARD SETTINGS ARE READ FROM / WRITTEN TO THE PIXHAWK · ASC RUNS ON THE JETSON</span><span>Acknowledging an alert does not clear a failsafe or resume flight.</span></footer>
 </div>
 <dialog id="fsDraftDialog" class="fs-plan-dialog" aria-labelledby="fsDraftTitle">
 <form id="fsDraftForm"><div class="fs-plan-head"><h2 id="fsDraftTitle">Failsafe Settings</h2><button type="button" data-close="fsDraftDialog" aria-label="Close response editor">×</button></div><p class="fs-plan-notice">LOCAL SETTINGS · No aircraft writes</p><p id="fsDraftRule"></p>

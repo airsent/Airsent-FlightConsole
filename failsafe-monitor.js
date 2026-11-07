@@ -34,7 +34,7 @@ function draw(){
  $('fsObservation').textContent=(frame?.source==='demo'&&v?'SIMULATED · ':'')+text;
  }
  $('fsSource').textContent=frame?(frame.source==='demo'?'DEMO':'TELEMETRY'):'TRIAL';
- $('fsVehicleState').textContent=!frame?'WAITING':!fresh?'STALE':frame.source==='demo'?'SIMULATED':frame.values.pixhawk_connected===false?'FC OFFLINE':'UNVERIFIED';
+ $('fsVehicleState').textContent=!frame?'WAITING':!fresh?'STALE':frame.source==='demo'?'SIMULATED':frame.values.pixhawk_connected===false?'FC OFFLINE':'CONNECTED';
  $('fsVehicleState').dataset.severity=!frame?'unknown':!fresh?'warning':frame.source==='demo'?'info':frame.values.pixhawk_connected===false?'fault':'unknown';
  $('fsVoltage').textContent=fresh&&numeric(frame.values.voltage)&&frame.values.voltage>=0?frame.values.voltage.toFixed(1)+' V':'—';
  $('fsGps').textContent=fresh&&typeof frame.values.fix_type==='string'?frame.values.fix_type:'—';

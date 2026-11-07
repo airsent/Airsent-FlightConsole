@@ -108,7 +108,13 @@
     return { state: 'ok', note: '' };
   }
 
+  function triggered(def) {
+    const a = M() && M().asc;
+    return ((a && a.triggered) || []).find(t => t.kind === def.id && !t.cleared && t.age < 60);
+  }
   function status(def) {
+    const trig = triggered(def);
+    if (trig) return { state: 'trig', text: 'TRIGGERED', title: trig.text };
     const v = values(), rl = rules(), prim = def.params.find(p => p.primary);
     if (v[prim.name] === undefined) return { state: 'unknown', text: '—', title: fresh() ? 'Not reported by the Pixhawk' : 'Waiting for the Jetson' };
     const states = def.params.map(p => paramStatus(p, v[p.name], rl));
@@ -127,6 +133,9 @@
   .fso-chip{height:26px;padding:0 10px;font:600 11px 'Share Tech Mono',monospace;letter-spacing:1px;border:1px solid #2a3e4e;background:#0b1620;color:#8fa3b5;cursor:pointer;white-space:nowrap}
   .fso-chip.ok{border-color:rgba(0,227,131,.45);color:#00e383;background:rgba(0,227,131,.07)} .fso-chip.warn{border-color:rgba(255,184,0,.5);color:#ffb800;background:rgba(255,184,0,.07)}
   .fso-chip.bad{border-color:rgba(255,51,85,.6);color:#ff5c7a;background:rgba(255,51,85,.09)}
+  @keyframes fso-blink{0%,100%{opacity:1}50%{opacity:.35}}
+  .fso-chip.trig,.fso-tag.trig,.fso-pill.trig{border-color:#ff2244;color:#fff;background:#ff2244;animation:fso-blink 1s step-end infinite}
+  .failsafe-page .fso-chip.info{border-color:#2a3e4e;color:#8fa3b5;background:#0b1620;cursor:help;min-width:0;font-size:10px;padding:6px 8px}
   .failsafe-page .fso-chip{position:absolute;right:12px;top:84px;min-width:76px;height:auto;padding:6px 9px;font-size:11px}
   .fso-tag{margin-left:auto;margin-right:10px;font:700 10px 'Share Tech Mono',monospace;letter-spacing:.5px;padding:2px 6px;border:1px solid #2a3e4e;color:#8fa3b5;white-space:nowrap}
   .fso-tag.ok{color:#00e383;border-color:rgba(0,227,131,.4)} .fso-tag.warn{color:#ffb800;border-color:rgba(255,184,0,.45)} .fso-tag.bad{color:#ff5c7a;border-color:rgba(255,51,85,.55)}
@@ -249,17 +258,33 @@
     });
     return true;
   }
+  // Tiles that are not Pixhawk failsafes: say plainly what covers them (their old ACTIVATE did nothing on the drone).
+  const OTHER_TILES = { 3: ['VIA GPS / EKF', 'Compass problems show up as EKF errors: the GPS / EKF failsafe handles them.'],
+                        5: ['ASC WATCH', 'ASC checks the front camera and obstacle distance in flight and alerts; there is no automatic action.'],
+                        8: ['NOT FITTED', 'There is no rear camera on the aircraft yet.'],
+                        9: ['NO HARDWARE', 'The parachute hardware is not defined; nothing is armed or automated.'],
+                        11: ['ASC WATCH', 'ASC checks motor balance, saturation and ESC telemetry in flight and alerts; a quad cannot survive a motor loss.'] };
+  function labelOtherTiles() {
+    document.querySelectorAll('.fs-square-tile').forEach(tile => {
+      const info = OTHER_TILES[tile.dataset.system]; if (!info) return;
+      const act = tile.querySelector('.fs-card-activation'); if (!act) return;
+      const chip = document.createElement('span'); chip.className = 'fso-chip info'; chip.textContent = info[0]; chip.title = info[1];
+      act.replaceWith(chip);
+    });
+  }
   function renderFailsafePage() {
     document.querySelectorAll('[data-fso-tile]').forEach(chip => {
       const defs = DEFS.filter(d => String(d.tile) === chip.dataset.fsoTile);
       const st = defs.map(status), worst = st.find(s => s.state === 'bad') || st.find(s => s.state === 'warn') || st.find(s => s.state === 'unknown') || st[0];
       chip.className = 'fso-chip ' + worst.state;
+      const trig = st.find(s => s.state === 'trig');
+      if (trig) { chip.className = 'fso-chip trig'; chip.textContent = '■ TRIGGERED'; return; }
       chip.textContent = { ok: '✓ ON DRONE', warn: '⚠ CHECK', bad: '✗ FIX', unknown: '— NOT READ' }[worst.state];
       chip.title = defs.map((d, i) => `${d.title}: ${st[i].text}\n${st[i].title}`).join('\n\n') + '\n\nClick to view or change on the drone';
     });
     document.querySelectorAll('[data-fso-def]').forEach(tag => {
       const st = status(DEFS.find(d => d.id === tag.dataset.fsoDef));
-      tag.className = 'fso-tag ' + st.state; tag.textContent = st.text + (st.state === 'ok' ? ' ✓' : st.state === 'unknown' ? '' : ' !'); tag.title = st.title;
+      tag.className = 'fso-tag ' + st.state; tag.textContent = st.text + (st.state === 'ok' ? ' ✓' : st.state === 'unknown' || st.state === 'trig' ? '' : ' !'); tag.title = st.title;
     });
     const lbl = [...document.querySelectorAll('.bar-lbl')].find(x => x.textContent.trim() === 'Config');
     if (lbl && lbl.nextElementSibling) {
@@ -282,7 +307,7 @@
   function renderDashboard() {
     document.querySelectorAll('.fso-list [data-fso]').forEach(row => {
       const st = status(DEFS.find(d => d.id === row.dataset.fso)), pill = row.querySelector('.fso-pill');
-      pill.textContent = st.text + (st.state === 'ok' ? ' ✓' : st.state === 'unknown' ? '' : ' !');
+      pill.textContent = st.text + (st.state === 'ok' ? ' ✓' : st.state === 'unknown' || st.state === 'trig' ? '' : ' !');
       pill.className = 'fso-pill ' + st.state; pill.title = st.title;
     });
   }
@@ -290,7 +315,7 @@
   let page = { fs: false, dash: false }, lastKey = '';
   function notify() { lastKey = ''; tick(); }
   function tick() {
-    const key = JSON.stringify([values(), rules(), fresh()]);
+    const key = JSON.stringify([values(), rules(), fresh(), (M() && M().asc && M().asc.triggered) || []]);
     if (key === lastKey) return;
     lastKey = key;
     if (page.fs) renderFailsafePage();
@@ -299,6 +324,7 @@
   }
   function init() {
     page.fs = wireFailsafePage();
+    if (page.fs) labelOtherTiles();
     page.dash = wireDashboard();
     if (M()) M().on(tick);
     setInterval(tick, 1000);
