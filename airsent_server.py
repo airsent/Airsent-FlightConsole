@@ -531,6 +531,30 @@ def wait_ack(command, since, timeout):
             ack_cond.wait(left)
 
 
+# Message rates once the Pixhawk link is fast enough (>= 460800 baud). At 57600 the
+# link cannot carry this, so the old 10 Hz "all streams" request is used instead.
+FAST_STREAMS = {
+    'ATTITUDE': 30, 'GLOBAL_POSITION_INT': 20, 'VFR_HUD': 20, 'SERVO_OUTPUT_RAW': 20,
+    'DISTANCE_SENSOR': 20, 'RANGEFINDER': 20, 'OPTICAL_FLOW': 20,
+    'SYS_STATUS': 10, 'BATTERY_STATUS': 10, 'VIBRATION': 10, 'GPS_RAW_INT': 10, 'RC_CHANNELS': 10,
+    'EKF_STATUS_REPORT': 5,
+}
+
+
+def configure_streams(mav):
+    """Ask the Pixhawk for telemetry at rates the link can carry."""
+    if PIXHAWK_BAUD < 460800:
+        mav.mav.request_data_stream_send(mav.target_system, mav.target_component,
+                                         mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1)
+        return 'all streams @ 10 Hz'
+    for name, hz in FAST_STREAMS.items():
+        msg_id = getattr(mavutil.mavlink, 'MAVLINK_MSG_ID_' + name)
+        mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                  mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+                                  msg_id, int(1e6 / hz), 0, 0, 0, 0, 0)
+    return ', '.join(f'{n} {hz} Hz' for n, hz in FAST_STREAMS.items())
+
+
 def mavlink_reader():
     global mav_conn, _last_imu_accel, last_mav_report, last_mav_heartbeat
     while True:
@@ -559,10 +583,8 @@ def mavlink_reader():
             pilot_settings.reset()
             pilot_settings.request_parameters(mav)
             settings_poll_at = time.monotonic()
-            mav.mav.request_data_stream_send(
-                mav.target_system, mav.target_component,
-                mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1
-            )
+            print(f"[MAV] Streams @ {PIXHAWK_BAUD} baud: {configure_streams(mav)}")
+            streams_at = time.monotonic()
             last_mav_msg = time.time()
             tlog_open = None
             while True:
@@ -590,6 +612,8 @@ def mavlink_reader():
                             pass
                         break
                     continue
+                if time.monotonic() - streams_at > 60:
+                    configure_streams(mav); streams_at = time.monotonic()
                 if time.monotonic()-settings_poll_at > 15:
                     pilot_settings.request_parameters(mav);settings_poll_at=time.monotonic()
                 t = msg.get_type()
