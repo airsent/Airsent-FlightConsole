@@ -2,6 +2,9 @@ import os
 from pilot_settings import PilotSettings
 from health_telemetry import HealthTelemetry, gpu_percent
 from datalink_telemetry import start_monitor
+from mission_engine import MissionEngine, default_config, disk_free_gb
+from golden_params import GoldenParams
+from collections import deque
 import asyncio
 import websockets
 import sys
@@ -312,6 +315,17 @@ downcam_lock = threading.Lock()
 apriltag_result = {'detected': False, 'tags': []}
 apriltag_lock = threading.Lock()
 
+# ── Launch sequencer / faults (see mission_engine.py) ─────────────────────────
+statustext_log = deque(maxlen=60)          # (time, severity, text) from the Pixhawk
+home_state = {'set': False}
+vps_relay_state = {'telem': False}
+MISSION_CONFIG = default_config(sim=SIM_MODE)
+_gate_extra = ({f"RC{MISSION_CONFIG['rc_gate_channel']}_OPTION": {'value': 31, 'why': 'RC gate = Motor Emergency Stop'}}
+               if MISSION_CONFIG['rc_gate_channel'] else {})
+golden = GoldenParams(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden_params.json'),
+                      extra=_gate_extra)
+mission_cache = {'mission': None, 'faults': None}
+
 def log_mavlink(msg):
     with mavlink_log_lock:
         ts = time.strftime('%H:%M:%S')
@@ -500,6 +514,8 @@ def mavlink_reader():
             with rc_lock:
                 rc_monitor.reset()
             last_mav_heartbeat = 0.0
+            golden.reset()
+            home_state.clear(); home_state['set'] = False
             hb = mav.wait_heartbeat(timeout=15)
             if hb is None:
                 print("[MAV] No heartbeat — retrying")
@@ -548,6 +564,7 @@ def mavlink_reader():
                     health_telemetry.observe(msg, _now)
                 if t == 'PARAM_VALUE':
                     pilot_settings.observe(msg)
+                    golden.observe(msg)
                 elif t == 'ATTITUDE':
                     telem['roll']  = round(math.degrees(msg.roll), 1)
                     telem['pitch'] = round(math.degrees(msg.pitch), 1)
@@ -620,6 +637,14 @@ def mavlink_reader():
                         telem['vib_z'] = round(abs(accel[2] - _last_imu_accel[2]), 3)
                         _sensor_ts['vib'] = _now
                     _last_imu_accel = accel
+                elif t == 'RC_CHANNELS':
+                    telem['rc_channels'] = [getattr(msg, f'chan{i}_raw', 0) for i in range(1, 19)]
+                elif t == 'HOME_POSITION':
+                    home_state.update(set=True, lat=msg.latitude / 1e7, lon=msg.longitude / 1e7,
+                                      alt=msg.altitude / 1000, seen=_now)
+                elif t == 'STATUSTEXT':
+                    text = msg.text.decode('ascii', 'ignore') if isinstance(msg.text, bytes) else str(msg.text)
+                    statustext_log.append((_now, int(msg.severity), text.strip('\x00').strip()))
                 elif t == 'EKF_STATUS_REPORT':
                     telem['ekf_healthy'] = bool(msg.flags & 0x1F == 0x1F)
 
@@ -745,6 +770,148 @@ def send_takeoff(mav, alt):
     )
     log_mavlink(f"MAV_CMD_NAV_TAKEOFF → {alt}m")
 
+# ── Launch sequencer: vehicle adapter, faults, 5 Hz loop ────────────────────
+class MavVehicle:
+    """What the mission engine may do to the aircraft. Never raises."""
+    MODES = {'GUIDED': 4, 'LOITER': 5, 'RTL': 6, 'LAND': 9}
+
+    def _run(self, label, fn):
+        with mav_lock:
+            mav = mav_conn
+        if mav is None:
+            log_mavlink(f"MISSION {label} FAILED — no MAVLink connection")
+            return False
+        try:
+            fn(mav)
+            return True
+        except Exception as e:
+            log_mavlink(f"MISSION {label} FAILED — {e}")
+            return False
+
+    def set_mode(self, name):
+        return self._run('MODE ' + name, lambda mav: set_mode(mav, self.MODES[name], name))
+
+    def arm(self):
+        return self._run('ARM', arm_drone)
+
+    def disarm(self, force=False):
+        with vel_lock:
+            vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+        if not force:
+            return self._run('DISARM', disarm_drone)
+        def forced(mav):
+            mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                      mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 0, 21196, 0, 0, 0, 0, 0)
+            log_mavlink("MAV_CMD_COMPONENT_ARM_DISARM → FORCE DISARM")
+        return self._run('FORCE DISARM', forced)
+
+    def takeoff(self, alt):
+        return self._run('TAKEOFF', lambda mav: send_takeoff(mav, alt))
+
+    def land(self):
+        return self._run('LAND', send_land)
+
+    def rtl(self):
+        return self._run('RTL', send_rtl)
+
+
+MISSION_ROOT = os.environ.get('AIRSENT_MISSION_DIR',
+                              os.path.expanduser('~/airsent_missions_sim' if SIM_MODE else '~/airsent_missions'))
+mission_engine = MissionEngine(
+    os.environ.get('AIRSENT_MISSION_STATE', os.path.expanduser(
+        '~/.local/share/airsent/' + ('sim_mission_state.json' if SIM_MODE else 'mission_state.json'))),
+    MISSION_ROOT, MavVehicle(), config=MISSION_CONFIG)
+
+
+def last_prearm_text(now, window=40):
+    for t, severity, text in reversed(list(statustext_log)):
+        if now - t > window:
+            break
+        if text.lower().startswith('prearm'):
+            return text
+    return ''
+
+
+def system_fault_conditions(s, now):
+    """Faults that exist whether or not a mission is running."""
+    c = {}
+    if not s.get('pixhawk_connected'):
+        c['sys:pixhawk'] = ('critical', 'Pixhawk', 'Flight controller offline — no heartbeat')
+    else:
+        if not s.get('ekf_healthy'):
+            c['sys:ekf'] = ('critical' if s.get('armed') else 'warning', 'Pixhawk', 'EKF position estimate unhealthy')
+        fix = s.get('fix_type') or 'NO FIX'
+        if fix in ('NO FIX', '2D FIX'):
+            c['sys:gps'] = ('warning', 'GPS', f'GPS: {fix}')
+        volt = s.get('voltage')
+        if isinstance(volt, (int, float)) and 1 < volt < 21.6:
+            c['sys:battery'] = ('critical', 'Battery', f'Battery low: {volt:.1f} V')
+        vib = [s.get(k) for k in ('vib_x', 'vib_y', 'vib_z') if isinstance(s.get(k), (int, float))]
+        if vib and max(vib) >= MISSION_CONFIG['max_vibration']:
+            c['sys:vibration'] = ('warning', 'Sensors', f'High vibration: {max(vib):.0f} m/s²')
+        if not SIM_MODE and not (s.get('rc_signal') or {}).get('input_present'):
+            c['sys:rc'] = ('warning', 'RC', 'RC receiver signal not present')
+        gs = s.get('_golden') or {}
+        if gs.get('state') == 'diff':
+            c['sys:golden'] = ('warning', 'Config', f"{len(gs['diffs'])} Pixhawk parameter(s) differ from the approved set")
+    if not SIM_MODE:
+        if not s.get('front_cam_active'):
+            c['sys:frontcam'] = ('warning', 'Camera', 'Front camera (OAK-D) offline')
+        if not s.get('down_cam_active'):
+            c['sys:downcam'] = ('warning', 'Camera', 'Down camera offline')
+        if MISSION_CONFIG['require_esc_telemetry'] and not (s.get('esc_telemetry') or {}).get('connected'):
+            c['sys:esc'] = ('warning', 'ESC', 'ESC telemetry (Datalink) not connected')
+    temp = s.get('jetson_temp')
+    if isinstance(temp, (int, float)) and temp >= MISSION_CONFIG['max_jetson_temp']:
+        c['sys:jetson_temp'] = ('warning', 'Jetson', f'Jetson hot: {temp:.0f} °C')
+    disk = s.get('_disk_free_gb')
+    if disk is not None and disk < MISSION_CONFIG['min_disk_gb']:
+        c['sys:disk'] = ('warning', 'Jetson', f'Low storage for mission logs: {disk:.1f} GB')
+    for t, severity, text in list(statustext_log):
+        age = now - t
+        if text.lower().startswith('prearm') and age < 35:
+            c['px:' + text[:48]] = ('warning', 'Pixhawk', text)
+        elif severity <= 2 and age < 30:
+            c['px:' + text[:48]] = ('critical', 'Pixhawk', text)
+        elif severity == 3 and age < 20:
+            c['px:' + text[:48]] = ('warning', 'Pixhawk', text)
+    return c
+
+
+def mission_loop():
+    last_golden = last_home = last_disk = 0.0
+    disk = None
+    while True:
+        try:
+            now = time.time()
+            with mav_lock:
+                mav = mav_conn
+            if mav is not None:
+                if now - last_golden > 20:
+                    last_golden = now
+                    golden.request(mav)
+                if now - last_home > 5:
+                    last_home = now
+                    mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                              mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
+                                              mavutil.mavlink.MAVLINK_MSG_ID_HOME_POSITION, 0, 0, 0, 0, 0, 0)
+            if now - last_disk > 5:
+                last_disk = now
+                disk = disk_free_gb(MISSION_ROOT)
+            s = build_telemetry_payload(include_mission=False)
+            s['_golden'] = golden.snapshot()
+            s['_disk_free_gb'] = disk
+            s['_vps_relay_connected'] = vps_relay_state['telem'] or SIM_MODE
+            s['_last_prearm'] = last_prearm_text(now)
+            mission_engine.tick(s, system_fault_conditions(s, now))
+            mission_cache['mission'] = mission_engine.snapshot()
+            mission_cache['faults'] = mission_engine.faults.snapshot()
+        except Exception as e:
+            print(f"[MISSION] loop error: {e}")
+            traceback.print_exc()
+        time.sleep(0.2)
+
+
 # ── Command WebSocket handler ─────────────────────
 def process_command(raw):
     """Execute a single command (JSON string) and return a reply dict.
@@ -758,6 +925,11 @@ def process_command(raw):
         return {'ok': False, 'msg': f'JSON error: {e}'}
 
     action = cmd.get('action', '')
+
+    # Launch sequencer requests are handled by the Jetson mission engine,
+    # including abort/hold when the Pixhawk link is down.
+    if isinstance(action, str) and (action.startswith('mission_') or action == 'fault_ack'):
+        return mission_engine.handle(cmd)
 
     with mav_lock:
         mav = mav_conn
@@ -924,7 +1096,13 @@ async def cmd_handler(websocket):
             vel_setpoint.update({'vx':0,'vy':0,'vz':0,'yaw_rate':0})
 
 # ── Telemetry payload builder ─────────────────────────────────────────────
-def build_telemetry_payload():
+def mission_interval():
+    """Mission/fault state is ~6 KB: send it 2x/s during a mission, every 2 s otherwise."""
+    stage = (mission_cache['mission'] or {}).get('stage', 'standby')
+    return 2.0 if stage == 'standby' else 0.5
+
+
+def build_telemetry_payload(include_mission=True):
     now = time.time()
     with mavlink_log_lock:
         log = list(mavlink_log)
@@ -993,14 +1171,22 @@ def build_telemetry_payload():
         payload.pop('vib_x', None)
         payload.pop('vib_y', None)
         payload.pop('vib_z', None)
+    payload['home'] = dict(home_state)
+    if include_mission:
+        payload['mission'] = mission_cache['mission']
+        payload['faults'] = mission_cache['faults']
     return payload
 
 # ── Telemetry WebSocket ──────────────────────────
 async def telem_handler(websocket):
     print(f"[TELEM] Client: {websocket.remote_address}")
+    last_mission = 0.0
     try:
         while True:
-            await websocket.send(json.dumps(build_telemetry_payload()))
+            include = time.time() - last_mission >= mission_interval()
+            if include:
+                last_mission = time.time()
+            await websocket.send(json.dumps(build_telemetry_payload(include_mission=include)))
             await asyncio.sleep(0.05)
     except websockets.exceptions.ConnectionClosed:
         print("[TELEM] Disconnected")
@@ -1758,13 +1944,19 @@ async def vps_telem_relay():
             )
 
             print("[VPS] Telemetry relay connected")
+            vps_relay_state['telem'] = True
+            last_mission = 0.0
 
             while True:
-                await remote.send(json.dumps(build_telemetry_payload()))
+                include = time.time() - last_mission >= mission_interval()
+                if include:
+                    last_mission = time.time()
+                await remote.send(json.dumps(build_telemetry_payload(include_mission=include)))
                 await asyncio.sleep(0.05)
 
         except Exception as e:
             print(f"[VPS] Relay error: {e}")
+        vps_relay_state['telem'] = False
 
         await asyncio.sleep(2)
 
@@ -1831,6 +2023,7 @@ if __name__ == "__main__":
     threading.Thread(target=battery_soc_init,       daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
+    threading.Thread(target=mission_loop,           daemon=True).start()
     if not SIM_MODE:
         threading.Thread(target=thermal_monitor,        daemon=True).start()
         threading.Thread(target=downcam_capture_thread, daemon=True).start()

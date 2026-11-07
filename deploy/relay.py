@@ -65,7 +65,9 @@ async def cmd_jetson(ws):
         async for msg in ws:
             try:
                 reply = json.loads(msg)
-                JOURNAL.append('BACKEND ' + ('REPLY' if reply.get('ok') else 'ERROR') + ': ' + str(reply.get('msg', 'Response received')), 'Jetson backend (not flight confirmation)')
+                # Console keep-alives (mission_ping) are not operator actions; keep them out of the journal.
+                if not reply.get('quiet'):
+                    JOURNAL.append('BACKEND ' + ('REPLY' if reply.get('ok') else 'ERROR') + ': ' + str(reply.get('msg', 'Response received')), 'Jetson backend (not flight confirmation)')
             except (ValueError, AttributeError):
                 pass
             dead = set()
@@ -105,10 +107,13 @@ async def cmd_browser(ws):
             except (ValueError, AttributeError):
                 await ws.send('{"ok":false,"msg":"Invalid command JSON"}')
                 continue
-            JOURNAL.append('OPERATOR REQUEST: ' + action.upper(), 'operator command')
+            quiet = action == 'mission_ping'
+            if not quiet:
+                JOURNAL.append('OPERATOR REQUEST: ' + action.upper(), 'operator command')
             jws = jetson["cmd"]
             if jws is None:
-                JOURNAL.append("COMMAND FAILED: Jetson command channel offline", "relay")
+                if not quiet:
+                    JOURNAL.append("COMMAND FAILED: Jetson command channel offline", "relay")
                 try:
                     await ws.send('{"ok":false,"msg":"Jetson command channel offline"}')
                 except Exception:
@@ -116,7 +121,8 @@ async def cmd_browser(ws):
                 continue
             try:
                 await jws.send(msg)
-                JOURNAL.append("COMMAND FORWARDED: " + action.upper(), "relay (not flight confirmation)")
+                if not quiet:
+                    JOURNAL.append("COMMAND FORWARDED: " + action.upper(), "relay (not flight confirmation)")
             except Exception:
                 JOURNAL.append("COMMAND FAILED: Failed to reach Jetson", "relay")
                 try:
