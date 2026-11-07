@@ -406,7 +406,7 @@ class ASC:
         self.hist = deque(maxlen=200)
         self.action = None             # {'stage': 'hold'|'rtl'|'stood_down', ...}
         self.triggered = deque(maxlen=20)
-        self.events = deque(maxlen=30)
+        self.events = deque(maxlen=60)
         self.last_mode = None
         self.console_mode_at = 0.0
         self.checks_run = 0
@@ -417,6 +417,11 @@ class ASC:
         self.console_seen_at = None
         self.console_seen_in_session = False
         self.last_summary = None
+        self.post_thread = None
+        self.seq = 0
+        self.boot = int(self.clock())
+        self.pending_param_dump = False
+        self._ticks = 0
 
     # inputs ────────────────────────────────────────────────────────────────
     def console_heard(self, now=None):
@@ -428,6 +433,25 @@ class ASC:
     def console_mode_command(self, now=None):
         """A console asked for a mode change (so the next mode change is not 'external')."""
         self.console_mode_at = now or self.clock()
+
+    QUIET = {'mission_ping', 'param_read', 'wp_download', 'get_log'}
+
+    def note_command(self, action, who='Operator', data=None, now=None):
+        """Operator commands go into the flight record (joystick input into its own file)."""
+        if not self.session or action in self.QUIET:
+            return
+        now = now or self.clock()
+        t = round(now - self.session['start'], 3)
+        if action == 'velocity':
+            d = data or {}
+            self.rec.write('controls.jsonl.gz', {'t': t, 'who': who, **{k: d.get(k) for k in ('vx', 'vy', 'vz', 'yaw_rate')}})
+            return
+        detail = {k: v for k, v in (data or {}).items() if k not in ('action', 'request_id', 'console_id', 'operator', 'page', 'plan', 'params')}
+        self._event('command', f'{who}: {action}' + (f' {detail}' if detail else ''), INFO)
+
+    def write_params(self, values):
+        if self.session and values:
+            self.rec.write('params_start.json', {'count': len(values), 'params': values})
 
     def statustext(self, text, now=None):
         """Pixhawk messages: failsafes and other warnings become events / triggered flags."""
@@ -462,7 +486,12 @@ class ASC:
                         'max_vib': 0.0, 'actions': [], 'failsafes': [], 'console_losses': 0, 'flying_s': 0.0,
                         'start_pct': None, 'end_pct': None}
         self.console_seen_in_session = bool(self.console_seen_at and now - self.console_seen_at < 5)
-        self._event('session', f'ASC watching — recording to {os.path.basename(folder)}/asc', INFO)
+        self._event('session', f'ASC recording to {os.path.basename(folder)}/asc', INFO)
+        self.pending_param_dump = True
+        bad = [f'{c.label}: {self.state[c.id]["msg"]}' for c in self.checks
+               if self.state.get(c.id, {}).get('raised') and self.state[c.id].get('active', True)]
+        if bad:
+            self._event('check', 'Already wrong at the start — ' + '; '.join(bad), WARN)
         if removed:
             self._event('storage', f'Removed old mission folders to keep space: {", ".join(removed)}', INFO)
 
@@ -482,11 +511,20 @@ class ASC:
             'battery_pct': [s['start_pct'], s['end_pct']], 'max_vibration': round(s['max_vib'], 1),
             'console_link_losses': s['console_losses'], 'asc_actions': s['actions'], 'pixhawk_failsafes': s['failsafes'],
             'checks': stats, 'samples_dropped': self.rec.dropped if self.rec else 0,
-            'files': {'asc/samples.jsonl.gz': 'every tick: flight values', 'asc/events.jsonl': 'findings, actions, Pixhawk messages',
-                      'asc/focus.jsonl.gz': 'detail while a check was not OK', 'asc/mavlink.tlog': 'every MAVLink message from the Pixhawk'},
+            'files': {'asc/samples.jsonl.gz': 'every tick (20 Hz): flight values + which checks were not OK',
+                      'asc/samples.csv': 'the same as a spreadsheet',
+                      'asc/telemetry_full.jsonl.gz': 'the complete console telemetry frame, 5 Hz',
+                      'asc/events.jsonl': 'findings, actions, mode changes, Pixhawk messages, operator commands',
+                      'asc/controls.jsonl.gz': 'every joystick / velocity command',
+                      'asc/focus.jsonl.gz': 'detail while a check was not OK',
+                      'asc/params_start.json': 'every Pixhawk parameter at the start',
+                      'asc/mavlink.tlog': 'every MAVLink message from the Pixhawk (MAVExplorer)',
+                      'asc/charts/*.png': 'flight charts'},
         }
         self.rec.write('summary.json', summary)
         self.rec.close()
+        self.post_thread = threading.Thread(target=postprocess, args=(s['dir'],), daemon=True)
+        self.post_thread.start()
         self.last_summary = summary
         self.session, self.rec = None, None
         self.action = None
@@ -511,7 +549,7 @@ class ASC:
         flying = armed and (alt > 0.5 or (_num(s.get('vspd')) and abs(s.get('vspd')) > 0.3))
         stage = (mission or {}).get('stage') or 'standby'
         mfolder = ((mission or {}).get('mission') or {}).get('folder')
-        watching = armed or stage in ('prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed')
+        watching = armed or stage in ('countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed')
 
         if watching and not self.session:
             self._open_session(now, mfolder if stage != 'standby' else None)
@@ -545,10 +583,7 @@ class ASC:
         ran = 0
         for chk in self.checks:
             if chk.when == 'flying' and not flying or chk.when == 'armed' and not armed:
-                self._set(chk, OK, '', None, now)
-                continue
-            if chk.when == 'session' and not self.session and chk.id not in ('fc_link',):
-                self._set(chk, OK, '', None, now)
+                self._set(chk, OK, '', None, now, active=False)     # shown grey in the live view
                 continue
             try:
                 level, msg, value = chk.fn(s, ctx)
@@ -566,8 +601,9 @@ class ASC:
         self.loop_ms = (time.perf_counter() - t0) * 1000
         return actions
 
-    def _set(self, chk, level, msg, value, now):
+    def _set(self, chk, level, msg, value, now, active=True):
         st = self.state.setdefault(chk.id, {'level': OK, 'since': now, 'raised': False, 'msg': '', 'value': None, 'raised_level': OK})
+        st['active'] = active
         if level != st['level']:
             st['level'], st['since'] = level, now
         st['msg'], st['value'] = msg, value
@@ -649,6 +685,9 @@ class ASC:
         if bad:
             sample['issues'] = bad
         self.rec.write('samples.jsonl.gz', sample)
+        self._ticks += 1
+        if self._ticks % max(1, int(self.cfg['rate_hz'] / 5)) == 0:      # everything the consoles see, 5 Hz
+            self.rec.write('telemetry_full.jsonl.gz', {'t': t, **{k: v for k, v in s.items() if k not in ('mavlink_log',)}})
         for cid, st in self.state.items():
             if st['level'] >= WARN:
                 self.rec.write('focus.jsonl.gz', {'t': t, 'check': cid, 'level': LEVEL_NAME[st['level']], 'msg': st['msg'],
@@ -662,7 +701,8 @@ class ASC:
 
     def _event(self, kind, msg, level=INFO, **extra):
         now = self.clock()
-        e = {'t': now, 'kind': kind, 'level': LEVEL_NAME[level], 'msg': msg, **extra}
+        self.seq += 1
+        e = {'t': now, 'seq': self.seq, 'kind': kind, 'level': LEVEL_NAME[level], 'msg': msg, **extra}
         self.events.appendleft(e)
         if self.session:
             self.rec.write('events.jsonl', dict(e, t_rel=round(now - self.session['start'], 3)))
@@ -692,7 +732,24 @@ class ASC:
                 out['asc:fs:' + f['kind']] = ('critical', 'Pixhawk', 'FAILSAFE TRIGGERED: ' + f['text'])
         return out
 
-    def snapshot(self):
+    def defs(self):
+        return [[c.id, c.group, c.label] for c in self.checks]
+
+    def live(self):
+        out = []
+        for c in self.checks:
+            st = self.state.get(c.id)
+            if not st:
+                continue
+            lvl = -1 if not st.get('active', True) else st['level']
+            v = st['value']
+            row = [c.id, lvl, round(v, 3) if isinstance(v, float) else v]
+            if lvl >= WARN:
+                row.append(st['msg'])
+            out.append(row)
+        return out
+
+    def snapshot(self, with_defs=False):
         issues = sorted(([cid, st['raised_level'], st['msg']] for cid, st in self.state.items() if st['raised']), key=lambda x: -x[1])
         now = self.clock()
         return {
@@ -705,5 +762,105 @@ class ASC:
             'console_age': round(now - self.console_seen_at, 1) if self.console_seen_at else None,
             'action': self.action,
             'triggered': [dict(f, age=round(now - f['t'], 1)) for f in self.triggered if now - f['t'] < 120][:5],
-            'events': [{'t': round(e['t'], 1), 'level': e['level'], 'msg': e['msg']} for e in list(self.events)[:5]],
+            'live': self.live(),
+            **({'defs': self.defs()} if with_defs else {}),
+            'boot': self.boot,
+            'events': [{'seq': e['seq'], 't': round(e['t'], 1), 'level': e['level'], 'msg': e['msg']}
+                       for e in list(self.events)[:12] if e['kind'] != 'command'],
         }
+
+
+# ── after the flight: spreadsheet + charts (runs in its own thread) ─────────
+CHART_SET = [
+    ('altitude', 'Altitude and climb', [('alt', 'altitude (m)'), ('rangefinder_agl', 'LiDAR AGL (m)'), ('vspd', 'climb (m/s)')]),
+    ('power', 'Battery', [('voltage', 'voltage (V)'), ('current', 'current (A)')]),
+    ('battery_pct', 'Battery remaining', [('battery', 'remaining (%)')]),
+    ('attitude', 'Attitude', [('roll', 'roll (°)'), ('pitch', 'pitch (°)')]),
+    ('vibration', 'Vibration', [('vib_x', 'x (m/s²)'), ('vib_y', 'y'), ('vib_z', 'z')]),
+    ('motors', 'Motor outputs', [('m1', 'M1 (µs)'), ('m2', 'M2'), ('m3', 'M3'), ('m4', 'M4')]),
+    ('gps', 'GPS', [('sats', 'satellites'), ('hdop', 'HDOP')]),
+    ('speed', 'Ground speed', [('spd', 'speed (m/s)')]),
+    ('flow', 'Optical flow / RC', [('of_quality', 'flow quality'), ('rssi', 'RC signal (%)')]),
+    ('jetson', 'Jetson', [('jetson_temp', 'temp (°C)'), ('cpu', 'CPU (%)'), ('ram', 'RAM (%)')]),
+]
+
+
+def postprocess(asc_dir):
+    """samples.jsonl.gz → samples.csv and charts/*.png. Never raises."""
+    try:
+        _postprocess(asc_dir)
+    except Exception as e:                     # post-flight extras must never take anything down
+        print(f'[ASC] postprocess failed: {e}')
+
+
+def _postprocess(asc_dir):
+    import csv
+    path = os.path.join(asc_dir, 'samples.jsonl.gz')
+    try:
+        with gzip.open(path, 'rt') as f:
+            rows = [json.loads(line) for line in f if line.strip()]
+    except (OSError, ValueError) as e:
+        print(f'[ASC] postprocess: {e}')
+        return
+    if not rows:
+        return
+    keys = ['t'] + [k for k in SAMPLE_KEYS if any(k in r for r in rows)] + ['issues']
+    try:
+        with open(os.path.join(asc_dir, 'samples.csv'), 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(keys)
+            for r in rows:
+                w.writerow([';'.join(f'{k}={v}' for k, v in r.get('issues', {}).items()) if k == 'issues' else r.get(k, '') for k in keys])
+    except OSError as e:
+        print(f'[ASC] samples.csv: {e}')
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+    except Exception as e:                                     # charts are optional
+        print(f'[ASC] charts skipped (matplotlib unavailable: {e})')
+        return
+    out = os.path.join(asc_dir, 'charts')
+    os.makedirs(out, exist_ok=True)
+    t = [r['t'] for r in rows]
+    style = dict(facecolor='#060d14')
+    made = []
+    for name, title, series in CHART_SET:
+        lines = [(lbl, [r.get(k) if _num(r.get(k)) else float('nan') for r in rows]) for k, lbl in series if any(_num(r.get(k)) for r in rows)]
+        if not lines:
+            continue
+        fig, ax = plt.subplots(figsize=(10, 3.2), **style)
+        ax.set_facecolor('#0a1520')
+        for lbl, ys in lines:
+            ax.plot(t, ys, linewidth=1, label=lbl)
+        ax.set_title(title, color='#e8f4ff', fontsize=11, loc='left')
+        ax.set_xlabel('seconds since recording started', color='#8fa3b5', fontsize=8)
+        ax.tick_params(colors='#8fa3b5', labelsize=8)
+        for sp in ax.spines.values():
+            sp.set_color('#2a3e4e')
+        ax.grid(color='#1a2a38', linewidth=.5)
+        ax.legend(loc='upper right', fontsize=7, facecolor='#0a1520', edgecolor='#2a3e4e', labelcolor='#e8f4ff')
+        fig.tight_layout()
+        fig.savefig(os.path.join(out, f'{name}.png'), dpi=110)
+        plt.close(fig)
+        made.append(name)
+    issues = sorted({k for r in rows for k in r.get('issues', {})})
+    if issues:                                                   # which checks were not OK, and when
+        fig, ax = plt.subplots(figsize=(10, 0.6 + 0.32 * len(issues)), **style)
+        ax.set_facecolor('#0a1520')
+        for i, cid in enumerate(issues):
+            pts = [(r['t'], r['issues'][cid]) for r in rows if r.get('issues', {}).get(cid)]
+            ax.scatter([p[0] for p in pts], [i] * len(pts), marker='|', s=60,
+                       c=['#ff3355' if p[1] >= CRIT else '#ffb800' for p in pts])
+        ax.set_xlim(t[0], t[-1])
+        ax.set_ylim(-0.6, len(issues) - 0.4)
+        ax.set_yticks(range(len(issues)), issues)
+        ax.set_title('Checks that were not OK (yellow warning, red critical)', color='#e8f4ff', fontsize=11, loc='left')
+        ax.tick_params(colors='#8fa3b5', labelsize=8)
+        for sp in ax.spines.values():
+            sp.set_color('#2a3e4e')
+        fig.tight_layout()
+        fig.savefig(os.path.join(out, 'checks_timeline.png'), dpi=110)
+        plt.close(fig)
+        made.append('checks_timeline')
+    print(f'[ASC] post-flight files written: samples.csv, charts: {", ".join(made)}')
