@@ -1232,7 +1232,7 @@ window.addEventListener('airsent-events', event=>{
   sharedEventSnapshot=event.detail.events;
   sessionEventArchive.splice(0,sessionEventArchive.length,...sharedEventSnapshot);
   const button=document.getElementById('eventsDownloadBtn');
-  const title=eventLogPanel?.querySelector(".panel-title");
+  const title=eventLogPanel?.querySelector(".panel-title > span");
   if(title){title.textContent=event.detail.ready?"EVENTS LOG · LIVE":"EVENTS LOG · OFFLINE";}
   if(telemetryEls.eventsResetBtn)telemetryEls.eventsResetBtn.title="Resume shared history (saved events are retained)";
   if(button)button.title=event.detail.ready?'Download shared event history':'History offline — showing last received records';
