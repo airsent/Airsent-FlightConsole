@@ -424,6 +424,62 @@ def thermal_monitor():
         time.sleep(5)
 
 # ── MAVLink thread ───────────────────────────────
+# ── Battery % from resting voltage at power-up ──────────────────────────────
+# ArduPilot assumes a full pack at boot and counts down by current. If the pack
+# isn't full, % is wrong all flight. Once per Pixhawk connection, while disarmed
+# and resting, estimate SoC from voltage and send MAV_CMD_BATTERY_RESET.
+BATT_CELLS = 6
+_LIPO_CURVE = [(4.20,100),(4.15,95),(4.11,90),(4.08,85),(4.02,80),(3.98,75),(3.95,70),(3.91,65),
+               (3.87,60),(3.85,55),(3.84,50),(3.82,45),(3.80,40),(3.79,35),(3.77,30),(3.75,25),
+               (3.73,20),(3.71,15),(3.69,10),(3.61,5),(3.27,0)]
+
+def _lipo_soc(vcell):
+    if vcell >= _LIPO_CURVE[0][0]:
+        return 100
+    for (v1, p1), (v2, p2) in zip(_LIPO_CURVE, _LIPO_CURVE[1:]):
+        if vcell >= v2:
+            return round(p2 + (p1 - p2) * (vcell - v2) / (v1 - v2))
+    return 0
+
+def battery_soc_init():
+    done_for, last_set = None, None
+    while True:
+        time.sleep(1)
+        with mav_lock:
+            mav = mav_conn
+        if mav is None:
+            continue
+        # Pixhawk rebooted and forgot our correction -> do it again
+        if (mav is done_for and last_set is not None and last_set < 90
+                and telem.get('battery', 0) >= 99 and not telem.get('armed', False)):
+            done_for = None
+        if mav is done_for:
+            continue
+        samples, ok = [], True
+        for _ in range(5):
+            v, a = telem.get('voltage', 0) or 0, telem.get('current', 0) or 0
+            if telem.get('armed', False) or v < BATT_CELLS * 3.0 or a > 3.0:
+                ok = False
+                break
+            samples.append(v)
+            time.sleep(1)
+        if not ok or max(samples) - min(samples) > 0.15:
+            continue
+        v = sum(samples) / len(samples)
+        pct = _lipo_soc(v / BATT_CELLS)
+        try:
+            with mav_lock:
+                if mav_conn is not mav:
+                    continue
+                mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                          mavutil.mavlink.MAV_CMD_BATTERY_RESET, 0,
+                                          1, pct, 0, 0, 0, 0, 0)
+            print(f"[BATT] Resting {v:.2f} V ({v/BATT_CELLS:.2f} V/cell) -> remaining set to {pct}%")
+            done_for, last_set = mav, pct
+        except Exception as e:
+            print(f"[BATT] reset failed: {e}")
+
+
 def mavlink_reader():
     global mav_conn, _last_imu_accel, last_mav_report, last_mav_heartbeat
     while True:
@@ -1744,6 +1800,7 @@ if __name__ == "__main__":
     os.environ.setdefault("DATALINK_MOTOR_POLES", "22")
     esc_monitor = None if SIM_MODE else start_monitor()
     threading.Thread(target=mavlink_reader,         daemon=True).start()
+    threading.Thread(target=battery_soc_init,       daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
     if not SIM_MODE:
