@@ -423,21 +423,21 @@ function updateSignalIndicators(data, feedFresh) {
 
 function setDisconnectedState() {
   setStatusSelect("disarmed");
-  setText("topVoltage", "0.0V"); setText("topCurrent", "0.0A");
-  setText("topBattery", "0%");   setText("cpuLoadTop", "0%");
-  setText("missionDistanceVal", "0.0"); setText("ltVal", "0");
-  setText("rollVal", "0.0°");    setText("pitchVal", "0.0°");
-  setText("headingVal", "0°");   setText("compassHeadingText", "0°");
-  setText("altVal", "0.0 m");    setText("spdVal", "0.0 m/s");
+  setText("topVoltage", "--V"); setText("topCurrent", "--A");
+  setText("topBattery", "--%");   setText("cpuLoadTop", "--%");
+  setText("ltVal", "--");
+  setText("rollVal", "--°");    setText("pitchVal", "--°");
+  setText("headingVal", "--°");   setText("compassHeadingText", "--°");
+  setText("altVal", "-- m");    setText("spdVal", "-- m/s");
   setText("lidarAltVal", "-- m");
-  setText("latVal", "0.0000°");  setText("lonVal", "0.0000°");
+  setText("latVal", "--");  setText("lonVal", "--");
   setText("mapModeVal", "DISCONNECTED");
   setText("positionVal", "NO DATA"); setText("mslVal", "0.0m");
   resetSignalIndicators();
   updateMotors({});
 
   setOnlineStatus(getEl("gpsFixTop"), "NO FIX", false);
-  setText("satCountTop", "0");
+  setText("satCountTop", "--");
   setOnlineStatus(getEl("ekfTop"), "OFFLINE", false);
   setOnlineStatus(getEl("linkTop"), "NO SIGNAL", false);
 
@@ -638,6 +638,8 @@ function applyTelemetry(data) {
   }
   lastFreshTelemetryAt = Date.now();
   setConnectedState(data);
+  // LT = telemetry latency: age of this frame when it reached the relay (ms)
+  setText("ltVal", Math.round(data.telemetry_age * 1000) + " ms");
   updateSignalIndicators(data, true);
   updateMotors(data);
   if (losActive) return;

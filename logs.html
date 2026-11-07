@@ -10,952 +10,238 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Flight Logs</title>
 <link rel="stylesheet" href="styles.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="mission-ui.css?v=3">
 <script src="fit-screen.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:    #030508;
-  --bg1:   #070c12;
-  --bg2:   #0c1520;
-  --bg3:   #111e2e;
-  --line:  rgba(0,200,255,.08);
-  --line2: rgba(0,200,255,.15);
-  --cyan:  #00c8ff;
-  --green: #00ff88;
-  --amber: #ffb800;
-  --red:   #ff3355;
-  --purple:#c084fc;
-  --text:  #c8e8f8;
-  --text2: #4a7090;
-  --mono:  'Share Tech Mono', monospace;
-  --head:  'Rajdhani', sans-serif;
-}
-
-body {
-  height: 100vh; overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--head);
-  display: flex; flex-direction: column;
-  letter-spacing: .3px;
-}
-
-/* Scanline overlay */
-body::after {
-  content: '';
-  position: fixed; inset: 0;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.06) 2px, rgba(0,0,0,.06) 4px);
-  pointer-events: none; z-index: 9999;
-}
-
-/* Nav */
+:root { --bg:#020507; --bg1:#060d14; --bg2:#0a1520; --line:rgba(0,180,255,.08); --line2:rgba(0,180,255,.18);
+  --cyan:#00c8ff; --green:#00e383; --amber:#ffb800; --red:#ff3355; --white:#e8f4ff; --muted:#5d7a92; --mono:'Share Tech Mono',monospace; --head:'Rajdhani',sans-serif; }
+body { height:100vh; overflow:hidden; background:var(--bg); color:var(--white); font-family:var(--head); display:flex; flex-direction:column; }
 .logo-dropdown { position:relative; display:inline-block; }
 .logo-dropdown-btn { background:transparent; border:none; padding:0; display:flex; align-items:center; cursor:pointer; }
-.logo-dropdown-menu { display:none; position:absolute; top:calc(100%+6px); left:0; min-width:220px; background:#070c12; border:1px solid var(--line2); border-radius:4px; overflow:hidden; z-index:9999; box-shadow:0 0 30px rgba(0,200,255,.1); }
-.logo-dropdown-menu a { display:block; padding:10px 14px; color:var(--text); text-decoration:none; font-size:13px; font-family:var(--head); letter-spacing:.5px; border-bottom:1px solid var(--line); }
-.logo-dropdown-menu a:hover { background:rgba(0,200,255,.06); color:var(--cyan); }
+.logo-dropdown-menu { display:none; position:absolute; top:calc(100% + 6px); left:0; min-width:220px; background:#060d14; border:1px solid var(--line2); z-index:9999; }
+.logo-dropdown-menu a { display:block; padding:10px 14px; color:var(--white); text-decoration:none; font-size:13px; border-bottom:1px solid var(--line); }
+.logo-dropdown-menu a:hover { background:rgba(0,200,255,.07); color:var(--cyan); }
 .logo-dropdown:hover .logo-dropdown-menu, .logo-dropdown:focus-within .logo-dropdown-menu { display:block; }
-
-/* ── Topbar ─────────────────────────────────────────────── */
-.topbar {
-  flex-shrink: 0; height: 42px;
-  background: linear-gradient(90deg, #040a10, #06101a, #040a10);
-  border-bottom: 1px solid var(--line2);
-  display: flex; align-items: center; padding: 0 12px; gap: 0;
-  position: relative;
-}
-.topbar::after {
-  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-  opacity: .4;
-}
-.tb-seg { display:flex; align-items:center; gap:6px; padding:0 10px; border-right:1px solid var(--line); height:100%; }
-.tb-seg:first-child { padding-left:4px; }
-.tb-label { font-size:8px; letter-spacing:2px; color:var(--text2); text-transform:uppercase; font-family:var(--mono); }
-.tb-val { font-size:11px; font-family:var(--mono); }
-.tb-val.c { color:var(--cyan); }
-.tb-val.g { color:var(--green); }
-.tb-val.a { color:var(--amber); }
-.tb-val.r { color:var(--red); animation:blink-r .7s infinite; }
-.tb-title { font-size:13px; letter-spacing:3px; font-weight:700; color:var(--cyan); text-transform:uppercase; }
-.tb-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
-@keyframes blink-r { 0%,100%{opacity:1} 50%{opacity:.3} }
-
-/* ── Body grid ──────────────────────────────────────────── */
-.body {
-  flex: 1; min-height: 0;
-  display: grid;
-  grid-template-columns: 260px 1fr 360px;
-  grid-template-rows: 1fr;
-  gap: 1px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-/* ── Panel base ─────────────────────────────────────────── */
-.pnl { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; position: relative; }
-
-.pnl-head {
-  padding: 8px 12px 6px;
-  border-bottom: 1px solid var(--line2);
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg1), var(--bg));
-}
-.pnl-title {
-  font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
-  text-transform: uppercase; color: var(--cyan);
-  display: flex; align-items: center; gap: 6px;
-}
-.pnl-title::before {
-  content: ''; width: 6px; height: 6px; background: var(--cyan);
-  border-radius: 50%; box-shadow: 0 0 6px var(--cyan);
-}
-.pnl-sub { font-size: 9px; color: var(--text2); font-family: var(--mono); margin-top: 1px; }
-
-/* ── Flight list ────────────────────────────────────────── */
-.rec-bar {
-  padding: 6px 12px; border-bottom: 1px solid var(--line);
-  display: flex; gap: 6px; flex-shrink: 0;
-}
-.btn {
-  height: 28px; padding: 0 12px; border-radius: 2px; border: 1px solid;
-  font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
-  cursor: pointer; font-family: var(--head); transition: all .12s;
-}
-.btn-rec { border-color: var(--red); color: var(--red); background: rgba(255,51,85,.06); }
-.btn-rec:hover { background: rgba(255,51,85,.15); box-shadow: 0 0 12px rgba(255,51,85,.2); }
-.btn-stop { border-color: var(--green); color: var(--green); background: rgba(0,255,136,.06); }
-.btn-stop:hover { background: rgba(0,255,136,.15); }
-.btn-sm { height:26px; padding:0 8px; border-color:var(--line2); color:var(--text2); background:transparent; font-size:9px; }
-.btn-sm:hover { border-color:var(--cyan); color:var(--cyan); }
-
-.flights-list { flex:1; overflow-y:auto; scrollbar-width:none; }
-.flights-list::-webkit-scrollbar { display:none; }
-
-.fi {
-  padding: 9px 12px; border-bottom: 1px solid var(--line);
-  cursor: pointer; transition: background .1s; position: relative;
-}
-.fi::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .2s; }
-.fi:hover { background: rgba(0,200,255,.03); }
-.fi.sel { background: rgba(0,200,255,.05); }
-.fi.sel::before { background: var(--cyan); }
-.fi.crash::before { background: var(--red) !important; }
-.fi.warn::before { background: var(--amber) !important; }
-.fi.ok::before { background: var(--green) !important; }
-.fi.rec-active::before { background: var(--red); animation: pulse-left 1s infinite; }
-@keyframes pulse-left { 0%,100%{opacity:1;box-shadow:0 0 4px var(--red)} 50%{opacity:.4;box-shadow:none} }
-
-.fi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-.fi-name { font-size:12px; font-weight:700; color:var(--text); letter-spacing:.5px; }
-.fi-badge {
-  font-size:8px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
-  padding:1px 6px; border:1px solid; border-radius:1px;
-}
-.fi-badge.ok     { color:var(--green); border-color:rgba(0,255,136,.3); }
-.fi-badge.crash  { color:var(--red);   border-color:rgba(255,51,85,.3); }
-.fi-badge.warn   { color:var(--amber); border-color:rgba(255,184,0,.3); }
-.fi-badge.live   { color:var(--red);   border-color:rgba(255,51,85,.4); animation:blink-r .6s infinite; }
-
-.fi-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px 8px; }
-.fi-stat { font-size:9px; color:var(--text2); font-family:var(--mono); display:flex; justify-content:space-between; }
-.fi-stat span:last-child { color:var(--text); }
-
-/* ── CENTER: Data view ──────────────────────────────────── */
-.data-view { display: flex; flex-direction: column; overflow: hidden; }
-
-/* Tab bar */
-.tabs {
-  display: flex; flex-shrink: 0;
-  border-bottom: 1px solid var(--line2);
-  background: var(--bg1);
-}
-.tab {
-  padding: 8px 14px; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
-  text-transform: uppercase; cursor: pointer; color: var(--text2);
-  border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap;
-  font-family: var(--head);
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--cyan); border-bottom-color: var(--cyan); background: rgba(0,200,255,.04); }
-
-/* Tab content */
-.tab-content { flex:1; overflow:hidden; display:none; flex-direction:column; }
-.tab-content.active { display:flex; }
-
-/* Charts tab */
-.charts-grid {
-  flex: 1; display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
-  gap: 1px; background: var(--line); overflow: hidden;
-}
-.chart-cell {
-  background: var(--bg); position: relative; overflow: hidden;
-  display: flex; flex-direction: column;
-}
-.chart-label {
-  position: absolute; top: 5px; left: 8px; z-index: 2;
-  font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
-  color: var(--text2); font-family: var(--mono);
-}
-.chart-val {
-  position: absolute; top: 4px; right: 8px; z-index: 2;
-  font-size: 11px; font-family: var(--mono); font-weight: 700;
-}
-canvas.chart-canvas { flex:1; width:100%; }
-
-/* Timeline tab */
-.timeline-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.timeline-scrubber {
-  flex-shrink:0; padding:8px 12px; border-bottom:1px solid var(--line);
-  display:flex; align-items:center; gap:10px;
-}
-.scrubber-track {
-  flex:1; height:6px; background:var(--bg2); border-radius:1px; position:relative; cursor:pointer;
-  border:1px solid var(--line2);
-}
-.scrubber-fill { height:100%; background:var(--cyan); border-radius:1px; opacity:.7; pointer-events:none; }
-.scrubber-head {
-  position:absolute; top:-5px; width:4px; height:16px;
-  background:var(--cyan); border-radius:1px; pointer-events:none;
-  box-shadow:0 0 8px var(--cyan);
-}
-.scrubber-time { font-family:var(--mono); font-size:10px; color:var(--cyan); flex-shrink:0; width:52px; text-align:right; }
-
-.timeline-events { flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line2) transparent; }
-.timeline-events::-webkit-scrollbar { width:3px; }
-.timeline-events::-webkit-scrollbar-thumb { background:var(--bg3); }
-.tl-row {
-  display:grid; grid-template-columns:60px 48px 60px 1fr;
-  gap:8px; padding:4px 12px; border-bottom:1px solid rgba(0,200,255,.04);
-  align-items:start; font-size:10px; cursor:pointer; transition:background .08s;
-}
-.tl-row:hover { background:rgba(0,200,255,.04); }
-.tl-row.highlighted { background:rgba(255,184,0,.04); border-left:2px solid var(--amber); }
-.tl-t { color:var(--text2); font-family:var(--mono); padding-top:1px; }
-.tl-c { font-weight:700; letter-spacing:.8px; text-transform:uppercase; font-size:8px; padding-top:2px; }
-.tl-c.ok    { color:var(--green); }
-.tl-c.warn  { color:var(--amber); }
-.tl-c.fault { color:var(--red); }
-.tl-c.info  { color:var(--cyan); }
-.tl-c.data  { color:var(--text2); }
-.tl-src { color:var(--text2); font-family:var(--mono); font-size:9px; padding-top:2px; }
-.tl-msg { color:var(--text); line-height:1.4; }
-
-/* Motors tab */
-.motors-view { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:1px; background:var(--line); overflow:hidden; }
-.motor-cell {
-  background:var(--bg); display:flex; flex-direction:column;
-  align-items:center; justify-content:center; padding:12px; gap:8px; position:relative;
-}
-.motor-cell::before {
-  content:''; position:absolute; inset:0;
-  background:radial-gradient(ellipse at center, rgba(0,200,255,.03), transparent 70%);
-  pointer-events:none;
-}
-.motor-id { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--text2); }
-.motor-pwm { font-size:28px; font-weight:700; font-family:var(--mono); line-height:1; }
-.motor-pct { font-size:11px; color:var(--text2); font-family:var(--mono); }
-.motor-bar-wrap { width:80%; height:4px; background:var(--bg3); border-radius:2px; overflow:hidden; }
-.motor-bar { height:100%; border-radius:2px; transition:width .4s; }
-.motor-cell.m1 .motor-pwm { color:var(--cyan); }
-.motor-cell.m2 .motor-pwm { color:var(--green); }
-.motor-cell.m3 .motor-pwm { color:var(--amber); }
-.motor-cell.m4 .motor-pwm { color:var(--purple); }
-.motor-cell.fault-cell { background:rgba(255,51,85,.06); }
-.motor-cell.fault-cell .motor-pwm { color:var(--red) !important; }
-.motor-status { font-size:8px; letter-spacing:1.5px; text-transform:uppercase; }
-.motor-status.ok { color:var(--green); }
-.motor-status.warn { color:var(--amber); }
-.motor-status.fault { color:var(--red); animation:blink-r .6s infinite; }
-
-/* Telemetry tab */
-.telem-grid {
-  flex:1; display:grid;
-  grid-template-columns:repeat(4, 1fr);
-  grid-template-rows:repeat(3, 1fr);
-  gap:1px; background:var(--line); overflow:hidden;
-}
-.telem-cell {
-  background:var(--bg); display:flex; flex-direction:column;
-  justify-content:center; padding:10px 14px; position:relative;
-  overflow:hidden;
-}
-.telem-cell::after {
-  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
-  opacity:0; transition:opacity .3s;
-}
-.telem-cell:hover::after { opacity:.3; }
-.tc-label { font-size:8px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text2); font-family:var(--mono); margin-bottom:4px; }
-.tc-val { font-size:22px; font-weight:700; font-family:var(--mono); line-height:1; }
-.tc-val.c{color:var(--cyan);} .tc-val.g{color:var(--green);} .tc-val.a{color:var(--amber);} .tc-val.r{color:var(--red);}
-.tc-sub { font-size:9px; color:var(--text2); font-family:var(--mono); margin-top:3px; }
-.tc-spark { position:absolute; bottom:0; left:0; right:0; height:28px; opacity:.4; }
-
-/* ── RIGHT: AI Analyzer ─────────────────────────────────── */
-.analyzer { display:flex; flex-direction:column; overflow:hidden; }
-.analyzer .pnl-title::before { background:var(--purple); box-shadow:0 0 6px var(--purple); }
-.analyzer .pnl-title { color:var(--purple); }
-
-.analyze-btn {
-  margin: 10px 12px 8px; height:38px; border-radius:2px;
-  border:1px solid rgba(192,132,252,.4); background:rgba(192,132,252,.07);
-  color:var(--purple); font-size:11px; font-weight:700; letter-spacing:2px;
-  text-transform:uppercase; cursor:pointer; font-family:var(--head);
-  transition:all .15s; display:flex; align-items:center; justify-content:center; gap:8px;
-  flex-shrink:0;
-}
-.analyze-btn:hover { background:rgba(192,132,252,.15); box-shadow:0 0 20px rgba(192,132,252,.2); }
-.analyze-btn:disabled { opacity:.3; cursor:not-allowed; }
-
-.ai-body { flex:1; overflow-y:auto; padding:10px 12px; scrollbar-width:thin; scrollbar-color:var(--line2) transparent; display:flex; flex-direction:column; gap:10px; }
-.ai-body::-webkit-scrollbar { width:3px; }
-.ai-body::-webkit-scrollbar-thumb { background:var(--bg3); }
-
-/* Spinner */
-.ai-spin-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:24px; }
-.ai-spinner { width:36px; height:36px; border:2px solid rgba(192,132,252,.15); border-top-color:var(--purple); border-radius:50%; animation:spin .7s linear infinite; }
-@keyframes spin { to{transform:rotate(360deg)} }
-.ai-spin-txt { font-size:9px; letter-spacing:2px; color:var(--text2); text-transform:uppercase; font-family:var(--mono); }
-
-/* Verdict */
-.ai-verdict {
-  border:1px solid; padding:10px 12px; position:relative; overflow:hidden;
-}
-.ai-verdict::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; }
-.ai-verdict.crash  { border-color:rgba(255,51,85,.35);  } .ai-verdict.crash::before  { background:var(--red); }
-.ai-verdict.warning{ border-color:rgba(255,184,0,.35);  } .ai-verdict.warning::before{ background:var(--amber); }
-.ai-verdict.nominal{ border-color:rgba(0,255,136,.35);  } .ai-verdict.nominal::before{ background:var(--green); }
-.ai-verdict.unknown{ border-color:var(--line2); }         .ai-verdict.unknown::before{ background:var(--text2); }
-
-.av-hdr { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.av-icon { font-size:16px; }
-.av-title { font-size:14px; font-weight:700; letter-spacing:1px; }
-.ai-verdict.crash  .av-title { color:var(--red); }
-.ai-verdict.warning .av-title{ color:var(--amber); }
-.ai-verdict.nominal .av-title{ color:var(--green); }
-.av-conf { font-size:8px; font-family:var(--mono); color:var(--text2); margin-left:auto; letter-spacing:1px; }
-.av-body { font-size:11px; color:var(--text2); line-height:1.6; }
-
-/* Section header */
-.ai-sec { font-size:8px; letter-spacing:2px; text-transform:uppercase; color:var(--text2); font-family:var(--mono); padding-bottom:4px; border-bottom:1px solid var(--line); }
-
-/* Cause item */
-.cause {
-  display:flex; gap:10px; padding:8px 10px;
-  border:1px solid var(--line); background:rgba(0,0,0,.2);
-  position:relative; overflow:hidden;
-}
-.cause::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; }
-.cause.high::before   { background:var(--red); }
-.cause.medium::before { background:var(--amber); }
-.cause.low::before    { background:var(--green); }
-.cause-num { font-size:10px; font-family:var(--mono); color:var(--text2); flex-shrink:0; padding-top:1px; }
-.cause-name { font-size:12px; font-weight:700; letter-spacing:.5px; color:var(--text); margin-bottom:3px; }
-.cause-desc { font-size:10px; color:var(--text2); line-height:1.4; }
-.cause-prob { font-size:8px; letter-spacing:1.5px; text-transform:uppercase; font-family:var(--mono); margin-top:3px; }
-.cause-prob.high   { color:var(--red); }
-.cause-prob.medium { color:var(--amber); }
-.cause-prob.low    { color:var(--green); }
-
-/* Anomaly */
-.anomaly { display:flex; gap:8px; padding:5px 10px; border-left:2px solid; font-size:10px; }
-.anomaly.critical { border-color:var(--red); background:rgba(255,51,85,.04); }
-.anomaly.warning  { border-color:var(--amber); background:rgba(255,184,0,.04); }
-.an-t { color:var(--text2); font-family:var(--mono); flex-shrink:0; width:52px; }
-.an-m { color:var(--text); line-height:1.4; }
-
-/* Recommendation */
-.rec-box { border:1px solid rgba(0,200,255,.2); padding:10px 12px; background:rgba(0,200,255,.03); }
-.rec-box p { font-size:11px; color:var(--text2); line-height:1.6; }
-
-/* Empty state */
-.ai-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:20px; text-align:center; }
-.ai-empty-icon { font-size:36px; opacity:.25; }
-.ai-empty-title { font-size:13px; font-weight:700; letter-spacing:1px; color:var(--text2); }
-.ai-empty-desc { font-size:10px; color:var(--text2); line-height:1.6; opacity:.7; max-width:280px; }
-
-/* Filters */
-.log-filters { display:flex; gap:4px; padding:5px 12px; border-bottom:1px solid var(--line); flex-shrink:0; }
-.filt { height:20px; padding:0 8px; border:1px solid var(--line); background:transparent; color:var(--text2); font-size:8px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; font-family:var(--head); transition:all .1s; border-radius:1px; }
-.filt:hover { border-color:var(--cyan); color:var(--cyan); }
-.filt.on { background:rgba(0,200,255,.08); border-color:var(--cyan); color:var(--cyan); }
-.filt.fw.on { background:rgba(255,184,0,.08); border-color:var(--amber); color:var(--amber); }
-.filt.ff.on { background:rgba(255,51,85,.08); border-color:var(--red); color:var(--red); }
+.topbar { flex-shrink:0; height:44px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line2); background:linear-gradient(90deg,#030a10,#050f18,#030a10); }
+.seg { display:flex; align-items:center; gap:6px; padding:0 14px; height:100%; border-right:1px solid var(--line); }
+.ttl { font-size:13px; letter-spacing:4px; font-weight:700; color:var(--cyan); }
+.lbl { font:8px var(--mono); letter-spacing:2px; color:var(--muted); } .val { font:11px var(--mono); }
+.tb-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.btn { height:28px; padding:0 12px; background:#0b1620; color:#9be5ff; border:1px solid rgba(127,220,255,.3); font:600 10px var(--mono); letter-spacing:1.5px; cursor:pointer; }
+.btn:hover { color:#fff; border-color:#9be5ff; } .btn:disabled { opacity:.4; cursor:wait; }
+.main { flex:1; min-height:0; display:grid; grid-template-columns:420px 1fr; gap:1px; background:var(--line); }
+.col { background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+.head { padding:10px 14px; border-bottom:1px solid var(--line2); display:flex; align-items:center; justify-content:space-between; }
+.title { font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--cyan); }
+.sub { font:9px var(--mono); color:var(--muted); }
+.list { overflow-y:auto; flex:1; }
+.flight { padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer; border-left:2px solid transparent; }
+.flight:hover { background:rgba(0,200,255,.04); } .flight.sel { background:rgba(0,200,255,.08); border-left-color:var(--cyan); }
+.flight .n { font-size:15px; font-weight:600; display:flex; gap:8px; align-items:center; }
+.flight .f { font:9px var(--mono); color:var(--muted); margin-top:2px; word-break:break-all; }
+.flight .s { display:flex; gap:12px; flex-wrap:wrap; font:10px var(--mono); color:#9fb3c4; margin-top:5px; }
+.tag { font:9px var(--mono); padding:1px 6px; border:1px solid currentColor; letter-spacing:1px; }
+.tag.rec { color:var(--red); animation:blink 1s step-end infinite; } .tag.warn { color:var(--amber); } .tag.ok { color:var(--green); }
+@keyframes blink { 50% { opacity:.35; } }
+.detail { overflow-y:auto; flex:1; padding:14px 18px 30px; }
+.empty { padding:30px; text-align:center; color:var(--muted); font:12px var(--mono); }
+h2 { font-size:22px; font-weight:700; letter-spacing:1px; } h3 { font:700 11px var(--head); letter-spacing:2.5px; color:var(--cyan); margin:20px 0 8px; }
+.stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:12px; }
+.stat { border:1px solid var(--line2); background:var(--bg1); padding:8px 10px; } .stat .k { font:8px var(--mono); letter-spacing:1.5px; color:var(--muted); } .stat .v { font:17px var(--mono); margin-top:3px; }
+.charts { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .charts img { width:100%; border:1px solid var(--line2); background:#060d14; }
+.charts .ph { aspect-ratio:10/3.2; border:1px dashed var(--line2); display:flex; align-items:center; justify-content:center; font:10px var(--mono); color:var(--muted); }
+table { width:100%; border-collapse:collapse; font:11px var(--mono); }
+th { text-align:left; font-weight:400; font-size:9px; letter-spacing:1.5px; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--line2); }
+td { padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.ok td.m { color:var(--green); }
+.ev { max-height:340px; overflow-y:auto; border:1px solid var(--line); }
+.prog { height:3px; background:var(--bg2); margin-top:3px; } .prog i { display:block; height:100%; background:var(--cyan); width:0; }
+.filters { display:flex; gap:6px; margin-bottom:6px; } .filters .btn { height:22px; font-size:9px; } .filters .btn.on { background:rgba(0,200,255,.15); color:#fff; }
+.note { font:10px var(--mono); color:var(--muted); margin-top:4px; }
 </style>
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
 <script src="console-navigation.js" defer></script>
 </head>
 <body class="console-fit">
-
-<!-- TOPBAR -->
 <div class="topbar">
-  <div class="tb-seg">
-    <div class="logo-dropdown">
-      <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
-      <div class="logo-dropdown-menu">
-      <a href="dashboard.html">Main Dashboard</a>
-      <a href="mission.html">Mission Planner</a>
-      <a href="preflight.html">Pre-Flight Checklist</a>
-      <a href="parameters.html">Parameters</a>
-      <a href="logs.html">Flight Logs</a>
-      <a href="launch.html">Launch Sequencer</a>
-      <a href="pilot.html">Pilot</a>
-      <a href="health.html">System Health</a>
-      <a href="failsafe.html">Failsafe Systems</a>
-      <a href="sensor-status.html">Sensor Status</a>
-      <a href="actuators.html">Actuators</a>
-    </div>
-    </div>
-  </div>
-  <div class="tb-seg"><span class="tb-title">Flight Data Recorder</span></div>
-  <div class="tb-seg"><span class="tb-label">Flights</span>&nbsp;<span class="tb-val c" id="hFlights">0</span></div>
-  <div class="tb-seg"><span class="tb-label">Selected</span>&nbsp;<span class="tb-val" id="hSel" style="color:var(--text2)">—</span></div>
-  <div class="tb-seg"><span class="tb-label">Duration</span>&nbsp;<span class="tb-val c" id="hDur">—</span></div>
-  <div class="tb-seg"><span class="tb-label">Faults</span>&nbsp;<span class="tb-val" id="hFaults" style="color:var(--text2)">—</span></div>
-  <div class="tb-seg"><span class="tb-label">Recording</span>&nbsp;<span class="tb-val r" id="hRec" style="color:var(--text2);animation:none">OFF</span></div>
-  <div class="tb-right">
-    <div class="tb-seg" style="border-right:none"><span class="tb-val" style="color:var(--text2);font-family:var(--mono)" id="hClock">--:--:--</span></div>
-  </div>
+  <div class="seg"><div class="logo-dropdown">
+    <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;object-fit:contain;object-position:left center;display:block" alt="Airsent"></button>
+    <div class="logo-dropdown-menu">
+      <a href="dashboard.html">Main Dashboard</a><a href="mission.html">Mission Planner</a><a href="preflight.html">Pre-Flight Checklist</a>
+      <a href="parameters.html">Parameters</a><a href="logs.html">Flight Logs</a><a href="launch.html">Launch Sequencer</a><a href="pilot.html">Pilot</a>
+      <a href="health.html">System Health</a><a href="failsafe.html">Failsafe Systems</a><a href="sensor-status.html">Sensor Status</a><a href="actuators.html">Actuators</a>
+    </div></div></div>
+  <div class="seg"><span class="ttl">FLIGHT LOGS</span></div>
+  <div class="seg"><span class="lbl">STORED ON</span><span class="val">JETSON SSD</span></div>
+  <div class="seg"><span class="lbl">FLIGHTS</span><span class="val" id="hCount">--</span></div>
+  <div class="seg"><span class="lbl">FREE</span><span class="val" id="hFree">--</span></div>
+  <div class="tb-right"><button class="btn" id="btnRefresh">⟳ REFRESH</button><span class="val" style="color:var(--muted);padding:0 8px" id="hClock">--:--:--</span></div>
 </div>
-
-<!-- BODY -->
-<div class="body">
-
-  <!-- COL 1: Flights -->
-  <div class="pnl">
-    <div class="pnl-head">
-      <div><div class="pnl-title">Flight History</div><div class="pnl-sub">STORED LOCALLY · MAX 20</div></div>
-      <button class="btn btn-sm" id="btnClear">CLEAR</button>
-    </div>
-    <div class="rec-bar">
-      <button class="btn btn-rec" id="btnRec">⏺ RECORD</button>
-      <button class="btn btn-sm" id="btnImport">IMPORT</button>
-      <button class="btn btn-sm" id="btnExport">EXPORT</button>
-    </div>
-    <div class="flights-list" id="flightsList"></div>
-  </div>
-
-  <!-- COL 2: Data View -->
-  <div class="pnl data-view">
-    <div class="tabs">
-      <div class="tab active" data-tab="charts">Telemetry Charts</div>
-      <div class="tab" data-tab="timeline">Event Timeline</div>
-      <div class="tab" data-tab="motors">Motor Outputs</div>
-      <div class="tab" data-tab="telem">Live Snapshot</div>
-    </div>
-
-    <!-- Charts tab -->
-    <div class="tab-content active" data-content="charts">
-      <div class="charts-grid">
-        <div class="chart-cell">
-          <div class="chart-label">ALTITUDE AGL</div>
-          <div class="chart-val c" id="cv-alt">-- m</div>
-          <canvas class="chart-canvas" id="ch-alt"></canvas>
-        </div>
-        <div class="chart-cell">
-          <div class="chart-label">VOLTAGE</div>
-          <div class="chart-val g" id="cv-volt">-- V</div>
-          <canvas class="chart-canvas" id="ch-volt"></canvas>
-        </div>
-        <div class="chart-cell">
-          <div class="chart-label">ROLL / PITCH</div>
-          <div class="chart-val" id="cv-att" style="color:var(--cyan)">-- / --°</div>
-          <canvas class="chart-canvas" id="ch-att"></canvas>
-        </div>
-        <div class="chart-cell">
-          <div class="chart-label">GROUND SPEED</div>
-          <div class="chart-val a" id="cv-spd">-- m/s</div>
-          <canvas class="chart-canvas" id="ch-spd"></canvas>
-        </div>
-        <div class="chart-cell">
-          <div class="chart-label">VIBRATION MAG</div>
-          <div class="chart-val" id="cv-vib" style="color:var(--purple)">--</div>
-          <canvas class="chart-canvas" id="ch-vib"></canvas>
-        </div>
-        <div class="chart-cell">
-          <div class="chart-label">CURRENT DRAW</div>
-          <div class="chart-val a" id="cv-curr">-- A</div>
-          <canvas class="chart-canvas" id="ch-curr"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Timeline tab -->
-    <div class="tab-content" data-content="timeline">
-      <div class="timeline-wrap">
-        <div class="timeline-scrubber">
-          <span style="font-size:8px;letter-spacing:1.5px;color:var(--text2);font-family:var(--mono)">SEEK</span>
-          <div class="scrubber-track" id="scrubberTrack">
-            <div class="scrubber-fill" id="scrubberFill" style="width:100%"></div>
-            <div class="scrubber-head" id="scrubberHead" style="left:calc(100% - 2px)"></div>
-          </div>
-          <div class="scrubber-time" id="scrubberTime">00:00</div>
-        </div>
-        <div class="log-filters">
-          <button class="filt on" data-f="all">ALL</button>
-          <button class="filt ff" data-f="fault">FAULTS</button>
-          <button class="filt fw" data-f="warn">WARN</button>
-          <button class="filt" data-f="ok">OK</button>
-          <button class="filt" data-f="data">DATA</button>
-        </div>
-        <div class="timeline-events" id="tlEvents"></div>
-      </div>
-    </div>
-
-    <!-- Motors tab -->
-    <div class="tab-content" data-content="motors">
-      <div class="motors-view">
-        <div class="motor-cell m1" id="mc1">
-          <div class="motor-id">MOTOR 1 · FL</div>
-          <div class="motor-pwm" id="m1-pwm">1000</div>
-          <div class="motor-pct" id="m1-pct">0%</div>
-          <div class="motor-bar-wrap"><div class="motor-bar" id="m1-bar" style="width:0%;background:var(--cyan)"></div></div>
-          <div class="motor-status ok" id="m1-status">NOMINAL</div>
-        </div>
-        <div class="motor-cell m2" id="mc2">
-          <div class="motor-id">MOTOR 2 · FR</div>
-          <div class="motor-pwm" id="m2-pwm">1000</div>
-          <div class="motor-pct" id="m2-pct">0%</div>
-          <div class="motor-bar-wrap"><div class="motor-bar" id="m2-bar" style="width:0%;background:var(--green)"></div></div>
-          <div class="motor-status ok" id="m2-status">NOMINAL</div>
-        </div>
-        <div class="motor-cell m3" id="mc3">
-          <div class="motor-id">MOTOR 3 · RL</div>
-          <div class="motor-pwm" id="m3-pwm">1000</div>
-          <div class="motor-pct" id="m3-pct">0%</div>
-          <div class="motor-bar-wrap"><div class="motor-bar" id="m3-bar" style="width:0%;background:var(--amber)"></div></div>
-          <div class="motor-status ok" id="m3-status">NOMINAL</div>
-        </div>
-        <div class="motor-cell m4" id="mc4">
-          <div class="motor-id">MOTOR 4 · RR</div>
-          <div class="motor-pwm" id="m4-pwm">1000</div>
-          <div class="motor-pct" id="m4-pct">0%</div>
-          <div class="motor-bar-wrap"><div class="motor-bar" id="m4-bar" style="width:0%;background:var(--purple)"></div></div>
-          <div class="motor-status ok" id="m4-status">NOMINAL</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Snapshot tab -->
-    <div class="tab-content" data-content="telem">
-      <div class="telem-grid">
-        <div class="telem-cell"><div class="tc-label">GPS FIX</div><div class="tc-val c" id="tc-gps">--</div><div class="tc-sub" id="tc-gps-sub">-- sats</div></div>
-        <div class="telem-cell"><div class="tc-label">ALTITUDE AGL</div><div class="tc-val c" id="tc-alt">--</div><div class="tc-sub">metres</div></div>
-        <div class="telem-cell"><div class="tc-label">GROUND SPEED</div><div class="tc-val a" id="tc-spd">--</div><div class="tc-sub">m/s</div></div>
-        <div class="telem-cell"><div class="tc-label">HEADING</div><div class="tc-val c" id="tc-hdg">--</div><div class="tc-sub">degrees</div></div>
-        <div class="telem-cell"><div class="tc-label">ROLL</div><div class="tc-val" id="tc-roll">--</div><div class="tc-sub">degrees</div></div>
-        <div class="telem-cell"><div class="tc-label">PITCH</div><div class="tc-val" id="tc-pitch">--</div><div class="tc-sub">degrees</div></div>
-        <div class="telem-cell"><div class="tc-label">VOLTAGE</div><div class="tc-val g" id="tc-volt">--</div><div class="tc-sub">volts</div></div>
-        <div class="telem-cell"><div class="tc-label">CURRENT</div><div class="tc-val a" id="tc-curr">--</div><div class="tc-sub">amperes</div></div>
-        <div class="telem-cell"><div class="tc-label">BATTERY</div><div class="tc-val g" id="tc-batt">--</div><div class="tc-sub">percent</div></div>
-        <div class="telem-cell"><div class="tc-label">RSSI</div><div class="tc-val c" id="tc-rssi">--</div><div class="tc-sub">percent</div></div>
-        <div class="telem-cell"><div class="tc-label">EKF</div><div class="tc-val g" id="tc-ekf">--</div><div class="tc-sub">status</div></div>
-        <div class="telem-cell"><div class="tc-label">CPU LOAD</div><div class="tc-val" id="tc-cpu">--</div><div class="tc-sub">percent</div></div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- COL 3: AI Analyzer -->
-  <div class="pnl analyzer">
-    <div class="pnl-head">
-      <div><div class="pnl-title" style="color:var(--purple)">AI Fault Analyzer</div><div class="pnl-sub">CLAUDE · FLIGHT DIAGNOSTICS</div></div>
-    </div>
-    <button class="analyze-btn" id="btnAnalyze" disabled>✦ ANALYZE SELECTED FLIGHT</button>
-    <div class="ai-body" id="aiBody">
-      <div class="ai-empty">
-        <div class="ai-empty-icon">✦</div>
-        <div class="ai-empty-title">Awaiting Flight Data</div>
-        <div class="ai-empty-desc">Select a flight from the history panel, then click Analyze to get an AI-powered fault diagnosis.</div>
-      </div>
-    </div>
-  </div>
-
+<div class="main">
+  <section class="col">
+    <div class="head"><div><div class="title">MISSIONS</div><div class="sub">newest first · recorded by ASC and the launch sequencer</div></div></div>
+    <div class="list" id="list"><div class="empty">Loading from the Jetson…</div></div>
+  </section>
+  <section class="col"><div class="detail" id="detail"><div class="empty">Select a mission to see its summary, charts, events and files.</div></div></section>
 </div>
-
+<script src="mission-client.js?v=4"></script>
+<script src="mission-ui.js?v=3"></script>
 <script>
-// ── Config ────────────────────────────────────────────────
-const STORAGE_KEY = 'airsent_fdr_v3';
-const airsentMode = (localStorage.getItem("airsentMode") || "demo").toLowerCase();
-let flights = [], selectedId = null, activeFilter = 'all';
-let isRecording = false, currentFlight = null, recInterval = null;
-let lastTelemetry = {}, ws = null;
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const M = () => window.airsentMission;
+  const mode = (localStorage.getItem('airsentMode') || 'demo').toLowerCase(), isDemo = mode === 'demo';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const toast = (m, k) => window.airsentMissionUI ? window.airsentMissionUI.toast(m, k) : alert(m);
+  const mmss = s => s == null ? '--' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const size = b => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? (b / 1e3).toFixed(0) + ' KB' : b + ' B';
+  const num = (v, d = 1, u = '') => v == null ? '--' : (+v).toFixed(d) + u;
+  let missions = [], selected = null, detail = null, evFilter = 'all';
+  const blobs = {};
 
-// Chart buffers
-const chartData = { alt:[], volt:[], roll:[], pitch:[], spd:[], vib:[], curr:[] };
-const CHART_MAX = 120;
+  // ── demo data (no Jetson) ─────────────────────────────────────────────────
+  const DEMO = { missions: [{ folder: '2026-11-07_0930_bench_hover', name: 'Bench hover', operator: 'Aarav', mtime: Date.now() / 1000 - 3600, size_mb: 14.2, has_asc: true,
+      duration_s: 412, flying_s: 288, max_alt_m: 5.1, used_mah: 1840, findings: 3, failsafes: 0, actions: 0 },
+    { folder: '2026-11-06_1712_flight', name: '2026-11-06_1712_flight', mtime: Date.now() / 1000 - 90000, size_mb: 6.8, has_asc: true,
+      duration_s: 190, flying_s: 0, max_alt_m: 0, used_mah: 120, findings: 0, failsafes: 0, actions: 0 }], free_gb: 212.4 };
+  const DEMO_DETAIL = { summary: { duration_s: 412, flying_s: 288, max_alt_m: 5.1, max_dist_m: 3.2, distance_flown_m: 41.5, used_mah: 1840, min_voltage: 23.6,
+      max_current_a: 31.2, max_vibration: 34.1, checks_per_s: 862, checks_run: 355000, console_link_losses: 0, battery_pct: [96, 78],
+      checks: { vibration: { label: 'Vibration', raised: 2, warn_s: 6.4, crit_s: 0, worst: 34.1 }, gps_hdop: { label: 'HDOP', raised: 1, warn_s: 12, crit_s: 0, worst: 1.7 } },
+      asc_actions: [], pixhawk_failsafes: [] },
+    files: [{ path: 'asc/summary.json', size: 4100 }, { path: 'asc/samples.csv', size: 1820000 }, { path: 'asc/mavlink.tlog', size: 9400000 }, { path: 'asc/charts/altitude.png', size: 41000 }],
+    events: [{ t_rel: 0, level: 'info', msg: 'ASC recording to 2026-11-07_0930_bench_hover/asc' }, { t_rel: 31.2, level: 'info', msg: 'Aarav: mission_go' },
+      { t_rel: 96.4, level: 'warning', msg: 'Vibration: High vibration 34 m/s²' }, { t_rel: 102.8, level: 'ok', msg: 'Vibration: back to normal' }] };
 
-function pad(n) { return String(n).padStart(2,"0"); }
-function now()  { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-function el(id) { return document.getElementById(id); }
-function r2d(r) { return r*180/Math.PI; }
-function fmtDur(ms) { const s=Math.round(ms/1000); return s<60?`${s}s`:`${Math.floor(s/60)}m ${s%60}s`; }
-function fmtTs(ms) { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-
-// ── Storage ───────────────────────────────────────────────
-function load() { try{ flights=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){flights=[];} }
-function save() { if(flights.length>20)flights=flights.slice(-20); try{localStorage.setItem(STORAGE_KEY,JSON.stringify(flights));}catch(e){} }
-
-// ── Charts ────────────────────────────────────────────────
-function drawChart(id, data, color, minVal, maxVal, fillColor) {
-  const canvas = el(id); if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  if (!W || !H) return;
-  canvas.width = W * devicePixelRatio; canvas.height = H * devicePixelRatio;
-  ctx.scale(devicePixelRatio, devicePixelRatio);
-  ctx.clearRect(0,0,W,H);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(0,200,255,.04)'; ctx.lineWidth = 1;
-  for (let i=1;i<4;i++) { const y=H*i/4; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  for (let i=1;i<8;i++) { const x=W*i/8; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-
-  if (data.length < 2) return;
-  const min = minVal !== undefined ? minVal : Math.min(...data);
-  const max = maxVal !== undefined ? maxVal : Math.max(...data);
-  const range = max - min || 1;
-
-  const pts = data.map((v,i) => ({ x: (i/(data.length-1))*W, y: H - ((v-min)/range)*H*0.85 - H*0.07 }));
-
-  // Fill
-  if (fillColor) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, H);
-    pts.forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.lineTo(pts[pts.length-1].x, H);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0,0,0,H);
-    grad.addColorStop(0, fillColor.replace(')',', .3)').replace('rgb','rgba'));
-    grad.addColorStop(1, fillColor.replace(')',', 0)').replace('rgb','rgba'));
-    ctx.fillStyle = fillColor.includes('rgba') ? fillColor : grad;
-    ctx.fill();
-  }
-
-  // Line
-  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
-  pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
-  ctx.stroke();
-
-  // Live dot
-  const last = pts[pts.length-1];
-  ctx.beginPath(); ctx.arc(last.x,last.y,3,0,Math.PI*2);
-  ctx.fillStyle = color; ctx.fill();
-}
-
-function redrawCharts() {
-  drawChart('ch-alt',  chartData.alt,  '#00c8ff', 0, undefined, 'rgb(0,200,255)');
-  drawChart('ch-volt', chartData.volt, '#00ff88', 10, 17, 'rgb(0,255,136)');
-  drawChart('ch-att',  chartData.roll, '#00c8ff');
-  if(chartData.pitch.length) drawChart('ch-att', chartData.pitch, '#ffb800');
-  drawChart('ch-spd',  chartData.spd,  '#ffb800', 0, undefined, 'rgb(255,184,0)');
-  drawChart('ch-vib',  chartData.vib,  '#c084fc', 0, undefined, 'rgb(192,132,252)');
-  drawChart('ch-curr', chartData.curr, '#ffb800', 0, undefined, 'rgb(255,184,0)');
-}
-
-function pushChart(key, val) {
-  if (!chartData[key]) return;
-  chartData[key].push(val);
-  if (chartData[key].length > CHART_MAX) chartData[key].shift();
-}
-
-// ── Update live snapshot tab ──────────────────────────────
-function updateSnapshot(d) {
-  function sv(id, val, cls) { const e=el(id); if(!e) return; e.textContent=val; if(cls) e.className='tc-val '+cls; }
-  const gpsOk = d.fix_type && d.fix_type !== 'NO FIX';
-  sv('tc-gps',  d.fix_type||'--', gpsOk?'g':'r');
-  if(el('tc-gps-sub')) el('tc-gps-sub').textContent = `${d.sats||0} sats · HDOP ${d.hdop?.toFixed(2)||'--'}`;
-  sv('tc-alt',  d.alt!=null?d.alt.toFixed(1):'--', 'c');
-  sv('tc-spd',  d.groundspeed!=null?d.groundspeed.toFixed(1):'--', 'a');
-  sv('tc-hdg',  d.heading!=null?String(d.heading):'--', 'c');
-  if(d.roll!==undefined) { sv('tc-roll', `${r2d(d.roll)>=0?'+':''}${r2d(d.roll).toFixed(1)}`, Math.abs(r2d(d.roll))<20?'':'a'); }
-  if(d.pitch!==undefined) { sv('tc-pitch',`${r2d(d.pitch)>=0?'+':''}${r2d(d.pitch).toFixed(1)}`, Math.abs(r2d(d.pitch))<20?'':'a'); }
-  sv('tc-volt', d.voltage?d.voltage.toFixed(1):'--', d.voltage>14?'g':d.voltage>12?'a':'r');
-  sv('tc-curr', d.current!=null?d.current.toFixed(1):'--', 'a');
-  sv('tc-batt', d.battery!=null?Math.round(d.battery)+'%':'--', d.battery>50?'g':d.battery>25?'a':'r');
-  sv('tc-rssi', d.rssi!=null?Math.round(d.rssi)+'%':'--', d.rssi>60?'c':d.rssi>30?'a':'r');
-  sv('tc-ekf',  d.ekf_healthy!==false?'OK':'FAIL', d.ekf_healthy!==false?'g':'r');
-  sv('tc-cpu',  d.cpu!=null?Math.round(d.cpu)+'%':'--', d.cpu<70?'':'a');
-}
-
-// ── Update motors tab ─────────────────────────────────────
-function updateMotors(d) {
-  const motors = [
-    {i:1,color:'var(--cyan)'},  {i:2,color:'var(--green)'},
-    {i:3,color:'var(--amber)'},{i:4,color:'var(--purple)'}
-  ];
-  const vals = [d.m1,d.m2,d.m3,d.m4].map(v=>v||1000);
-  const avg = vals.reduce((a,b)=>a+b,0)/4;
-
-  motors.forEach(m => {
-    const pwm = vals[m.i-1];
-    const pct = Math.max(0, Math.min(100,(pwm-1000)/8));
-    const diff = Math.abs(pwm-avg);
-    const isFault = diff > avg*0.15 && pwm > 1100;
-    const isWarn  = diff > avg*0.08 && pwm > 1100;
-
-    if(el(`m${m.i}-pwm`)) el(`m${m.i}-pwm`).textContent = Math.floor(pwm);
-    if(el(`m${m.i}-pct`)) el(`m${m.i}-pct`).textContent = pct.toFixed(0)+'%';
-    const bar = el(`m${m.i}-bar`);
-    if(bar) { bar.style.width=pct+'%'; bar.style.background=isFault?'var(--red)':isWarn?'var(--amber)':m.color; }
-    const stat = el(`m${m.i}-status`);
-    if(stat) {
-      stat.textContent = isFault?'FAULT':isWarn?'WARN':'NOMINAL';
-      stat.className = 'motor-status '+(isFault?'fault':isWarn?'warn':'ok');
+  async function call(action, data = {}, timeout = 20000) {
+    if (isDemo) {
+      if (action === 'log_list') return { ok: true, ...DEMO };
+      if (action === 'log_detail') return { ok: true, ...DEMO_DETAIL };
+      return { ok: false, msg: 'Downloads need the Jetson (demo mode)' };
     }
-    const cell = el(`mc${m.i}`);
-    if(cell) { cell.classList.toggle('fault-cell', isFault); }
-  });
-}
-
-// ── Chart value labels ────────────────────────────────────
-function updateChartLabels(d) {
-  if(d.alt!=null)    { el('cv-alt').textContent  = d.alt.toFixed(1)+' m'; }
-  if(d.voltage)      { el('cv-volt').textContent = d.voltage.toFixed(1)+' V'; el('cv-volt').style.color=d.voltage>14?'var(--green)':d.voltage>12?'var(--amber)':'var(--red)'; }
-  if(d.roll!=null)   el('cv-att').textContent  = `${r2d(d.roll).toFixed(1)} / ${r2d(d.pitch||0).toFixed(1)}°`;
-  if(d.groundspeed!=null) el('cv-spd').textContent = d.groundspeed.toFixed(1)+' m/s';
-  if(d.vib_x!=null)  { const vm=Math.sqrt(d.vib_x**2+d.vib_y**2+d.vib_z**2); el('cv-vib').textContent=vm.toFixed(2); }
-  if(d.current!=null) el('cv-curr').textContent = d.current.toFixed(1)+' A';
-}
-
-// ── Recording ─────────────────────────────────────────────
-function startRec() {
-  isRecording = true;
-  const id = 'f_'+Date.now();
-  currentFlight = { id, name:`Flight ${flights.length+1}`, startTime:Date.now(), endTime:null, status:'recording',
-    events:[], telemetry:[], summary:{maxAlt:0,maxSpeed:0,minVolt:999,maxCurrent:0,faultCount:0,warnCount:0} };
-  addEv('info','SYSTEM','Recording started');
-  el('btnRec').textContent='⏹ STOP'; el('btnRec').classList.remove('btn-rec'); el('btnRec').classList.add('btn-stop');
-  el('hRec').textContent='REC'; el('hRec').style.color='var(--red)'; el('hRec').style.animation='';
-  recInterval = setInterval(sampleTelem, 1000);
-}
-function stopRec() {
-  if (!isRecording||!currentFlight) return;
-  isRecording=false; clearInterval(recInterval);
-  currentFlight.endTime=Date.now();
-  currentFlight.status=currentFlight.summary.faultCount>0?'crash':currentFlight.summary.warnCount>1?'warn':'ok';
-  addEv('info','SYSTEM',`Stopped — ${fmtDur(currentFlight.endTime-currentFlight.startTime)}`);
-  flights.push(currentFlight); currentFlight=null; save();
-  el('btnRec').textContent='⏺ RECORD'; el('btnRec').classList.remove('btn-stop'); el('btnRec').classList.add('btn-rec');
-  el('hRec').textContent='OFF'; el('hRec').style.color='var(--text2)'; el('hRec').style.animation='none';
-  el('hFlights').textContent=flights.length;
-  renderList();
-}
-function sampleTelem() {
-  const d=lastTelemetry; if(!currentFlight) return;
-  const snap={ t:Date.now(), alt:d.alt||0, spd:d.groundspeed||0, volt:d.voltage||0, curr:d.current||0, batt:d.battery||0, roll:d.roll?r2d(d.roll):0, pitch:d.pitch?r2d(d.pitch):0, sats:d.sats||0, rssi:d.rssi||0, m1:d.m1||0,m2:d.m2||0,m3:d.m3||0,m4:d.m4||0, vib_x:d.vib_x||0,vib_y:d.vib_y||0,vib_z:d.vib_z||0, armed:d.armed||false, mode:d.flight_mode||'--', ekf:d.ekf_healthy!==false };
-  currentFlight.telemetry.push(snap);
-  const s=currentFlight.summary;
-  s.maxAlt=Math.max(s.maxAlt,snap.alt); s.maxSpeed=Math.max(s.maxSpeed,snap.spd);
-  s.minVolt=Math.min(s.minVolt,snap.volt||999); s.maxCurrent=Math.max(s.maxCurrent,snap.curr);
-  checkAnomalies(snap);
-
-  // Push to charts if this is selected
-  if(selectedId===currentFlight.id) { pushChartSnap(snap); redrawCharts(); updateChartLabels(d); updateSnapshot(d); updateMotors(d); }
-}
-function pushChartSnap(s) {
-  pushChart('alt',s.alt); pushChart('volt',s.volt); pushChart('roll',s.roll); pushChart('pitch',s.pitch);
-  pushChart('spd',s.spd); pushChart('curr',s.curr);
-  pushChart('vib', Math.sqrt(s.vib_x**2+s.vib_y**2+s.vib_z**2));
-}
-function checkAnomalies(snap) {
-  if(!currentFlight) return;
-  const tels=currentFlight.telemetry; if(tels.length<2) return;
-  const prev=tels[tels.length-2];
-  if(prev.volt>8&&snap.volt>0&&(prev.volt-snap.volt)>0.8) addEv('fault','POWER',`Voltage drop: ${prev.volt.toFixed(1)}V → ${snap.volt.toFixed(1)}V`);
-  if(snap.m1>1100){const avg=(snap.m1+snap.m2+snap.m3+snap.m4)/4;[snap.m1,snap.m2,snap.m3,snap.m4].forEach((m,i)=>{if(Math.abs(m-avg)>avg*0.15)addEv('warn',`M${i+1}`,`Motor ${i+1} diverged: ${Math.floor(m)}μs vs avg ${Math.floor(avg)}μs (${Math.round(Math.abs(m-avg)/avg*100)}%)`);});}
-  if(Math.abs(snap.roll)>45) addEv('fault','ATTITUDE',`Roll exceeded 45°: ${snap.roll.toFixed(1)}°`);
-  if(Math.abs(snap.pitch)>45) addEv('fault','ATTITUDE',`Pitch exceeded 45°: ${snap.pitch.toFixed(1)}°`);
-  if(prev.ekf&&!snap.ekf) addEv('fault','EKF','EKF health lost');
-  if(prev.sats>=6&&snap.sats<4) addEv('fault','GPS',`Sats dropped: ${prev.sats} → ${snap.sats}`);
-  const vm=Math.sqrt(snap.vib_x**2+snap.vib_y**2+snap.vib_z**2); if(vm>40) addEv('fault','VIB',`Vibration spike: ${vm.toFixed(1)} m/s²`);
-  if(snap.batt>0&&snap.batt<15&&prev.batt>=15) addEv('warn','BATT',`Battery critical: ${Math.round(snap.batt)}%`);
-  if(prev.mode!==snap.mode&&snap.mode!=='--') addEv('info','MODE',`Mode: ${prev.mode} → ${snap.mode}`);
-  if(!prev.armed&&snap.armed) addEv('ok','ARM','Vehicle ARMED');
-  if(prev.armed&&!snap.armed) addEv('info','ARM','Vehicle DISARMED');
-}
-function addEv(cat,src,msg) {
-  if(!currentFlight) return;
-  currentFlight.events.push({t:Date.now(),cat,src,msg});
-  if(cat==='fault')currentFlight.summary.faultCount++;
-  if(cat==='warn')currentFlight.summary.warnCount++;
-  if(selectedId===currentFlight.id||isRecording) renderTimeline();
-}
-
-// ── Render list ───────────────────────────────────────────
-function renderList() {
-  const list=el('flightsList');
-  const all=[...flights,...(isRecording&&currentFlight?[currentFlight]:[])].reverse();
-  if(!all.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text2);font-size:11px;font-family:var(--mono)">NO FLIGHTS RECORDED</div>';return;}
-  list.innerHTML='';
-  all.forEach(f=>{
-    const dur=f.endTime?fmtDur(f.endTime-f.startTime):fmtDur(Date.now()-f.startTime);
-    const d=new Date(f.startTime);
-    const dateStr=`${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    const div=document.createElement('div');
-    div.className=`fi ${f.status}${f.status==='recording'?' rec-active':''}${selectedId===f.id?' sel':''}`;
-    div.innerHTML=`<div class="fi-top"><span class="fi-name">${f.name}</span><span class="fi-badge ${f.status==='recording'?'live':f.status==='crash'?'crash':f.status==='warn'?'warn':'ok'}">${f.status==='recording'?'● LIVE':f.status.toUpperCase()}</span></div><div class="fi-grid"><div class="fi-stat"><span>Date</span><span>${dateStr}</span></div><div class="fi-stat"><span>Duration</span><span>${dur}</span></div><div class="fi-stat"><span>Max Alt</span><span>${f.summary.maxAlt.toFixed(1)}m</span></div><div class="fi-stat"><span>Min Volt</span><span>${f.summary.minVolt===999?'--':f.summary.minVolt.toFixed(2)+'V'}</span></div><div class="fi-stat"><span>Max Curr</span><span>${f.summary.maxCurrent.toFixed(1)}A</span></div><div class="fi-stat" style="color:${f.summary.faultCount>0?'var(--red)':'var(--text2)'}"><span>Faults</span><span>${f.summary.faultCount}</span></div><div class="fi-stat"><span>Events</span><span>${f.events.length}</span></div><div class="fi-stat"><span>Samples</span><span>${f.telemetry.length}</span></div></div>`;
-    div.addEventListener('click',()=>selectFlight(f.id));
-    list.appendChild(div);
-  });
-}
-
-function selectFlight(id) {
-  selectedId=id;
-  const all=[...flights,...(isRecording&&currentFlight?[currentFlight]:[])];
-  const f=all.find(x=>x.id===id); if(!f) return;
-  el('hSel').textContent=f.name; el('hSel').style.color='var(--cyan)';
-  el('hDur').textContent=f.endTime?fmtDur(f.endTime-f.startTime):'Live';
-  el('hFaults').textContent=f.summary.faultCount; el('hFaults').style.color=f.summary.faultCount>0?'var(--red)':'var(--green)';
-  el('btnAnalyze').disabled=false;
-  el('aiBody').innerHTML=`<div class="ai-empty"><div class="ai-empty-icon">✦</div><div class="ai-empty-title">Ready</div><div class="ai-empty-desc">Click Analyze to run AI diagnosis on <b style="color:var(--cyan)">${f.name}</b>.</div></div>`;
-
-  // Load telemetry into charts
-  Object.keys(chartData).forEach(k=>chartData[k]=[]);
-  f.telemetry.forEach(s=>{ pushChart('alt',s.alt); pushChart('volt',s.volt); pushChart('roll',s.roll); pushChart('pitch',s.pitch); pushChart('spd',s.spd); pushChart('curr',s.curr); pushChart('vib',Math.sqrt(s.vib_x**2+s.vib_y**2+s.vib_z**2)); });
-  setTimeout(()=>{ redrawCharts(); },50);
-
-  // Last snapshot
-  if(f.telemetry.length) {
-    const last=f.telemetry[f.telemetry.length-1];
-    updateMotors({m1:last.m1,m2:last.m2,m3:last.m3,m4:last.m4});
-    updateChartLabels({alt:last.alt,voltage:last.volt,roll:last.roll/180*Math.PI,pitch:last.pitch/180*Math.PI,groundspeed:last.spd,current:last.curr,vib_x:last.vib_x,vib_y:last.vib_y,vib_z:last.vib_z});
-    updateSnapshot({fix_type:f.telemetry[f.telemetry.length-1].sats>5?'3D FIX':'NO FIX',sats:last.sats,alt:last.alt,groundspeed:last.spd,heading:0,roll:last.roll/180*Math.PI,pitch:last.pitch/180*Math.PI,voltage:last.volt,current:last.curr,battery:last.batt,rssi:last.rssi,ekf_healthy:last.ekf,cpu:40});
+    if (!M()) return { ok: false, msg: 'Command link not loaded' };
+    if (!M().canCommand) return { ok: false, msg: 'Browsing the Jetson\'s logs needs an operator login (viewers are read only).' };
+    return M().send(action, data, { timeout });
   }
-  renderList();
-  renderTimeline();
-}
 
-// ── Render timeline ───────────────────────────────────────
-function renderTimeline() {
-  const all=[...flights,...(isRecording&&currentFlight?[currentFlight]:[])];
-  const f=all.find(x=>x.id===selectedId); if(!f){ el('tlEvents').innerHTML=''; return; }
-  const filtered=f.events.filter(e=>activeFilter==='all'||e.cat===activeFilter);
-  if(!filtered.length){ el('tlEvents').innerHTML='<div style="padding:20px;text-align:center;color:var(--text2);font-size:11px;font-family:var(--mono)">NO EVENTS MATCH FILTER</div>'; return; }
-  el('tlEvents').innerHTML='';
-  [...filtered].reverse().forEach(e=>{
-    const div=document.createElement('div');
-    div.className='tl-row'+(e.cat==='fault'||e.cat==='warn'?' highlighted':'');
-    div.innerHTML=`<span class="tl-t">${fmtTs(e.t)}</span><span class="tl-c ${e.cat}">${e.cat.toUpperCase()}</span><span class="tl-src">${e.src}</span><span class="tl-msg">${e.msg}</span>`;
-    el('tlEvents').appendChild(div);
-  });
-}
-
-// ── AI Analyzer ───────────────────────────────────────────
-el('btnAnalyze').addEventListener('click', async()=>{
-  const all=[...flights,...(isRecording&&currentFlight?[currentFlight]:[])];
-  const f=all.find(x=>x.id===selectedId); if(!f) return;
-  el('btnAnalyze').disabled=true;
-  el('aiBody').innerHTML=`<div class="ai-spin-wrap"><div class="ai-spinner"></div><div class="ai-spin-txt">Analyzing flight data...</div></div>`;
-  const faults=f.events.filter(e=>e.cat==='fault'||e.cat==='warn');
-  const tels=f.telemetry;
-  const motorStats=tels.length?`Last motor values: M1:${Math.floor(tels[tels.length-1].m1)}μs M2:${Math.floor(tels[tels.length-1].m2)}μs M3:${Math.floor(tels[tels.length-1].m3)}μs M4:${Math.floor(tels[tels.length-1].m4)}μs`:'No motor data';
-  const prompt=`You are an expert ArduPilot/ArduCopter drone flight analyst. Analyze this flight and diagnose faults.
-
-FLIGHT: ${f.name} | Duration: ${f.endTime?fmtDur(f.endTime-f.startTime):'ongoing'} | Status: ${f.status}
-Max Alt: ${f.summary.maxAlt.toFixed(1)}m | Min Volt: ${f.summary.minVolt===999?'N/A':f.summary.minVolt.toFixed(2)+'V'} | Max Current: ${f.summary.maxCurrent.toFixed(1)}A
-Faults: ${f.summary.faultCount} | Warnings: ${f.summary.warnCount} | ${motorStats}
-
-FAULT/WARNING EVENTS:
-${faults.length===0?'None.':[...faults].slice(-20).map(e=>`[${fmtTs(e.t)}] ${e.cat.toUpperCase()} [${e.src}] ${e.msg}`).join('\n')}
-
-ALL EVENTS (last 25):
-${f.events.slice(-25).map(e=>`[${fmtTs(e.t)}] ${e.cat.toUpperCase()} [${e.src}] ${e.msg}`).join('\n')}
-
-Respond with ONLY valid JSON, no markdown:
-{"verdict":"crash"|"warning"|"nominal"|"unknown","confidence":"high"|"medium"|"low","summary":"2-3 sentence diagnosis","primary_cause":{"label":"","description":"","probability":"high"|"medium"|"low"},"causes":[{"rank":1,"label":"","description":"","probability":"high"|"medium"|"low"}],"anomalies":[{"time":"HH:MM:SS","severity":"critical"|"warning","description":""}],"recommendation":""}`;
-
-  try {
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
-    const data=await res.json();
-    const r=JSON.parse(data.content?.[0]?.text?.replace(/```json|```/g,'').trim()||'{}');
-    renderAnalysis(r);
-  } catch(err) {
-    el('aiBody').innerHTML=`<div class="ai-verdict unknown"><div class="av-hdr"><span class="av-icon">⚠</span><span class="av-title">Analysis Failed</span></div><div class="av-body" style="color:var(--text2)">${err.message}</div></div>`;
+  async function load() {
+    $('btnRefresh').disabled = true;
+    const r = await call('log_list');
+    $('btnRefresh').disabled = false;
+    if (!r.ok) { $('list').innerHTML = `<div class="empty">${esc(r.msg)}</div>`; return; }
+    missions = r.missions || [];
+    $('hCount').textContent = missions.length;
+    $('hFree').textContent = r.free_gb != null ? r.free_gb + ' GB' : '--';
+    renderList();
+    if (!selected && missions[0]) select(missions[0].folder);
   }
-  el('btnAnalyze').disabled=false;
-});
 
-function renderAnalysis(r) {
-  const vc={crash:'critical',warning:'warning',nominal:'nominal',unknown:'unknown'}[r.verdict]||'unknown';
-  const vi={crash:'💥',warning:'⚠',nominal:'✓',unknown:'?'}[r.verdict]||'?';
-  let h=`<div class="ai-sec">DIAGNOSIS</div>
-    <div class="ai-verdict ${vc}">
-      <div class="av-hdr"><span class="av-icon">${vi}</span><span class="av-title">${(r.verdict||'UNKNOWN').toUpperCase()}</span><span class="av-conf">CONFIDENCE: ${(r.confidence||'--').toUpperCase()}</span></div>
-      <div class="av-body">${r.summary||'--'}</div>
-    </div>`;
-  if(r.primary_cause) h+=`<div class="ai-sec">PRIMARY CAUSE</div><div class="cause ${r.primary_cause.probability}"><span class="cause-num">#1</span><div><div class="cause-name">${r.primary_cause.label}</div><div class="cause-desc">${r.primary_cause.description}</div><div class="cause-prob ${r.primary_cause.probability}">PROBABILITY: ${(r.primary_cause.probability||'').toUpperCase()}</div></div></div>`;
-  if(r.causes&&r.causes.length>1) { h+=`<div class="ai-sec">CONTRIBUTING FACTORS</div>`; r.causes.slice(1).forEach(c=>{ h+=`<div class="cause ${c.probability}"><span class="cause-num">#${c.rank}</span><div><div class="cause-name">${c.label}</div><div class="cause-desc">${c.description}</div><div class="cause-prob ${c.probability}">PROBABILITY: ${(c.probability||'').toUpperCase()}</div></div></div>`; }); }
-  if(r.anomalies&&r.anomalies.length) { h+=`<div class="ai-sec">TIMELINE ANOMALIES</div>`; r.anomalies.forEach(a=>{ h+=`<div class="anomaly ${a.severity}"><span class="an-t">${a.time}</span><span class="an-m">${a.description}</span></div>`; }); }
-  if(r.recommendation) h+=`<div class="ai-sec">RECOMMENDATION</div><div class="rec-box"><p>🔧 ${r.recommendation}</p></div>`;
-  el('aiBody').innerHTML=h;
-}
+  function renderList() {
+    $('list').innerHTML = missions.length ? missions.map(m => `<div class="flight${m.folder === selected ? ' sel' : ''}" data-f="${esc(m.folder)}">
+      <div class="n">${esc(m.name)} ${m.recording ? '<span class="tag rec">● RECORDING</span>' : ''}${m.failsafes ? `<span class="tag warn">${m.failsafes} FAILSAFE</span>` : ''}${m.actions ? `<span class="tag warn">ASC ACTED</span>` : ''}</div>
+      <div class="f">${esc(m.folder)} · ${new Date(m.mtime * 1000).toLocaleString()}${m.operator ? ' · ' + esc(m.operator) : ''}</div>
+      <div class="s"><span>⏱ ${mmss(m.duration_s)}</span><span>✈ ${mmss(m.flying_s)}</span><span>▲ ${num(m.max_alt_m, 1, ' m')}</span><span>⚡ ${m.used_mah != null ? Math.round(m.used_mah) + ' mAh' : '--'}</span>
+        <span style="color:${m.findings ? 'var(--amber)' : 'var(--green)'}">${m.findings ? '⚠ ' + m.findings + ' findings' : '✓ no findings'}</span><span>${num(m.size_mb, 1, ' MB')}</span></div></div>`).join('')
+      : '<div class="empty">No missions recorded yet. ASC starts recording when a mission is created or the drone arms.</div>';
+  }
+  $('list').addEventListener('click', e => { const f = e.target.closest('[data-f]'); if (f) select(f.dataset.f); });
 
-// ── Controls ──────────────────────────────────────────────
-el('btnRec').addEventListener('click',()=>{ if(!isRecording)startRec(); else stopRec(); });
-el('btnClear').addEventListener('click',()=>{
-  if(!confirm('Clear all flights?'))return;
-  flights=[]; selectedId=null; save();
-  el('hFlights').textContent=0; el('hSel').textContent='—'; el('hSel').style.color='var(--text2)';
-  renderList(); el('tlEvents').innerHTML=''; el('btnAnalyze').disabled=true;
-  Object.keys(chartData).forEach(k=>chartData[k]=[]); redrawCharts();
-});
-el('btnExport').addEventListener('click',()=>{
-  const all=[...flights,...(isRecording&&currentFlight?[currentFlight]:[])];
-  const f=all.find(x=>x.id===selectedId);
-  if(!f){alert('Select a flight first');return;}
-  const blob=new Blob([JSON.stringify(f,null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${f.name.replace(/\s/g,'_')}.json`; a.click();
-});
-el('btnImport').addEventListener('click',()=>{
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
-  inp.addEventListener('change',e=>{ const file=e.target.files[0]; if(!file)return; const r=new FileReader(); r.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.id&&d.events){flights.push(d);save();el('hFlights').textContent=flights.length;renderList();} }catch(e){alert('Invalid file');} }; r.readAsText(file); }); inp.click();
-});
+  async function select(folder) {
+    selected = folder; renderList();
+    $('detail').innerHTML = '<div class="empty">Loading…</div>';
+    const r = await call('log_detail', { folder });
+    if (selected !== folder) return;
+    if (!r.ok) { $('detail').innerHTML = `<div class="empty">${esc(r.msg)}</div>`; return; }
+    detail = r; renderDetail();
+  }
 
-// Tabs
-document.querySelectorAll('.tab').forEach(t=>{ t.addEventListener('click',()=>{ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active')); t.classList.add('active'); document.querySelector(`[data-content="${t.dataset.tab}"]`)?.classList.add('active'); if(t.dataset.tab==='charts')setTimeout(redrawCharts,50); }); });
+  function renderDetail() {
+    const m = missions.find(x => x.folder === selected) || {}, s = detail.summary || {};
+    const checks = Object.entries(s.checks || {}).sort((a, b) => (b[1].crit_s + b[1].warn_s) - (a[1].crit_s + a[1].warn_s));
+    const charts = (detail.files || []).filter(f => /^asc\/charts\/.+\.png$/.test(f.path));
+    const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+    $('detail').innerHTML = `<h2>${esc(m.name || selected)}</h2><div class="note">${esc(selected)}${m.recording ? ' · STILL RECORDING — numbers are final after landing' : ''}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="btnAI" ${detail.summary ? '' : 'disabled'}>COPY SUMMARY FOR AI</button></div>
+      ${detail.summary ? `<div class="stats">${stat('DURATION', mmss(s.duration_s))}${stat('FLYING', mmss(s.flying_s))}${stat('MAX ALTITUDE', num(s.max_alt_m, 1, ' m'))}${stat('DISTANCE FLOWN', num(s.distance_flown_m, 0, ' m'))}
+        ${stat('BATTERY USED', s.used_mah != null ? Math.round(s.used_mah) + ' mAh' : '--')}${stat('BATTERY %', (s.battery_pct || []).map(x => x == null ? '--' : Math.round(x)).join(' → ') || '--')}${stat('MIN VOLTAGE', num(s.min_voltage, 2, ' V'))}${stat('MAX CURRENT', num(s.max_current_a, 1, ' A'))}
+        ${stat('MAX VIBRATION', num(s.max_vibration, 1))}${stat('CHECKS / S', s.checks_per_s ?? '--')}${stat('CONSOLE LOSSES', s.console_link_losses ?? 0)}${stat('FAILSAFES', (s.pixhawk_failsafes || []).length)}</div>` :
+        '<div class="note" style="margin-top:12px">No ASC summary yet (written when the drone is disarmed on the ground).</div>'}
+      ${checks.length ? `<h3>CHECKS THAT WERE NOT OK</h3><table><tr><th>CHECK</th><th>TIMES</th><th>WARNING</th><th>CRITICAL</th><th>WORST</th></tr>${checks.map(([id, c]) =>
+        `<tr><td>${esc(c.label || id)}</td><td>${c.raised}</td><td style="color:var(--amber)">${num(c.warn_s, 1, ' s')}</td><td style="color:#ff5c7a">${num(c.crit_s, 1, ' s')}</td><td>${c.worst ?? '--'}</td></tr>`).join('')}</table>` : ''}
+      ${(s.asc_actions || []).length ? `<h3>ASC ACTIONS</h3><table>${s.asc_actions.map(a => `<tr><td>T+${num(a.t, 1, ' s')}</td><td>${esc(a.action)}</td><td>console lost ${a.console_age_s} s</td></tr>`).join('')}</table>` : ''}
+      ${charts.length ? `<h3>CHARTS</h3><div class="charts">${charts.map(f => `<div class="ph" data-chart="${esc(f.path)}">loading ${esc(f.path.split('/').pop())}…</div>`).join('')}</div>` : ''}
+      <h3>EVENTS</h3><div class="filters">${['all', 'warning', 'critical', 'commands'].map(k => `<button class="btn${evFilter === k ? ' on' : ''}" data-ev="${k}">${k.toUpperCase()}</button>`).join('')}</div>
+      <div class="ev"><table id="evTable"></table></div>
+      <h3>FILES</h3><table><tr><th>FILE</th><th>SIZE</th><th></th></tr>${(detail.files || []).map(f => `<tr><td>${esc(f.path)}<div class="prog"><i data-prog="${esc(f.path)}"></i></div></td><td>${size(f.size)}</td>
+        <td><button class="btn" data-dl="${esc(f.path)}" data-size="${f.size}">⤓ DOWNLOAD</button></td></tr>`).join('')}</table>
+      <div class="note">Downloads come from the Jetson in chunks over the console link. Large files (mavlink.tlog) can take a while on cellular.</div>`;
+    renderEvents();
+    charts.forEach(f => loadChart(f.path));
+  }
 
-// Timeline filters
-document.querySelectorAll('.filt').forEach(b=>{ b.addEventListener('click',()=>{ document.querySelectorAll('.filt').forEach(x=>x.classList.remove('on')); b.classList.add('on'); activeFilter=b.dataset.f; renderTimeline(); }); });
+  function renderEvents() {
+    const t = $('evTable'); if (!t || !detail) return;
+    const ev = (detail.events || []).filter(e => evFilter === 'all' || (evFilter === 'commands' ? e.kind === 'command' : e.level === evFilter));
+    t.innerHTML = ev.length ? ev.slice().reverse().map(e => `<tr class="${esc(e.level)}"><td style="color:var(--muted);white-space:nowrap">T+${num(e.t_rel, 1, ' s')}</td><td class="m">${esc(e.msg)}</td></tr>`).join('') : '<tr><td class="note">No events.</td></tr>';
+  }
 
-// WebSocket
-function connectWs() {
-  if(airsentMode==='demo')return;
-  ws=new WebSocket('ws://localhost:8765');
-  ws.onmessage=e=>{ try{ lastTelemetry=JSON.parse(e.data); }catch(e){} };
-  ws.onclose=()=>setTimeout(connectWs,3000);
-}
+  async function fetchFile(path, onProgress) {
+    const parts = []; let offset = 0, total = 0;
+    for (;;) {
+      const r = await call('log_file', { folder: selected, path, offset }, 30000);
+      if (!r.ok) throw new Error(r.msg);
+      const bin = atob(r.data), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      parts.push(bytes); offset += bytes.length; total = r.size;
+      onProgress && onProgress(offset, total);
+      if (r.eof || !bytes.length) break;
+    }
+    return new Blob(parts);
+  }
 
-// Demo flights
-function injectDemo() {
-  if(flights.length>0)return;
-  const b=Date.now()-3600000;
-  const crash={id:'demo1',name:'Flight 1 — Crash Test',startTime:b,endTime:b+245000,status:'crash',summary:{maxAlt:22.4,maxSpeed:5.8,minVolt:13.2,maxCurrent:19.1,faultCount:4,warnCount:2},telemetry:Array.from({length:245},(_,i)=>({t:b+i*1000,alt:i<30?i*0.7:i<200?22+Math.sin(i/10)*2:22-((i-200)*0.5),spd:i<30?i*0.2:4+Math.random(),volt:16-i*0.012,curr:i<30?2:10+Math.random()*4,batt:100-i*0.3,roll:i>210?-50+Math.random()*5:Math.sin(i/5)*3,pitch:i>210?-45+Math.random()*5:Math.sin(i/7)*2,sats:18,rssi:84,m1:i<30?1000:1400+Math.random()*50,m2:i<30?1000:1400+Math.random()*50,m3:i<30?1000:i>210?1900:1400+Math.random()*50,m4:i<30?1000:1400+Math.random()*50,vib_x:i>200?15+Math.random()*10:0.5+Math.random()*2,vib_y:i>200?12+Math.random()*8:0.5+Math.random()*2,vib_z:i>200?18+Math.random()*12:1+Math.random()*3,armed:i>10&&i<243,mode:i<15?'STABILIZE':i<20?'ALTHOLD':'POSHOLD',ekf:i<230})),events:[{t:b+10000,cat:'ok',src:'ARM',msg:'Vehicle ARMED'},{t:b+15000,cat:'ok',src:'MODE',msg:'Mode: STABILIZE → ALTHOLD'},{t:b+20000,cat:'ok',src:'MODE',msg:'Mode: ALTHOLD → POSHOLD'},{t:b+120000,cat:'warn',src:'BATT',msg:'Battery at 28%: 14.1V'},{t:b+210000,cat:'fault',src:'M3',msg:'Motor 3 diverged: 1847μs (avg 1420μs, diff 30%)'},{t:b+212000,cat:'fault',src:'ATTITUDE',msg:'Roll exceeded 45°: +52.3°'},{t:b+213000,cat:'fault',src:'ATTITUDE',msg:'Pitch exceeded 45°: -48.1°'},{t:b+214000,cat:'fault',src:'EKF',msg:'EKF health lost'},{t:b+215000,cat:'info',src:'ARM',msg:'Vehicle DISARMED'}]};
-  const b2=Date.now()-7200000;
-  const good={id:'demo2',name:'Flight 2 — Survey Mission',startTime:b2,endTime:b2+720000,status:'ok',summary:{maxAlt:45.2,maxSpeed:8.4,minVolt:14.1,maxCurrent:14.2,faultCount:0,warnCount:1},telemetry:Array.from({length:720},(_,i)=>({t:b2+i*1000,alt:i<60?i*0.75:i<600?45+Math.sin(i/20)*2:45-(i-600)*0.15,spd:i<60?i*0.14:7+Math.sin(i/30)*1.5,volt:16.1-i*0.003,curr:i<60?2:12+Math.random()*2,batt:100-i*0.08,roll:Math.sin(i/8)*5,pitch:Math.sin(i/12)*4,sats:19,rssi:86,m1:i<60?1000:1450+Math.random()*40,m2:i<60?1000:1455+Math.random()*35,m3:i<60?1000:1448+Math.random()*38,m4:i<60?1000:1452+Math.random()*42,vib_x:0.8+Math.random()*1.5,vib_y:0.7+Math.random()*1.3,vib_z:1.2+Math.random()*2,armed:i>10&&i<715,mode:i<20?'STABILIZE':'AUTO',ekf:true})),events:[{t:b2+10000,cat:'ok',src:'ARM',msg:'Vehicle ARMED'},{t:b2+18000,cat:'ok',src:'GPS',msg:'RTK FIX · 19 sats — Home set'},{t:b2+20000,cat:'ok',src:'MODE',msg:'Mode: STABILIZE → AUTO'},{t:b2+400000,cat:'warn',src:'BATT',msg:'Battery at 25%: 14.3V'},{t:b2+700000,cat:'ok',src:'MODE',msg:'Mode: AUTO → RTL'},{t:b2+715000,cat:'info',src:'ARM',msg:'Vehicle DISARMED'}]};
-  flights=[good,crash]; save();
-}
+  async function loadChart(path) {
+    const ph = document.querySelector(`[data-chart="${CSS.escape(path)}"]`);
+    try {
+      const key = selected + '/' + path;
+      blobs[key] = blobs[key] || URL.createObjectURL(new Blob([await fetchFile(path)], { type: 'image/png' }));
+      if (ph && ph.isConnected) { const img = new Image(); img.src = blobs[key]; img.alt = path; ph.replaceWith(img); }
+    } catch (e) { if (ph) ph.textContent = 'chart unavailable: ' + e.message; }
+  }
 
-// Init
-setInterval(()=>el('hClock').textContent=now(),1000);
-setInterval(()=>{ if(isRecording){renderList();} },2000);
-window.addEventListener('resize',()=>{ setTimeout(redrawCharts,50); });
-load();
-if(airsentMode==='demo') injectDemo();
-el('hFlights').textContent=flights.length;
-renderList();
-connectWs();
+  $('detail').addEventListener('click', async e => {
+    const ev = e.target.closest('[data-ev]');
+    if (ev) { evFilter = ev.dataset.ev; document.querySelectorAll('[data-ev]').forEach(b => b.classList.toggle('on', b === ev)); renderEvents(); return; }
+    if (e.target.id === 'btnAI') {
+      const txt = JSON.stringify({ mission: selected, summary: detail.summary, events: (detail.events || []).filter(x => x.level !== 'info').slice(-150) }, null, 1);
+      try { await navigator.clipboard.writeText(txt); toast('✓ Summary copied — paste it into an AI chat to analyse the flight'); }
+      catch { toast('Copy failed — your browser blocked the clipboard', 'err'); }
+      return;
+    }
+    const dl = e.target.closest('[data-dl]'); if (!dl) return;
+    const path = dl.dataset.dl, bar = document.querySelector(`[data-prog="${CSS.escape(path)}"]`);
+    if (+dl.dataset.size > 50e6 && !confirm(`${path} is ${size(+dl.dataset.size)}. Download it over the console link?`)) return;
+    dl.disabled = true;
+    try {
+      const blob = await fetchFile(path, (o, t) => { if (bar) bar.style.width = (100 * o / Math.max(1, t)).toFixed(0) + '%'; });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = selected + '__' + path.replace(/\//g, '_'); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (err) { toast('Download failed — ' + err.message, 'alert'); }
+    finally { dl.disabled = false; }
+  });
+
+  $('btnRefresh').onclick = load;
+  setInterval(() => { $('hClock').textContent = new Date().toLocaleTimeString([], { hour12: false }); }, 1000);
+  // wait for the command link, then load (and refresh the list every 30 s so new flights appear)
+  let tries = 0;
+  const start = setInterval(() => {
+    tries++;
+    if (isDemo || (M() && (!M().canCommand || tries > 2))) { clearInterval(start); load(); setInterval(() => { if (!document.hidden) load(); }, 30000); }
+  }, 1000);
+})();
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=3"></script>
-<script src="mission-ui.js?v=3"></script>
 </body>
 </html>

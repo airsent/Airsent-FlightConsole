@@ -56,6 +56,19 @@ async def telem_browser(ws):
         browsers["telem"].discard(ws)
         print(f"[RELAY] Browser telem disconnected ({len(browsers['telem'])} remaining)")
 
+# Reads and joystick input are not operator actions worth journaling.
+QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
+# request_id -> browser socket, so large replies (log file chunks) go only to the console that asked.
+pending = {}
+
+
+def remember(request_id, ws):
+    if request_id:
+        pending[str(request_id)] = ws
+        while len(pending) > 2000:
+            pending.pop(next(iter(pending)))
+
+
 # ── Jetson-facing command handler (port 9004) ─────────────────────────────────
 async def cmd_jetson(ws):
     jetson["cmd"] = ws
@@ -63,13 +76,22 @@ async def cmd_jetson(ws):
     print("[RELAY] Jetson command channel connected")
     try:
         async for msg in ws:
+            reply = None
             try:
                 reply = json.loads(msg)
-                # Console keep-alives (mission_ping) are not operator actions; keep them out of the journal.
+                # Console keep-alives, reads and joystick input are not operator actions; keep them out of the journal.
                 if not reply.get('quiet'):
                     JOURNAL.append('BACKEND ' + ('REPLY' if reply.get('ok') else 'ERROR') + ': ' + str(reply.get('msg', 'Response received')), 'Jetson backend (not flight confirmation)')
             except (ValueError, AttributeError):
                 pass
+            if isinstance(reply, dict) and reply.get('direct'):
+                target = pending.pop(str(reply.get('request_id')), None)
+                if target is not None:
+                    try:
+                        await target.send(msg)
+                    except Exception:
+                        browsers["cmd"].discard(target)
+                continue
             dead = set()
             for b in list(browsers["cmd"]):
                 try:
@@ -107,7 +129,8 @@ async def cmd_browser(ws):
             except (ValueError, AttributeError):
                 await ws.send('{"ok":false,"msg":"Invalid command JSON"}')
                 continue
-            quiet = action == 'mission_ping'
+            quiet = action in QUIET_ACTIONS
+            remember(command.get('request_id'), ws)
             if not quiet:
                 JOURNAL.append('OPERATOR REQUEST: ' + action.upper(), 'operator command')
             jws = jetson["cmd"]

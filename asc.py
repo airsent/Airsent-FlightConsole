@@ -484,7 +484,7 @@ class ASC:
         self.session = {'folder': folder, 'dir': asc_dir, 'start': now, 'armed_at': None, 'stats': {},
                         'max_alt': 0.0, 'max_dist': 0.0, 'min_volt': None, 'max_current': 0.0, 'mah': 0.0,
                         'max_vib': 0.0, 'actions': [], 'failsafes': [], 'console_losses': 0, 'flying_s': 0.0,
-                        'start_pct': None, 'end_pct': None}
+                        'start_pct': None, 'end_pct': None, 'dist_m': 0.0, 'last_pos': None, 'rec_bytes': 0}
         self.console_seen_in_session = bool(self.console_seen_at and now - self.console_seen_at < 5)
         self._event('session', f'ASC recording to {os.path.basename(folder)}/asc', INFO)
         self.pending_param_dump = True
@@ -506,7 +506,7 @@ class ASC:
             'started': datetime.fromtimestamp(s['start']).isoformat(), 'ended': datetime.fromtimestamp(now).isoformat(),
             'duration_s': round(now - s['start'], 1), 'flying_s': round(s['flying_s'], 1),
             'checks_run': self.checks_run, 'checks_per_s': self.checks_per_s(),
-            'max_alt_m': round(s['max_alt'], 1), 'max_dist_m': round(s['max_dist'], 1),
+            'max_alt_m': round(s['max_alt'], 1), 'max_dist_m': round(s['max_dist'], 1), 'distance_flown_m': round(s['dist_m'], 1),
             'min_voltage': s['min_volt'], 'max_current_a': round(s['max_current'], 1), 'used_mah': round(s['mah']),
             'battery_pct': [s['start_pct'], s['end_pct']], 'max_vibration': round(s['max_vib'], 1),
             'console_link_losses': s['console_losses'], 'asc_actions': s['actions'], 'pixhawk_failsafes': s['failsafes'],
@@ -665,6 +665,17 @@ class ASC:
             ses['armed_at'] = now
         if flying:
             ses['flying_s'] += dt
+        pos = (s['lat'], s['lon']) if _num(s.get('lat')) and _num(s.get('lon')) and (s['lat'] or s['lon']) else None
+        if flying and pos and ses['last_pos']:
+            step = _dist_m(ses['last_pos'], pos) or 0
+            if 0.05 < step < 50:                     # ignore jitter and GPS jumps
+                ses['dist_m'] += step
+        ses['last_pos'] = pos if flying else None
+        if self._ticks % 100 == 0:                   # recording size, every ~5 s
+            try:
+                ses['rec_bytes'] = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ses['dir']) for f in fs)
+            except OSError:
+                pass
         ses['max_alt'] = max(ses['max_alt'], alt or 0)
         ses['max_dist'] = max(ses['max_dist'], home_dist or 0)
         v, a, pct = s.get('voltage'), s.get('current'), s.get('battery')
@@ -763,6 +774,8 @@ class ASC:
             'action': self.action,
             'triggered': [dict(f, age=round(now - f['t'], 1)) for f in self.triggered if now - f['t'] < 120][:5],
             'live': self.live(),
+            'flight': {'since': self.session['start'], 'dist_m': round(self.session['dist_m'], 1),
+                       'flying_s': round(self.session['flying_s'], 1), 'rec_mb': round(self.session['rec_bytes'] / 1e6, 1)} if self.session else None,
             **({'defs': self.defs()} if with_defs else {}),
             'boot': self.boot,
             'events': [{'seq': e['seq'], 't': round(e['t'], 1), 'level': e['level'], 'msg': e['msg']}

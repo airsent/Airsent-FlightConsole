@@ -424,7 +424,7 @@ async function writeToDrone() {
   busy = true; setBusy('WRITING…');
   try {
     if (isDemo()) r = { ok: true, values: { ...changes }, msg: `Wrote and confirmed ${names.length} parameter(s) (demo)` };
-    else r = await M().send('param_write', { params: changes }, { timeout: 60000 });
+    else { lastOwnWrite = Date.now(); r = await M().send('param_write', { params: changes }, { timeout: 60000 }); }
   } finally { busy = false; setBusy(); }
   Object.entries(r.values || {}).forEach(([n, v]) => { vehicle[n] = v; delete drafts[n]; });
   shareParameterDrafts();
@@ -607,6 +607,25 @@ window.addEventListener('airsent-shared-change',e=>{
 });
 try { acceptSharedDrafts(JSON.parse(localStorage.getItem('airsent-parameter-drafts-v1') || '{}')); } catch (e) {}
 
+// ── Live: someone (on any console) wrote parameters → update the on-drone values here too ──
+let seenRev = null, lastOwnWrite = 0;
+function watchParamWrites() {
+  const pr = M() && M().paramRev;
+  if (!pr) return;
+  if (seenRev === null) { seenRev = pr.rev; return; }          // first sight: just remember it
+  if (pr.rev === seenRev) return;
+  seenRev = pr.rev;
+  const vals = pr.values || {};
+  let changed = 0;
+  Object.entries(vals).forEach(([n, v]) => {
+    if (!PARAMS.some(p => p.name === n)) return;
+    vehicle[n] = v; missing.delete(n); changed++;
+    if (n in drafts && same(drafts[n], v)) delete drafts[n];
+  });
+  if (changed) { renderAll(); if (Date.now() - lastOwnWrite > 8000) toast(`Parameters updated on the drone by ${pr.by || 'another console'}: ${Object.keys(vals).slice(0, 4).join(', ')}${Object.keys(vals).length > 4 ? '…' : ''}`); }
+}
+setInterval(watchParamWrites, 1000);
+
 // ── Init ──────────────────────────────────────────────────
 setInterval(() => el('hClock').textContent = now(), 1000);
 renderAll();
@@ -623,7 +642,7 @@ window.addEventListener('load', () => {
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=3"></script>
+<script src="mission-client.js?v=4"></script>
 <script src="mission-ui.js?v=3"></script>
 </body>
 </html>

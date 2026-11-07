@@ -17,6 +17,7 @@ if not SIM_MODE:
     import depthai as dai
     import cv2
 import base64
+import shutil
 import json
 import math
 import time
@@ -746,19 +747,41 @@ def mavlink_reader():
             time.sleep(3)
 
 # ── Velocity sender thread ────────────────────────
+# Joystick velocity is streamed ONLY while the pilot page is sending it (it sends
+# every 100 ms while flying manually). If commands stop for VEL_STALE_S (tab closed,
+# browser frozen, link lost) one zero-velocity "stop" is sent and streaming ends.
+# Streaming only while commanded also keeps GUIDED takeoff and tap-to-go targets
+# from being overridden by a constant stream of velocity setpoints.
+VEL_STALE_S = 1.0
+_vel_streaming = [False]
+
+
 def velocity_sender():
     while True:
         try:
             with mav_lock:
                 mav = mav_conn
-            if (mav and telem['flight_mode'] == 'GUIDED' and telem['armed']
-                    and (not SIM_MODE or (vel_last_cmd_ts > 0 and time.time() - vel_last_cmd_ts < 1.0))):
+            guided = bool(mav and telem['flight_mode'] == 'GUIDED' and telem['armed'])
+            fresh = vel_last_cmd_ts > 0 and time.time() - vel_last_cmd_ts < VEL_STALE_S
+            if guided and not fresh and _vel_streaming[0]:
+                _vel_streaming[0] = False
+                with vel_lock:
+                    vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+                log_mavlink("Joystick input stopped — velocity zeroed (stale command protection)")
+                vx = vy = vz = yr = 0.0
+            elif guided and fresh:
+                _vel_streaming[0] = True
                 with vel_lock:
                     vx = vel_setpoint['vx']
                     vy = vel_setpoint['vy']
                     vz = vel_setpoint['vz']
                     yr = vel_setpoint['yaw_rate']
-
+            else:
+                if not guided:
+                    _vel_streaming[0] = False
+                time.sleep(0.1)
+                continue
+            if True:
                 if obstacle_blocked and vx > 0:
                     vx = 0.0
                     log_mavlink("OBSTACLE BLOCK — forward velocity zeroed")
@@ -853,6 +876,176 @@ def emergency_stop(mav, who='Operator'):
         return {'ok': True, 'msg': 'EMERGENCY STOP — telemetry shows DISARMED (no acknowledgement received)'}
     return {'ok': False, 'msg': 'EMERGENCY STOP NOT CONFIRMED — ' + (f'Pixhawk answered {ACK_RESULTS.get(last, last)}' if last is not None
             else 'no answer from the Pixhawk') + '. Use the RC kill switch.'}
+
+
+GOTO_MAX_M = float(os.environ.get('AIRSENT_GOTO_MAX_M', '500'))
+
+
+def _hav(a_lat, a_lon, b_lat, b_lon):
+    r = 6371000.0
+    p1, p2 = math.radians(a_lat), math.radians(b_lat)
+    h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(b_lon - a_lon) / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(h))
+
+
+def goto_point(mav, cmd):
+    """Tap-to-go: fly to a map point in GUIDED, with distance / fence / altitude limits."""
+    global vel_last_cmd_ts
+    try:
+        lat, lon = float(cmd.get('lat')), float(cmd.get('lon'))
+    except (TypeError, ValueError):
+        return {'ok': False, 'msg': 'Invalid map point'}
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+        return {'ok': False, 'msg': 'Invalid map point'}
+    if not telem.get('armed'):
+        return {'ok': False, 'msg': 'Arm and take off first'}
+    alt_now = telem.get('alt') or 0
+    if alt_now < 1.0:
+        return {'ok': False, 'msg': 'Take off first — the drone is not airborne'}
+    if telem.get('flight_mode') != 'GUIDED':
+        return {'ok': False, 'msg': f"Switch to GUIDED (Autopilot) first — mode is {telem.get('flight_mode')}"}
+    cur_lat, cur_lon = telem.get('lat'), telem.get('lon')
+    if not (cur_lat or cur_lon):
+        return {'ok': False, 'msg': 'No position fix — cannot fly to a map point'}
+    dist = _hav(cur_lat, cur_lon, lat, lon)
+    if dist > GOTO_MAX_M:
+        return {'ok': False, 'msg': f'Point is {dist:.0f} m away — limit is {GOTO_MAX_M:.0f} m per hop'}
+    fence = param_store.snapshot(['FENCE_ENABLE', 'FENCE_RADIUS', 'FENCE_ALT_MAX'])
+    if fence.get('FENCE_ENABLE') == 1 and fence.get('FENCE_RADIUS') and home_state.get('set'):
+        dh = _hav(home_state['lat'], home_state['lon'], lat, lon)
+        if dh > fence['FENCE_RADIUS'] - 10:
+            return {'ok': False, 'msg': f"Point is {dh:.0f} m from home — outside the {fence['FENCE_RADIUS']:.0f} m fence"}
+    try:
+        alt = float(cmd.get('alt')) if cmd.get('alt') not in (None, '') else float(alt_now)
+    except (TypeError, ValueError):
+        return {'ok': False, 'msg': 'Invalid altitude'}
+    ceiling = min(120.0, (fence.get('FENCE_ALT_MAX') or 120.0) - 5)
+    if not 2 <= alt <= ceiling:
+        return {'ok': False, 'msg': f'Altitude must be 2–{ceiling:.0f} m'}
+    with vel_lock:                                   # stop joystick streaming so it cannot override the target
+        vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+        vel_last_cmd_ts = 0.0
+    _vel_streaming[0] = False
+    mask = 0b0000110111111000                         # position only
+    mav.mav.set_position_target_global_int_send(
+        0, mav.target_system, mav.target_component, mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+        mask, int(round(lat * 1e7)), int(round(lon * 1e7)), alt, 0, 0, 0, 0, 0, 0, 0, 0)
+    log_mavlink(f"GOTO {lat:.6f},{lon:.6f} @ {alt:.1f} m ({dist:.0f} m away) by {cmd.get('operator') or 'Operator'}")
+    return {'ok': True, 'msg': f'Flying to the point — {dist:.0f} m away at {alt:.0f} m', 'dist_m': round(dist, 1), 'alt_m': alt}
+
+
+def motor_test(mav, cmd):
+    """Props-off motor test (MAV_CMD_DO_MOTOR_TEST). Disarmed only; throttle and time capped."""
+    if telem.get('armed'):
+        return {'ok': False, 'msg': 'Motor test is blocked while armed'}
+    if not cmd.get('props_off_confirmed'):
+        return {'ok': False, 'msg': 'Confirm the propellers are removed'}
+    try:
+        motor = int(cmd.get('motor', 0))
+        pct = float(cmd.get('throttle', 8))
+        secs = float(cmd.get('seconds', 2))
+    except (TypeError, ValueError):
+        return {'ok': False, 'msg': 'Invalid motor test settings'}
+    if motor not in (0, 1, 2, 3, 4):
+        return {'ok': False, 'msg': 'Motor must be 1–4 (or 0 for all in turn)'}
+    if not (5 <= pct <= 20) or not (0.5 <= secs <= 3):
+        return {'ok': False, 'msg': 'Throttle must be 5–20 % and time 0.5–3 s'}
+    since = time.time()
+    # param1 motor (output number with board order), param2 0 = percent, param3 throttle, param4 seconds,
+    # param5 motor count (all four in turn when motor == 0), param6 2 = board (output) order
+    mav.mav.command_long_send(mav.target_system, mav.target_component, mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, 0,
+                              motor or 1, 0, pct, secs, 4 if motor == 0 else 0, 2, 0)
+    who = cmd.get('operator') or 'Operator'
+    which = 'all motors in turn' if motor == 0 else f'M{motor}'
+    r = wait_ack(mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, since, 2.0)
+    if r == 0:
+        log_mavlink(f"MOTOR TEST {which} {pct:.0f}% {secs:.1f}s by {who}")
+        return {'ok': True, 'msg': f'Motor test running — {which} at {pct:.0f}% for {secs:.1f} s' + (' each' if motor == 0 else '')}
+    reason = next((t for _, _, t in reversed(list(statustext_log)) if 'motor test' in t.lower() and time.time() - _ < 5), '')
+    return {'ok': False, 'msg': 'Pixhawk refused the motor test: ' + (ACK_RESULTS.get(r, str(r)) if r is not None else 'no answer')
+            + (f' — {reason}' if reason else '')}
+
+
+LOG_CHUNK = 192 * 1024
+
+
+def _mission_path(folder, rel=''):
+    """Resolve a path inside MISSION_ROOT; refuse anything outside it."""
+    root = os.path.realpath(MISSION_ROOT)
+    path = os.path.realpath(os.path.join(root, str(folder or ''), str(rel or '')))
+    if path != root and not path.startswith(root + os.sep):
+        raise ValueError('Path outside the mission folder')
+    return path
+
+
+def _summary(folder_path):
+    for rel in ('asc/summary.json', 'summary.json'):
+        try:
+            with open(os.path.join(folder_path, rel)) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def mission_files(action, cmd):
+    """Browse the mission folders on the Jetson SSD (logs page)."""
+    try:
+        if action == 'log_list':
+            root = _mission_path('')
+            out = []
+            names = sorted((d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))), reverse=True)[:200] if os.path.isdir(root) else []
+            for name in names:
+                path = os.path.join(root, name)
+                size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(path) for f in fs)
+                sm = _summary(path) or {}
+                info = {}
+                try:
+                    info = json.load(open(os.path.join(path, 'mission.json')))
+                except (OSError, ValueError):
+                    pass
+                out.append({'folder': name, 'mtime': os.path.getmtime(path), 'size_mb': round(size / 1e6, 2),
+                            'name': info.get('name') or sm.get('mission_name') or name,
+                            'operator': info.get('operator'), 'has_asc': os.path.isdir(os.path.join(path, 'asc')),
+                            'duration_s': sm.get('duration_s'), 'flying_s': sm.get('flying_s'), 'max_alt_m': sm.get('max_alt_m'),
+                            'used_mah': sm.get('used_mah'), 'findings': sum((c.get('raised') or 0) for c in (sm.get('checks') or {}).values()),
+                            'failsafes': len(sm.get('pixhawk_failsafes') or []), 'actions': len(sm.get('asc_actions') or []),
+                            'recording': bool(asc_engine.session and os.path.realpath(asc_engine.session['folder']) == os.path.realpath(path))})
+            return {'ok': True, 'msg': f'{len(out)} mission folder(s) on the Jetson', 'missions': out,
+                    'free_gb': round(shutil.disk_usage(root).free / 1e9, 1) if os.path.isdir(root) else None}
+        path = _mission_path(cmd.get('folder'))
+        if not os.path.isdir(path):
+            return {'ok': False, 'msg': 'Mission folder not found'}
+        if action == 'log_detail':
+            files = []
+            for dp, _, fs in os.walk(path):
+                for f in fs:
+                    full = os.path.join(dp, f)
+                    files.append({'path': os.path.relpath(full, path), 'size': os.path.getsize(full)})
+            files.sort(key=lambda x: x['path'])
+            events = []
+            try:
+                with open(os.path.join(path, 'asc', 'events.jsonl')) as f:
+                    events = [json.loads(x) for x in f.readlines()[-400:] if x.strip()]
+            except (OSError, ValueError):
+                pass
+            return {'ok': True, 'msg': 'Mission details', 'folder': cmd.get('folder'), 'files': files,
+                    'summary': _summary(path), 'events': events, 'direct': True}
+        rel = str(cmd.get('path') or '')
+        full = _mission_path(cmd.get('folder'), rel)
+        if not os.path.isfile(full):
+            return {'ok': False, 'msg': 'File not found', 'direct': True}
+        size = os.path.getsize(full)
+        offset = max(0, int(cmd.get('offset') or 0))
+        with open(full, 'rb') as f:
+            f.seek(offset)
+            data = f.read(LOG_CHUNK)
+        return {'ok': True, 'msg': 'chunk', 'path': rel, 'size': size, 'offset': offset,
+                'data': base64.b64encode(data).decode('ascii'), 'eof': offset + len(data) >= size, 'direct': True}
+    except ValueError as e:
+        return {'ok': False, 'msg': str(e), 'direct': True}
+    except OSError as e:
+        return {'ok': False, 'msg': f'Could not read the mission folder: {e}', 'direct': True}
 
 
 def send_rtl(mav):
@@ -1116,7 +1309,10 @@ def mission_loop():
 
 
 # ── Command WebSocket handler ─────────────────────
-SLOW_ACTIONS = {'wp_upload', 'wp_download', 'param_read', 'param_write'}
+SLOW_ACTIONS = {'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
+# Reads and joystick input: kept out of the shared events journal by the relay.
+QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
+param_changes = {'rev': 0, 'values': {}, 'by': None}      # last confirmed parameter write, for every console
 
 
 def process_command(raw):
@@ -1137,6 +1333,8 @@ def process_command(raw):
         if isinstance(cmd, dict) and isinstance(reply, dict):
             reply.setdefault('request_id', cmd.get('request_id'))
             reply.setdefault('action', cmd.get('action'))
+            if cmd.get('action') in QUIET_ACTIONS:
+                reply.setdefault('quiet', True)
     except Exception:
         pass
     return reply
@@ -1271,10 +1469,23 @@ def _process_command(raw):
             done, err = param_store.write_many(mav, changes)
             for n, v in done.items():
                 log_mavlink(f"PARAM {n} = {v} (confirmed) by {who}")
+            if done:
+                param_changes['rev'] += 1
+                param_changes['values'] = dict(done)
+                param_changes['by'] = who
             if err:
                 log_mavlink(f"PARAM WRITE STOPPED — {err}")
                 return {'ok': False, 'msg': f'Wrote {len(done)}/{len(changes)} — stopped: {err}', 'values': done}
             return {'ok': True, 'msg': f'Wrote and confirmed {len(done)} parameter(s) on the Pixhawk', 'values': done}
+
+        elif action == 'goto':
+            return goto_point(mav, cmd)
+
+        elif action == 'motor_test':
+            return motor_test(mav, cmd)
+
+        elif action in ('log_list', 'log_detail', 'log_file'):
+            return mission_files(action, cmd)
 
         elif action == 'wp_download':
             home = (home_state['lat'], home_state['lon']) if home_state.get('set') else None
@@ -1520,6 +1731,7 @@ def build_telemetry_payload(include_mission=True):
     if include_mission:
         payload['vehicle_mission'] = vehicle_mission.snapshot()
         payload.update(failsafe_payload(now))
+        payload['param_rev'] = param_changes
         send_defs = now - _asc_defs_sent[0] > 10          # check names/groups every 10 s; states every frame
         if send_defs:
             _asc_defs_sent[0] = now

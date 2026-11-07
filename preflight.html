@@ -256,8 +256,9 @@ const CHECKS = {
       check: d => d.battery != null ? (d.battery >= 50 ? 'pass' : d.battery >= 25 ? 'warn' : 'fail') : 'pending',
       live: d => d.battery != null ? `${Math.round(d.battery)}% · ${d.voltage?.toFixed(1)||'--'}V` : '--' },
     { id:'v-voltage',  label:'Cell Voltage ≥ 3.8V',       desc:'Each cell should read at least 3.8V at rest', type:'auto',
-      check: d => d.cell_voltage != null ? (d.cell_voltage >= 3.8 ? 'pass' : d.cell_voltage >= 3.6 ? 'warn' : 'fail') : 'pending',
-      live: d => d.cell_voltage ? `${d.cell_voltage.toFixed(3)} V/cell` : '--' },
+      // 6S pack: per-cell = pack voltage / 6 (the Jetson does not report per-cell readings)
+      check: d => { const cv = d.cell_voltage ?? (d.voltage > 1 ? d.voltage / 6 : null); return cv != null ? (cv >= 3.8 ? 'pass' : cv >= 3.6 ? 'warn' : 'fail') : 'pending'; },
+      live: d => { const cv = d.cell_voltage ?? (d.voltage > 1 ? d.voltage / 6 : null); return cv ? `${cv.toFixed(3)} V/cell (6S avg)` : '--'; } },
     { id:'v-motors',   label:'Motors Free & Undamaged',    desc:'Spin each motor by hand — smooth, no grinding or wobble', type:'manual' },
     { id:'v-esc',      label:'ESC Outputs Nominal',        desc:'M1–M4 all responding at idle (1000 μs)', type:'auto',
       check: d => d.m1 != null ? (d.m1 >= 990 && d.m1 <= 1100 ? 'pass' : 'warn') : 'pending',
@@ -285,13 +286,13 @@ const CHECKS = {
       check: d => d.ekf_healthy === undefined ? 'pending' : d.ekf_healthy ? 'pass' : 'fail',
       live: d => d.ekf_healthy === undefined ? '--' : d.ekf_healthy ? 'HEALTHY' : 'DEGRADED' },
     { id:'n-compass',  label:'Compass Calibrated',         desc:'Magnetometer calibrated, low interference', type:'auto',
-      check: d => d.sensors_health != null ? (!!(d.sensors_health & 0x100) ? 'pass' : 'fail') : 'pending',
+      check: d => { const h=d.sensor_health&&d.sensor_health['mag'];return h==null||h==='unknown'?'pending':h==='ok'?'pass':'fail'; },     // decoded SYS_STATUS from the Jetson
       live: d => d.ekf_compass_variance != null ? `Variance ${d.ekf_compass_variance.toFixed(4)}` : '--' },
     { id:'n-imu',      label:'IMU Sensors Healthy',        desc:'All inertial measurement sensors reporting normally', type:'auto',
-      check: d => d.sensors_health != null ? (!!(d.sensors_health & 0x3F) ? 'pass' : 'fail') : 'pending',
+      check: d => { const h=d.sensor_health&&d.sensor_health['imu'];return h==null||h==='unknown'?'pending':h==='ok'?'pass':'fail'; },
       live: d => d.roll != null ? `Roll ${(r2d(d.roll)).toFixed(1)}° Pitch ${(r2d(d.pitch||0)).toFixed(1)}°` : '--' },
     { id:'n-baro',     label:'Barometer Nominal',          desc:'Altitude reading stable and plausible', type:'auto',
-      check: d => d.alt != null ? 'pass' : 'pending',
+      check: d => { const h=d.sensor_health&&d.sensor_health.baro;return h==null||h==='unknown'?(d.alt!=null?'warn':'pending'):h==='ok'?'pass':'fail'; },
       live: d => d.alt != null ? `${d.alt.toFixed(1)} m AGL · ${d.alt_msl?.toFixed(0)||'--'} m MSL` : '--' },
     { id:'n-lidar',    label:'Lidar Rangefinder Active',   desc:'Range data available and within sensor limits', type:'auto',
       check: d => d.rangefinder != null ? (d.rangefinder > 0.05 && d.rangefinder < 12 ? 'pass' : 'warn') : 'pending',
@@ -317,7 +318,7 @@ const CHECKS = {
     { id:'c-weather',  label:'Weather Assessment Done',    desc:'Wind speed, gusts, precipitation, visibility checked', type:'manual' },
     { id:'c-area',     label:'Flight Area Clear',          desc:'No people, obstacles or hazards in takeoff zone', type:'manual' },
     { id:'c-arm-test', label:'Arm / Disarm Test',          desc:'Test arm and immediately disarm before final takeoff', type:'manual' },
-    { id:'c-cpu',      label:'CPU Load Nominal',           desc:'Flight controller CPU load below 80%', type:'auto',
+    { id:'c-cpu',      label:'Jetson CPU Load Nominal',    desc:'Jetson companion computer CPU load below 80%', type:'auto',
       check: d => d.cpu != null ? (d.cpu < 60 ? 'pass' : d.cpu < 80 ? 'warn' : 'fail') : 'pending',
       live: d => d.cpu != null ? `${Math.round(d.cpu)}% load` : '--' },
     { id:'c-pilot',    label:'Pilot Briefing Complete',    desc:'Emergency procedures reviewed, roles assigned', type:'manual' },
@@ -521,7 +522,7 @@ if(isActual) connectWs(); else runDemo();
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=3"></script>
+<script src="mission-client.js?v=4"></script>
 <script src="mission-ui.js?v=3"></script>
 </body>
 </html>

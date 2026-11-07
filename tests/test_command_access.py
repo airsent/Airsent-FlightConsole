@@ -14,7 +14,7 @@ class Socket:
   except StopIteration:raise StopAsyncIteration
 class AccessTests(unittest.IsolatedAsyncioTestCase):
  async def run_role(self,role):
-  target=Socket({});ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role,jetson={'cmd':target},browsers={'cmd':set()},JOURNAL=type('Journal',(),{'append':lambda *a:None})())
+  target=Socket({});ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role,jetson={'cmd':target},browsers={'cmd':set()},JOURNAL=type('Journal',(),{'append':lambda *a:None})(),QUIET_ACTIONS=set(),remember=lambda *a:None)
   exec(compile(ast.Module(body=[node],type_ignores=[]),'relay.py','exec'),ns)
   socket=Socket({'type':'command_auth','token':issue_token(role,'test-secret')},['{"action":"test_only"}'])
   await ns['cmd_browser'](socket)
@@ -28,3 +28,16 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
   ns=dict(asyncio=asyncio,json=json,SECRET='test-secret',token_role=token_role)
   exec(compile(ast.Module(body=[node],type_ignores=[]),'relay.py','exec'),ns)
   socket=Socket({'action':'arm'});await ns['cmd_browser'](socket);self.assertEqual(socket.closed['code'],1008)
+
+class DirectReplies(unittest.IsolatedAsyncioTestCase):
+ async def test_direct_reply_goes_only_to_the_requester(self):
+  fns={n.name:n for n in source.body if isinstance(n,(ast.AsyncFunctionDef,ast.FunctionDef)) and n.name in ('cmd_jetson','remember')}
+  a,b=Socket({}),Socket({})
+  ns=dict(asyncio=asyncio,json=json,jetson={'cmd':None},browsers={'cmd':{a,b}},pending={},JOURNAL=type('J',(),{'append':lambda *x:None})(),print=lambda *x:None)
+  exec(compile(ast.Module(body=[fns['remember'],fns['cmd_jetson']],type_ignores=[]),'relay.py','exec'),ns)
+  ns['remember']('r1',a)
+  jet=Socket({},[json.dumps({'ok':True,'request_id':'r1','direct':True,'data':'x'}),json.dumps({'ok':True,'msg':'hello'})])
+  await ns['cmd_jetson'](jet)
+  self.assertEqual(len(a.sent),2)          # its own direct reply + the broadcast
+  self.assertEqual(len(b.sent),1)          # only the broadcast
+  self.assertNotIn('direct',b.sent[0])

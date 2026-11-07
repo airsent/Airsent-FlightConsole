@@ -199,6 +199,12 @@ body.pilot-fixed{
   color:rgba(255,255,255,.65);font-family:var(--mono);font-size:9px;letter-spacing:1px;
   padding:5px 10px;cursor:pointer;transition:all .15s;}
 .map-center-btn:hover{background:var(--bg3);color:var(--t1);}
+.goto-box{display:none;position:absolute;bottom:48px;left:12px;z-index:20;background:rgba(6,13,20,.96);border:1px solid rgba(59,130,246,.5);
+  padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--t1);min-width:210px;}
+.goto-box .gt-t{letter-spacing:2px;color:var(--info);margin-bottom:4px}.goto-box .gt-d{color:var(--t2);margin-bottom:6px}
+.goto-box input{width:56px;background:var(--bg2);color:var(--t1);border:1px solid var(--rule);font:inherit;padding:2px 4px;margin:0 4px}
+.goto-box .gt-b{display:flex;gap:6px;margin-top:8px}.goto-box button{flex:1;height:24px;font:inherit;letter-spacing:1px;cursor:pointer;background:transparent;color:var(--t2);border:1px solid var(--rule)}
+.goto-box #gotoGo{color:var(--info);border-color:rgba(59,130,246,.6);background:rgba(59,130,246,.1)}.goto-box .gt-m{margin-top:6px;color:var(--t2)}.goto-box .gt-m.ok{color:var(--ok)}.goto-box .gt-m.err{color:var(--err)}
 .map-wp-btn{position:absolute;bottom:12px;left:12px;z-index:10;
   background:rgba(10,14,21,.88);border:1px solid rgba(59,130,246,.3);
   color:rgba(59,130,246,.7);font-family:var(--mono);font-size:9px;letter-spacing:1px;
@@ -769,11 +775,33 @@ function toggleWaypoint(){
   E('wpBtn').textContent=waypointMode?'✕ CANCEL WP':'✦ WAYPOINT';
   if(pilotMap)pilotMap.getContainer().style.cursor=waypointMode?'crosshair':'';
 }
+// Tap-to-go: tap the map (in WAYPOINT mode), confirm, and the Jetson flies the drone there in
+// GUIDED. The Jetson enforces the limits (airborne, GUIDED, ≤ 500 m per hop, inside the fence, altitude).
+function hav(a,b,c,d){const r=6371000,p1=a*Math.PI/180,p2=c*Math.PI/180,dp=p2-p1,dl=(d-b)*Math.PI/180;
+  const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*r*Math.asin(Math.sqrt(h));}
 function placeWaypoint(lat,lon){
   if(waypointMarker)pilotMap.removeLayer(waypointMarker);
   waypointMarker=L.marker([lat,lon],{icon:makeWpIcon()}).addTo(pilotMap)
     .bindTooltip('WP',{permanent:true,direction:'top'});
   toggleWaypoint();
+  if(!canSendCommands&&appMode!=='demo'){return;}
+  const have=S.lat||S.lon, dist=have?hav(S.lat,S.lon,lat,lon):null;
+  let box=E('gotoBox');
+  if(!box){box=document.createElement('div');box.id='gotoBox';box.className='goto-box';E('mapPanel').appendChild(box);}
+  box.innerHTML=`<div class="gt-t">FLY HERE?</div><div class="gt-d">${dist!==null?Math.round(dist)+' m away':'no position fix'}</div>
+    <label>ALT <input id="gotoAlt" type="number" min="2" max="115" step="1" value="${Math.max(2,Math.round(S.alt||5))}"> m</label>
+    <div class="gt-b"><button id="gotoGo" type="button">✦ FLY HERE</button><button id="gotoCancel" type="button">CANCEL</button></div><div class="gt-m" id="gotoMsg"></div>`;
+  box.style.display='block';
+  E('gotoCancel').onclick=()=>{box.style.display='none';if(waypointMarker){pilotMap.removeLayer(waypointMarker);waypointMarker=null;}};
+  E('gotoGo').onclick=async()=>{
+    const alt=Number(E('gotoAlt').value);
+    E('gotoGo').disabled=true;E('gotoMsg').textContent='Sending…';
+    const r=window.airsentMission?await window.airsentMission.send('goto',{lat,lon,alt},{timeout:5000}):{ok:false,msg:'Command link not loaded'};
+    E('gotoGo').disabled=false;
+    E('gotoMsg').textContent=(r.ok?'✓ ':'✗ ')+r.msg;E('gotoMsg').className='gt-m '+(r.ok?'ok':'err');
+    if(r.ok){waypointMarker&&waypointMarker.setTooltipContent('GOING');setTimeout(()=>{box.style.display='none';},2500);}
+    if(typeof appendMavLog==='function')appendMavLog('GOTO: '+r.msg,!r.ok);
+  };
 }
 function updateMapBorder(ft){
   const p=E('mapPanel');p.classList.remove('fix-3d','fix-rtk');
@@ -825,15 +853,15 @@ function setUnits(u){
 
 /* ── SIGNAL LOST ── */
 function startLinkLost(){
+  // This console lost the telemetry link. What the aircraft does is decided on the Jetson:
+  // joystick input stops after 1 s; ASC holds at 10 s and returns home at 30 s (GUIDED/AUTO only).
   if(linkLostTimer)return;
-  linkLostCountdown=15;
+  linkLostCountdown=0;
   E('linkWarn').classList.add('on');
   E('sigCountdown').classList.add('on');
-  linkLostTimer=setInterval(()=>{
-    linkLostCountdown--;
-    E('sigCountdown').textContent='FAILSAFE IN '+linkLostCountdown+'s';
-    if(linkLostCountdown<=0){clearInterval(linkLostTimer);linkLostTimer=null;}
-  },1000);
+  const draw=()=>{E('sigCountdown').textContent='NO LINK '+linkLostCountdown+'s · ASC: HOLD AT 10s · HOME AT 30s (GUIDED/AUTO)';};
+  draw();
+  linkLostTimer=setInterval(()=>{linkLostCountdown++;draw();},1000);
 }
 function clearLinkLost(){
   if(linkLostTimer){clearInterval(linkLostTimer);linkLostTimer=null;}
@@ -1948,7 +1976,7 @@ drawHUD(); drawDowncam();
 setInterval(()=>{drawAltProfile();drawWind();},500);
 </script>
 <script src="pilot-quick-settings.js?v=2"></script>
-<script src="mission-client.js?v=3"></script>
+<script src="mission-client.js?v=4"></script>
 <script src="mission-ui.js?v=3"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
