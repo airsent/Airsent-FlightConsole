@@ -1,4 +1,5 @@
 import os
+from pilot_settings import PilotSettings
 from datalink_telemetry import start_monitor
 import asyncio
 import websockets
@@ -278,6 +279,7 @@ last_mav_report = 0.0
 
 mav_conn = None
 mav_lock = threading.Lock()
+pilot_settings = PilotSettings(os.environ.get("AIRSENT_PILOT_SETTINGS_FILE", os.path.expanduser("~/.config/airsent/pilot-settings.json")))
 
 mavlink_log = []
 mavlink_log_lock = threading.Lock()
@@ -298,7 +300,8 @@ downcam_device_available = False
 cam_color_buf = {'frame': None}
 cam_buf_lock  = threading.Lock()
 
-stop_dist_global = 2.0
+stop_dist_global = pilot_settings.values["stop_distance"]
+detection_active = pilot_settings.values["detection"]
 
 downcam_raw = {'frame': None}
 downcam_jpg = {'b64': None}
@@ -501,6 +504,9 @@ def mavlink_reader():
             print(f"[MAV] Pixhawk connected — system {mav.target_system}")
             with mav_lock:
                 mav_conn = mav
+            pilot_settings.reset()
+            pilot_settings.request_parameters(mav)
+            settings_poll_at = time.monotonic()
             mav.mav.request_data_stream_send(
                 mav.target_system, mav.target_component,
                 mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1
@@ -520,6 +526,8 @@ def mavlink_reader():
                             pass
                         break
                     continue
+                if time.monotonic()-settings_poll_at > 15:
+                    pilot_settings.request_parameters(mav);settings_poll_at=time.monotonic()
                 t = msg.get_type()
                 if t == 'BAD_DATA': continue
                 if msg.get_srcSystem() != hb.get_srcSystem() or msg.get_srcComponent() != hb.get_srcComponent():
@@ -531,7 +539,9 @@ def mavlink_reader():
                 if _now - last_mav_report > 5:
                     last_mav_report = _now
                     print(f"[MAV] alive {t} mode={telem.get('flight_mode')} sats={telem.get('sats')} rssi={telem.get('rssi')}")
-                if t == 'ATTITUDE':
+                if t == 'PARAM_VALUE':
+                    pilot_settings.observe(msg)
+                elif t == 'ATTITUDE':
                     telem['roll']  = round(math.degrees(msg.roll), 1)
                     telem['pitch'] = round(math.degrees(msg.pitch), 1)
                     telem['yaw']   = round((math.degrees(msg.yaw)+360)%360, 1)
@@ -746,10 +756,15 @@ def process_command(raw):
         mav = mav_conn
 
     if mav is None:
-        return {'ok': False, 'msg': 'No MAVLink connection'}
+        return {'ok': False, 'msg': 'No MAVLink connection','type':'pilot_setting_result' if action=='pilot_setting' else 'command_error','request_id':cmd.get('request_id')}
 
     try:
-        if action == 'set_guided':
+        if action == 'pilot_setting':
+            if time.time()-last_mav_heartbeat>=3:raise ValueError('Fresh aircraft heartbeat required')
+            snapshot=pilot_settings.apply(mav,cmd.get('key'),cmd.get('value'),cmd.get('revision'),armed=bool(telem.get('armed')))
+            detection_active=pilot_settings.values['detection'];stop_dist_global=pilot_settings.values['stop_distance']
+            return {'ok':True,'type':'pilot_setting_result','request_id':cmd.get('request_id'),'settings':snapshot,'msg':'Setting confirmed'}
+        elif action == 'set_guided':
             set_guided_mode(mav)
             return {'ok': True, 'msg': 'Switching to GUIDED'}
 
@@ -777,7 +792,8 @@ def process_command(raw):
 
         elif action == 'takeoff':
             if SIM_MODE: vel_last_cmd_ts = 0.0
-            alt = float(cmd.get('alt', 2.0))
+            alt = float(cmd.get('alt', pilot_settings.values['takeoff_alt']))
+            if not math.isfinite(alt) or alt<1 or alt>50:raise ValueError('Invalid takeoff altitude')
             send_takeoff(mav, alt)
             return {'ok': True, 'msg': f'TAKEOFF to {alt}m'}
 
@@ -786,6 +802,7 @@ def process_command(raw):
             vy = float(cmd.get('vy', 0))
             vz = float(cmd.get('vz', 0))
             yr = float(cmd.get('yaw_rate', 0))
+            vx,vy,vz,yr=pilot_settings.clamp_velocity(vx,vy,vz,yr)
 
             if obstacle_blocked and vx > 0:
                 vx = 0.0
@@ -834,16 +851,12 @@ def process_command(raw):
             set_mode(mav, 3, 'AUTO')
             return {'ok': True, 'msg': 'Switching to AUTO (mission)'}
 
-        elif action == 'set_detection':
-            global detection_active
-            detection_active = bool(cmd.get('on', True))
-            log_mavlink(f"DETECTION {'ENABLED' if detection_active else 'DISABLED'}")
-            return {'ok': True, 'msg': f"detection={'on' if detection_active else 'off'}"}
-
-        elif action == 'set_stop_dist':
-            stop_dist_global = float(cmd.get('dist', 2.0))
-            log_mavlink(f"STOP_DIST updated -> {stop_dist_global}m")
-            return {'ok': True, 'msg': f'Stop dist={stop_dist_global}m'}
+        elif action in ('set_detection','set_stop_dist'):
+            key='detection' if action=='set_detection' else 'stop_distance'
+            value=cmd.get('on') if key=='detection' else cmd.get('dist')
+            pilot_settings.apply(mav,key,value,pilot_settings.revision,armed=bool(telem.get('armed')))
+            detection_active=pilot_settings.values['detection'];stop_dist_global=pilot_settings.values['stop_distance']
+            return {'ok':True,'msg':'Companion setting confirmed'}
 
         elif action == 'buzzer':
             # Play a tone on the flight controller's buzzer (the one on the GPS
@@ -887,7 +900,7 @@ def process_command(raw):
 
     except Exception as e:
         print(f"[CMD] Error: {e}")
-        return {'ok': False, 'msg': str(e)}
+        return {'ok': False, 'msg': str(e), 'type':'pilot_setting_result' if action=='pilot_setting' else 'command_error', 'request_id':cmd.get('request_id')}
 
 
 async def cmd_handler(websocket):
@@ -896,7 +909,7 @@ async def cmd_handler(websocket):
     print(f"[CMD] Client: {websocket.remote_address}")
     try:
         async for raw in websocket:
-            reply = process_command(raw)
+            reply = await asyncio.to_thread(process_command, raw)
             await websocket.send(json.dumps(reply))
     except websockets.exceptions.ConnectionClosed:
         print("[CMD] Disconnected")
@@ -950,7 +963,9 @@ def build_telemetry_payload():
         payload['detections'] = list(detections)
     with proximity_lock:
         payload['proximity'] = dict(proximity)
+    payload['pilot_settings'] = pilot_settings.snapshot(payload['pixhawk_connected'])
     payload['detection_active'] = detection_active
+    payload['stop_distance'] = stop_dist_global
     of_offline  = (_sensor_ts['of']          == 0 or (now - _sensor_ts['of'])          > SENSOR_TIMEOUT)
     rng_offline = (_sensor_ts['rangefinder'] == 0 or (now - _sensor_ts['rangefinder']) > SENSOR_TIMEOUT
                    or of_offline)
@@ -1760,7 +1775,7 @@ async def vps_cmd_relay():
             print("[VPS] Command relay connected")
 
             async for raw in remote:
-                reply = process_command(raw)
+                reply = await asyncio.to_thread(process_command, raw)
                 try:
                     await remote.send(json.dumps(reply))
                 except Exception:

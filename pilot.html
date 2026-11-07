@@ -245,7 +245,7 @@ body.pilot-fixed{
 #obstBadgeTxt{font-size:9px!important;letter-spacing:1.2px!important;}
 .qs-panel{position:fixed;top:68px;right:14px;z-index:500;
   background:var(--bg1);border:1px solid var(--rule);padding:14px 16px;min-width:260px;
-  box-shadow:0 16px 48px rgba(0,0,0,.9);display:none;}
+  box-shadow:0 16px 48px rgba(0,0,0,.9);display:none;max-height:calc(100vh - 88px);overflow-y:auto;max-width:calc(100vw - 28px);}
 .qs-panel.open{display:block;}
 .qs-title{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t3);
   text-transform:uppercase;margin-bottom:12px;border-bottom:1px solid var(--rule2);padding-bottom:8px;}
@@ -284,6 +284,8 @@ body.pilot-fixed{
 <!-- QUICK SETTINGS PANEL -->
 <div class="qs-panel" id="qsPanel">
   <div class="qs-title">Quick Settings</div>
+  <div id="qsApplyStatus" role="status" style="font-size:10px;color:var(--t2);margin-bottom:10px">Connecting to aircraft settings…</div>
+  <div id="qsFenceState" style="font-size:9px;color:var(--warn);margin-bottom:8px"></div>
   <div class="units-tog settings-units">
     <button class="ubtn active" id="uMetric" onclick="setUnits('metric')">Metric</button>
     <div class="msep"></div>
@@ -291,57 +293,57 @@ body.pilot-fixed{
   </div>
   <div class="qs-row">
     <span>RTH Altitude</span>
-    <input type="range" min="10" max="120" value="30" oninput="E('qsRthVal').textContent=this.value+'m';qsRTH=+this.value">
+    <input type="range" min="10" max="120" value="30" data-pilot-setting="rth_alt">
     <span class="qs-val" id="qsRthVal">30m</span>
   </div>
   <div class="qs-row">
-    <span>Geofence</span>
-    <input type="range" min="20" max="500" value="50" step="10" oninput="E('qsGeoVal').textContent=this.value+'m';updateGeofence(+this.value)">
+    <span>Fence Radius</span>
+    <input type="range" min="20" max="500" value="50" step="10" data-pilot-setting="fence_radius">
     <span class="qs-val" id="qsGeoVal">50m</span>
   </div>
   <div class="qs-row">
-    <span>Max Speed</span>
-    <input type="range" min="2" max="20" value="10" oninput="E('qsSpdVal').textContent=this.value+' m/s';qsMaxSpd=+this.value">
+    <span>Nav Max Speed</span>
+    <input type="range" min="2" max="20" value="10" data-pilot-setting="max_speed">
     <span class="qs-val" id="qsSpdVal">10 m/s</span>
   </div>
   <div class="qs-row">
-    <span>Max Altitude</span>
-    <input type="range" min="10" max="120" value="50" oninput="E('qsAltVal').textContent=this.value+'m';qsMaxAlt=+this.value">
+    <span>Fence Max Altitude</span>
+    <input type="range" min="10" max="120" value="50" data-pilot-setting="max_alt">
     <span class="qs-val" id="qsAltVal">50m</span>
   </div>
   <div class="qs-row">
     <span>Takeoff Altitude</span>
-    <input type="range" min="1" max="50" value="5" oninput="E('qsTakeoffVal').textContent=this.value+'m';qsTakeoffAlt=+this.value">
+    <input type="range" min="1" max="50" value="5" data-pilot-setting="takeoff_alt">
     <span class="qs-val" id="qsTakeoffVal">5m</span>
   </div>
   <div style="border-top:1px solid var(--rule2);margin:8px 0 8px;padding-top:8px;">
     <div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:10px;">OBSTACLE AVOIDANCE</div>
     <div class="qs-row">
       <span>Stop Distance</span>
-      <input type="range" min="0.5" max="5" value="2" step="0.5" oninput="E('qsObstVal').textContent=this.value+'m';qsObstStop=+this.value;sendCmd({action:'set_stop_dist',dist:qsObstStop})">
+      <input type="range" min="0.5" max="5" value="2" step="0.5" data-pilot-setting="stop_distance">
       <span class="qs-val" id="qsObstVal">2m</span>
     </div>
     <div style="border-top:1px solid var(--rule2);margin:8px 0 8px;padding-top:8px;">
     <div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:10px;">MANUAL CONTROL SENSITIVITY</div>
     <div class="qs-row">
       <span>Move Speed</span>
-      <input type="range" min="0.5" max="8" value="2" step="0.5" oninput="E('qsMovVal').textContent=this.value+' m/s';sensMov=+this.value">
+      <input type="range" min="0.5" max="8" value="2" step="0.5" data-pilot-setting="move_speed">
       <span class="qs-val" id="qsMovVal">2 m/s</span>
     </div>
     <div class="qs-row">
       <span>Climb Rate</span>
-      <input type="range" min="0.2" max="3" value="1" step="0.2" oninput="E('qsClimbVal').textContent=this.value+' m/s';sensClimb=+this.value">
+      <input type="range" min="0.2" max="3" value="1" step="0.2" data-pilot-setting="climb_rate">
       <span class="qs-val" id="qsClimbVal">1 m/s</span>
     </div>
     <div class="qs-row">
       <span>Yaw Rate</span>
-      <input type="range" min="0.1" max="1.5" value="0.5" step="0.1" oninput="E('qsYawVal').textContent=this.value+' r/s';sensYaw=+this.value">
+      <input type="range" min="0.1" max="1.5" value="0.5" step="0.1" data-pilot-setting="yaw_rate">
       <span class="qs-val" id="qsYawVal">0.5 r/s</span>
     </div>
   </div>
     <div class="qs-row" style="margin-bottom:0">
       <span>Detection Active</span>
-      <div onclick="toggleObstDetection()" style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+      <div data-pilot-detection onclick="toggleObstDetection()" style="display:flex;align-items:center;gap:7px;cursor:pointer;">
         <span id="obstDetLbl" style="font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--ok)">ON</span>
         <div id="obstDetTrack" style="width:28px;height:14px;border-radius:7px;background:var(--ok);
           position:relative;transition:background .2s;flex-shrink:0;">
@@ -1018,6 +1020,7 @@ function connectTelem(){
           proximityObstacle = obstDetectionOn ? !!d.proximity.obstacle : false;
           proximityDist = (d.proximity.dist !== undefined) ? d.proximity.dist : -1;
         }
+        window.AirsentPilotSettings?.receive(d.pilot_settings, d.pixhawk_connected===true && Number.isFinite(d.telemetry_age) && d.telemetry_age<2, !!d.armed);
         if(d.detection_active !== undefined) applyDetectionState(!!d.detection_active);
         const lidarValid=S.rangefinder>0.05&&S.rangefinder<12;
         S.alt=lidarValid?(S.rangefinder_agl??S.rangefinder):(d.alt??S.alt);
@@ -1095,6 +1098,7 @@ function setObstUI(on){
 }
 
 function toggleObstDetection(){
+  if(window.AirsentPilotSettings){return window.AirsentPilotSettings.submit('detection',!obstDetectionOn);}
   if(isViewerMode) return;
   obstDetectionOn = !obstDetectionOn;
   sendCmd({action:'set_detection', on: obstDetectionOn});
@@ -1119,6 +1123,7 @@ function connectCmd(){
     cmdWs.onmessage=ev=>{
       try{
         const d=JSON.parse(ev.data);
+        window.AirsentPilotSettings?.reply(d);
         if(d.log) updateMavLog(d.log);
         if(d.msg) appendMavLog(d.msg, d.blocked);
       }catch(_){}
@@ -1898,6 +1903,7 @@ setMode('auto'); setUnits('metric');
 drawHUD(); drawDowncam();
 setInterval(()=>{drawAltProfile();drawWind();},500);
 </script>
+<script src="pilot-quick-settings.js?v=2"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
 </body>
