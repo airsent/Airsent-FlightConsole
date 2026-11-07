@@ -987,8 +987,9 @@ FAILSAFE_PARAMS = ['FS_THR_ENABLE', 'FS_THR_VALUE', 'RC_FS_TIMEOUT',
                    'FS_GCS_ENABLE', 'FS_GCS_TIMEOUT', 'SYSID_MYGCS',
                    'FS_EKF_ACTION', 'FS_EKF_THRESH',
                    'FENCE_ENABLE', 'FENCE_ACTION', 'FENCE_TYPE', 'FENCE_ALT_MAX', 'FENCE_RADIUS',
-                   'FS_CRASH_CHECK', 'ARMING_CHECK', 'FS_VIBE_ENABLE',
-                   'RTL_ALT', 'RTL_ALT_FINAL', 'RTL_LOIT_TIME', 'RTL_SPEED']
+                   'FS_CRASH_CHECK', 'ARMING_SKIPCHK', 'ARMING_CHECK', 'FS_VIBE_ENABLE',
+                   # newer ArduPilot names first, older ones as fallback (only one of each exists)
+                   'RTL_ALT_M', 'RTL_ALT', 'RTL_ALT_FINAL_M', 'RTL_ALT_FINAL', 'RTL_LOIT_TIME', 'RTL_SPEED_MS', 'RTL_SPEED']
 _failsafe_rules_sent = [0.0]
 _asc_defs_sent = [0.0]
 
@@ -998,8 +999,13 @@ def failsafe_payload(now):
     out = {'failsafe_params': param_store.snapshot(FAILSAFE_PARAMS)}
     if now - _failsafe_rules_sent[0] > 10:
         _failsafe_rules_sent[0] = now
-        out['failsafe_rules'] = {n: {k: v for k, v in r.items() if k in ('value', 'min', 'max', 'in')}
-                                 for n, r in golden.rules.items() if n in FAILSAFE_PARAMS}
+        strip = lambda r: {k: v for k, v in r.items() if k in ('value', 'min', 'max', 'in')}
+        rules = {}
+        for n, r in golden.rules.items():
+            for name, rule in [(n, r)] + list((r.get('alt') or {}).items()):
+                if name in FAILSAFE_PARAMS:
+                    rules[name] = strip(rule)
+        out['failsafe_rules'] = rules
     return out
 
 

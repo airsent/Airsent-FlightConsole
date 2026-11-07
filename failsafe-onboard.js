@@ -22,6 +22,14 @@
                      [4, 'Brake, else Land', 'BRAKE'], [5, 'SmartRTL, else Land', 'SMARTRTL']];
   const ON_OFF = [[0, 'Off', 'OFF'], [1, 'On', 'ON']];
 
+  // Return altitude (metres) vs the fence ceiling: an RTL that climbs into the fence breaches it.
+  function rtlAltWarn(m, vals) {
+    const ceil = vals.FENCE_ALT_MAX;
+    if (vals.FENCE_ENABLE === 1 && ceil && m >= ceil - 5) return { state: 'bad', note: `at/above the ${ceil} m fence ceiling — RTL would breach the fence` };
+    if (m > 60) return { state: 'warn', note: `${Math.round(m)} m is very high for a return — 20–40 m is typical` };
+    return null;
+  }
+
   // p: name, label, opts | unit/min/max/step, int, scale (shown = raw * scale), rec (raw), primary
   const DEFS = [
     { id: 'rc', tile: 6, rule: 0, title: 'RC signal lost', dash: 'RC LOSS',
@@ -66,22 +74,36 @@
       params: [{ name: 'FS_VIBE_ENABLE', label: 'Vibration compensation', opts: ON_OFF, int: true, rec: 1, primary: true }] },
     { id: 'prearm', tile: 1, rule: 11, title: 'Pre-arm checks', dash: 'PRE-ARM',
       what: 'Checks the Pixhawk runs before it allows arming. 1 = all checks. Never set 0.',
-      params: [{ name: 'ARMING_CHECK', label: 'Checks (1 = all)', min: 0, max: 1048575, step: 1, int: true, rec: 1, primary: true, okIf: v => v !== 0, show: v => (v === 1 ? 'ALL' : v === 0 ? 'NONE' : 'CUSTOM') }] },
+      params: [{ name: 'ARMING_SKIPCHK', label: 'Checks skipped (0 = none skipped — every check runs)', min: 0, max: 1048575, step: 1, int: true, rec: 0, primary: true,
+                 okIf: v => v === 0, show: v => (v === 0 ? 'ALL' : 'SKIPS SOME'),
+                 alt: { name: 'ARMING_CHECK', label: 'Checks (1 = all)', rec: 1, okIf: v => v !== 0, show: v => (v === 1 ? 'ALL' : v === 0 ? 'NONE' : 'CUSTOM') } }] },
     { id: 'rtl', tile: 10, rule: 17, title: 'Return to home', dash: 'RETURN HOME',
       what: 'How every RTL action above flies home: climb to the return altitude, fly back, loiter, then land.',
       params: [
-        { name: 'RTL_ALT', label: 'Return altitude', unit: 'm', scale: 0.01, min: 2, max: 120, step: 1, int: true, primary: true, show: v => Math.round(v / 100) + ' M' },
-        { name: 'RTL_SPEED', label: 'Return speed (0 = waypoint speed)', unit: 'm/s', scale: 0.01, min: 0, max: 20, step: 0.5, int: true },
+        { name: 'RTL_ALT_M', label: 'Return altitude', unit: 'm', min: 2, max: 120, step: 1, primary: true, show: v => Math.round(v) + ' M', warnIf: rtlAltWarn,
+          alt: { name: 'RTL_ALT', scale: 0.01, int: true, show: v => Math.round(v / 100) + ' M' } },
+        { name: 'RTL_SPEED_MS', label: 'Return speed (0 = waypoint speed)', unit: 'm/s', min: 0, max: 20, step: 0.5,
+          alt: { name: 'RTL_SPEED', scale: 0.01, int: true } },
         { name: 'RTL_LOIT_TIME', label: 'Loiter over home before landing', unit: 's', scale: 0.001, min: 0, max: 60, step: 1, int: true },
-        { name: 'RTL_ALT_FINAL', label: 'Final altitude (0 = land)', unit: 'm', scale: 0.01, min: 0, max: 50, step: 1, int: true, rec: 0 }] },
+        { name: 'RTL_ALT_FINAL_M', label: 'Final altitude (0 = land)', unit: 'm', min: 0, max: 50, step: 1, rec: 0,
+          alt: { name: 'RTL_ALT_FINAL', scale: 0.01, int: true, rec: 0 } }] },
   ];
-  const ALL_NAMES = DEFS.flatMap(d => d.params.map(p => p.name));
+  const ALL_NAMES = DEFS.flatMap(d => d.params.flatMap(p => p.alt ? [p.name, p.alt.name] : [p.name]));
+  // Newer ArduPilot renamed some parameters (RTL_ALT → RTL_ALT_M, ARMING_CHECK → ARMING_SKIPCHK …):
+  // use whichever name this Pixhawk reports.
+  const R = p => {
+    if (!p.alt) return p;
+    const v = values();
+    if (v[p.name] === undefined && v[p.alt.name] !== undefined) { const { alt, ...base } = p; return { ...base, scale: undefined, int: undefined, ...alt }; }
+    return p;
+  };
+  const params = def => def.params.map(R);
 
   // Demo drone: recommended values, with one setting off so the "check" state is visible.
   const demoValues = {};
-  DEFS.forEach(d => d.params.forEach(p => { demoValues[p.name] = p.rec ?? ({ FENCE_ALT_MAX: 60, FENCE_RADIUS: 300, RTL_ALT: 3000, RTL_SPEED: 0, RTL_LOIT_TIME: 5000, BATT_LOW_MAH: 0, BATT_CRT_MAH: 0 }[p.name] ?? 0); }));
+  DEFS.forEach(d => d.params.forEach(p => { demoValues[p.name] = p.rec ?? ({ FENCE_ALT_MAX: 60, FENCE_RADIUS: 300, RTL_ALT_M: 30, RTL_SPEED_MS: 0, RTL_LOIT_TIME: 5000, BATT_LOW_MAH: 0, BATT_CRT_MAH: 0 }[p.name] ?? 0); }));
   demoValues.FS_VIBE_ENABLE = 0;
-  const demoRules = { FS_THR_ENABLE: { value: 1 }, FS_GCS_ENABLE: { in: [1, 5] }, FS_EKF_ACTION: { value: 1 }, FS_CRASH_CHECK: { value: 1 }, ARMING_CHECK: { value: 1 },
+  const demoRules = { FS_THR_ENABLE: { value: 1 }, FS_GCS_ENABLE: { in: [1, 5] }, FS_EKF_ACTION: { value: 1 }, FS_CRASH_CHECK: { value: 1 }, ARMING_SKIPCHK: { value: 0 },
     BATT_FS_LOW_ACT: { value: 2 }, BATT_FS_CRT_ACT: { value: 1 }, BATT_LOW_VOLT: { value: 21.6 }, BATT_CRT_VOLT: { value: 21.0 }, FENCE_ENABLE: { value: 1 },
     FENCE_ALT_MAX: { min: 10, max: 120 }, FENCE_ACTION: { in: [1, 4] } };
 
@@ -104,6 +126,7 @@
     if (v === undefined) return { state: 'unknown', note: 'not read' };
     if (!ruleOk(rl[p.name], v)) return { state: 'bad', note: `launch check needs ${ruleText(rl[p.name])} — the countdown would HOLD` };
     if (p.okIf && !p.okIf(v)) return { state: 'bad', note: 'unsafe' };
+    if (p.warnIf) { const w = p.warnIf(p.scale ? v * p.scale : v, values()); if (w) return w; }
     if (p.rec !== undefined && !near(v, p.rec)) return { state: 'warn', note: `recommended ${p.opts ? optLabel(p, p.rec) : shown(p, p.rec) + (p.unit ? ' ' + p.unit : '')}` };
     return { state: 'ok', note: '' };
   }
@@ -115,15 +138,15 @@
   function status(def) {
     const trig = triggered(def);
     if (trig) return { state: 'trig', text: 'TRIGGERED', title: trig.text };
-    const v = values(), rl = rules(), prim = def.params.find(p => p.primary);
+    const v = values(), rl = rules(), ps = params(def), prim = ps.find(p => p.primary);
     if (v[prim.name] === undefined) return { state: 'unknown', text: '—', title: fresh() ? 'Not reported by the Pixhawk' : 'Waiting for the Jetson' };
-    const states = def.params.map(p => paramStatus(p, v[p.name], rl));
+    const states = ps.map(p => paramStatus(p, v[p.name], rl));
     let text = prim.show ? prim.show(v[prim.name]) : prim.opts ? optLabel(prim, v[prim.name], true) : String(shown(prim, v[prim.name]));
-    if (prim.gate && near(v[prim.name], 1)) { const act = def.params.find(p => p.show === true); if (act && v[act.name] !== undefined) text = optLabel(act, v[act.name], true); }
-    if (def.id === 'battery' && v.BATT_FS_CRT_ACT !== undefined) text += '/' + optLabel(def.params[3], v.BATT_FS_CRT_ACT, true);
+    if (prim.gate && near(v[prim.name], 1)) { const act = ps.find(p => p.show === true); if (act && v[act.name] !== undefined) text = optLabel(act, v[act.name], true); }
+    if (def.id === 'battery' && v.BATT_FS_CRT_ACT !== undefined) text += '/' + optLabel(ps[3], v.BATT_FS_CRT_ACT, true);
     const off = prim.opts && near(v[prim.name], prim.opts[0][0]) && prim.opts[0][2] === 'OFF';
     const bad = states.some(s => s.state === 'bad'), warn = states.some(s => s.state === 'warn');
-    const notes = def.params.map((p, i) => states[i].note && states[i].state !== 'unknown' ? `${p.name}: ${states[i].note}` : '').filter(Boolean);
+    const notes = ps.map((p, i) => states[i].note && states[i].state !== 'unknown' ? `${p.name}: ${states[i].note}` : '').filter(Boolean);
     return { state: off || bad ? 'bad' : warn ? 'warn' : 'ok', text: off ? 'OFF' : text, title: notes.join('\n') || 'Matches the recommended setting' };
   }
   const issues = () => DEFS.filter(d => ['bad', 'warn'].includes(status(d).state)).length;
@@ -190,7 +213,7 @@
         <td>${onDrone}</td><td>${input}</td><td class="fso-st ${st.state}">${esc(stText)}</td></tr>`;
     }
     function render() {
-      tbody.innerHTML = def.params.map(row).join('');
+      tbody.innerHTML = params(def).map(row).join('');
       const changes = pending();
       goBtn.disabled = !canWrite || !Object.keys(changes).length;
       goBtn.textContent = Object.keys(changes).length ? `WRITE ${Object.keys(changes).length} CHANGE(S) TO DRONE` : 'WRITE TO DRONE';
@@ -204,7 +227,7 @@
     }
     tbody.addEventListener('change', e => {
       const el = e.target.closest('[data-p]'); if (!el || el.value === '') return;
-      const p = def.params.find(x => x.name === el.dataset.p);
+      const p = params(def).find(x => x.name === el.dataset.p);
       let raw = Number(el.value);
       if (!p.opts) {
         if (!Number.isFinite(raw) || raw < p.min || raw > p.max) { msg.textContent = `${p.label}: enter ${p.min}–${p.max}${p.unit ? ' ' + p.unit : ''}`; msg.className = 'msg err'; render(); return; }
@@ -213,10 +236,10 @@
       if (p.int) raw = Math.round(raw);
       draft[p.name] = raw; msg.textContent = ''; msg.className = 'msg'; render();
     });
-    recBtn.onclick = () => { def.params.forEach(p => { if (p.rec !== undefined) draft[p.name] = p.rec; }); render(); };
+    recBtn.onclick = () => { params(def).forEach(p => { if (p.rec !== undefined) draft[p.name] = p.rec; }); render(); };
     goBtn.onclick = async () => {
       const changes = pending(); const names = Object.keys(changes); if (!names.length) return;
-      const list = names.map(n => { const p = def.params.find(x => x.name === n); const fmt = r => p.opts ? optLabel(p, r) : shown(p, r) + (p.unit ? ' ' + p.unit : ''); return `${p.label}: ${fmt(values()[n])} → ${fmt(changes[n])}`; }).join('\n');
+      const list = names.map(n => { const p = params(def).find(x => x.name === n); const fmt = r => p.opts ? optLabel(p, r) : shown(p, r) + (p.unit ? ' ' + p.unit : ''); return `${p.label}: ${fmt(values()[n])} → ${fmt(changes[n])}`; }).join('\n');
       if (!confirm(`Write to the Pixhawk?\n\n${list}\n\nEach value is confirmed by reading it back. Blocked while armed.`)) return;
       goBtn.disabled = true; msg.className = 'msg'; msg.textContent = 'Writing…';
       let r;
