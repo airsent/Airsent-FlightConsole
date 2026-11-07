@@ -3,6 +3,7 @@
 # Web files → nginx web root (console-local.js with the map key is never touched),
 # relay + its modules → where the services run, restart the relay, check the services.
 set -euo pipefail
+SELF="$(realpath "$0")"
 cd "$(dirname "$0")/.."
 WEB="${AIRSENT_WEB_ROOT:-/var/www/groundcontrol/groundcontrol}"
 OPT="/opt/airsent"
@@ -11,7 +12,11 @@ RELAY="${RELAY:-/root/relay.py}"
 
 if [ "$(hostname)" = "airsent-desktop" ]; then echo "This is the Jetson — run deploy/deploy_jetson.sh here instead."; exit 1; fi
 [ -d "$WEB" ] || { echo "Web root $WEB not found (set AIRSENT_WEB_ROOT)"; exit 1; }
-git pull --ff-only
+if [ -z "${AIRSENT_DEPLOY_PULLED:-}" ]; then
+  git pull --ff-only
+  # bash reads scripts as it runs: re-run the freshly pulled copy so new files are included
+  AIRSENT_DEPLOY_PULLED=1 exec bash "$SELF" "$@"
+fi
 BACKUP="$HOME/gcs_backup_$(date +%F_%H%M%S)"; cp -r "$WEB" "$BACKUP"; echo "Backed up the live site to $BACKUP"
 
 cp ./*.html ./*.js ./*.css "$WEB/"
