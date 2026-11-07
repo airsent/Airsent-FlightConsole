@@ -142,6 +142,9 @@ body.dashboard-fixed .events-panel .panel-action-group.events-icons{display:flex
 body.dashboard-fixed .events-icons .panel-action-btn{width:28px!important;min-width:28px!important;height:22px!important;padding:0!important;font-size:13px!important;line-height:20px;
   background:#0c1822!important;color:#9be5ff!important;border:1px solid rgba(127,220,255,.25)!important;letter-spacing:0!important}
 body.dashboard-fixed .events-icons .panel-action-btn:hover{border-color:#9be5ff!important;color:#fff!important}
+/* Events log still scrolls (wheel / trackpad / touch), just without the white scrollbar. */
+body.dashboard-fixed .events-panel{scrollbar-width:none;-ms-overflow-style:none}
+body.dashboard-fixed .events-panel::-webkit-scrollbar{display:none;width:0;height:0}
 body.dashboard-fixed .events-icons #eventsPauseBtn.paused{color:#ffb800!important;border-color:rgba(255,184,0,.6)!important}
 body.dashboard-fixed .left-column{grid-template-rows:calc(126px * var(--dashboard-row-scale,1)) calc(238px * var(--dashboard-row-scale,1)) calc(210px * var(--dashboard-row-scale,1)) minmax(0,1fr)!important}
 </style>
