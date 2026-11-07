@@ -4,6 +4,7 @@
 <script src="demo-isolation.js?v=viewer-1"></script>
 <script src="viewer-access.js?v=shared-2"></script>
 <script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
 <script src="console-config.js?v=simulation-map-2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -269,6 +270,14 @@ body.pilot-fixed{
 .bar .brt{flex-wrap:wrap;row-gap:6px;min-width:0;}
 .bar .pilot-stats{gap:16px;flex-wrap:wrap;row-gap:6px;}
 .bar .pilot-actions{gap:8px;margin-right:0;}
+.estop-btn{position:relative;overflow:hidden;height:26px;padding:0 14px;border:1px solid #ff2244;background:rgba(255,34,68,.16);
+  color:#fff;font:700 11px var(--mono,monospace);letter-spacing:2px;cursor:pointer;flex-shrink:0;touch-action:none;user-select:none;}
+.estop-btn small{font-size:7px;letter-spacing:1px;opacity:.75;margin-left:4px;}
+.estop-btn .estop-fill{position:absolute;inset:0;width:0;background:#ff2244;}
+.estop-btn .estop-txt{position:relative;}
+.estop-btn.holding .estop-fill{width:100%;transition:width .6s linear;}
+.estop-btn.sent{background:#ff2244;}
+.estop-btn:disabled{opacity:.35;cursor:not-allowed;}
 .telem-strip{height:auto;min-height:24px;flex-wrap:wrap;row-gap:5px;padding-top:5px;padding-bottom:5px;}
 .ts-item{white-space:nowrap;}
 .qs-btn{color:var(--t2);white-space:nowrap;}
@@ -431,6 +440,9 @@ body.pilot-fixed{
   <div class="brt">
     <div class="rec-dot" id="recDot" style="display:none;margin-right:8px"></div>
     <div class="pilot-actions">
+      <button id="pilotEstop" class="estop-btn" type="button" title="Press and HOLD to cut all motors. In flight the drone will fall.">
+        <span class="estop-fill"></span><span class="estop-txt">■ E-STOP <small>HOLD</small></span>
+      </button>
       <div id="missionPilotSlot" style="display:flex;align-items:center"></div>
       <div id="obstBadge" style="display:flex;align-items:center;gap:5px;padding:0 10px;
         border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.07);
@@ -1144,6 +1156,25 @@ function connectCmd(){
     cmdWs.onerror=()=>{if(cmdWs)cmdWs.close();};
   }catch(e){setTimeout(connectCmd,2000);}
 }
+
+// ── E-STOP: press and hold 0.6 s → FORCE disarm through the Jetson ──────────
+(function wireEstop(){
+  const btn=E('pilotEstop'); if(!btn)return;
+  if(!canSendCommands&&appMode!=='demo'){btn.disabled=true;return;}   // viewers can't; demo goes to the demo engine
+  let timer=null;
+  const cancel=()=>{clearTimeout(timer);timer=null;btn.classList.remove('holding');};
+  const fire=async()=>{
+    timer=null;btn.classList.remove('holding');btn.classList.add('sent');
+    const toast=(m,k)=>window.airsentMissionUI?window.airsentMissionUI.toast(m,k):alert(m);
+    const r=window.airsentMission?await window.airsentMission.send('emergency_stop',{},{timeout:5000})
+      :(sendCmd({action:'emergency_stop'})?{ok:true,msg:'E-STOP sent'}:{ok:false,msg:'No command link'});
+    btn.classList.remove('sent');
+    toast((r.ok?'✓ ':'✗ ')+r.msg,r.ok?'':'alert');
+    if(typeof appendMavLog==='function')appendMavLog('E-STOP: '+r.msg,!r.ok);
+  };
+  btn.addEventListener('pointerdown',e=>{e.preventDefault();if(timer)return;btn.classList.add('holding');timer=setTimeout(fire,600);});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>btn.addEventListener(ev,()=>{if(timer)cancel();}));
+})();
 
 function sendCmd(obj){
   if(!canSendCommands || window.airsentDemoIsolation?.isDemo()) return false;
