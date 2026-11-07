@@ -354,6 +354,46 @@
     tick();
   }
 
-  window.AirsentFailsafes = { DEFS, ALL_NAMES, status, edit, values, rules, openRule: rule => { const d = DEFS.find(x => x.rule === rule); return d ? edit(d.id) : false; } };
+  // Buttons that are not Pixhawk failsafes: say plainly what really covers them, with the live ASC checks.
+  const INFO = {
+    'Thermal response': { title: 'Thermal', checks: ['jetson_temp', 'jetson_cpu', 'jetson_ram'],
+      text: 'ASC watches the Jetson temperature (warning at 85 °C), CPU and memory, and every console sees it. Battery and ESC temperatures are not measured on this aircraft. There is no automatic action.' },
+    'Camera failure': { title: 'Camera failure', checks: ['front_cam', 'down_cam'],
+      text: 'ASC watches both cameras and raises a warning when one goes offline. The flight continues on the Pixhawk\'s own sensors; obstacle stopping needs the front camera.' },
+    'Obstacle response': { title: 'Obstacle response', checks: ['obstacle', 'front_cam'],
+      text: 'The Jetson\'s obstacle detection (OAK-D) blocks forward joystick movement when something is closer than the stop distance (Settings on the pilot page). ASC reports close obstacles in flight. It does not steer AUTO missions or RC-flown modes.' },
+    'Stale commands': { title: 'Stale commands', checks: ['console', 'vps_link', 'network'],
+      text: 'Joystick commands from the pilot page are only used while they keep arriving (every 100 ms). If they stop for 1 s — tab closed, browser frozen, link lost — the Jetson sends one stop and stops commanding the drone, which then holds position in GUIDED. If no operator console comes back, ASC holds at 10 s and returns home at 30 s.' },
+    'Back-camera loss': { title: 'Back camera', checks: [], text: 'There is no rear camera on the aircraft yet. Nothing is monitored or automated.' },
+    'Motor settings': { title: 'Motors', checks: ['motor_balance', 'motor_sat', 'esc'], link: ['OPEN MOTOR TEST', 'actuators.html'],
+      text: 'ASC watches motor balance, motor saturation and ESC telemetry in flight. A quad cannot keep flying on three motors, so there is no in-flight motor failsafe — prevention is the props-off motor test (Actuators page) and the launch sequencer\'s motor-health check at arming.' },
+  };
+  function info(cfg) {
+    addStyles(); close();
+    const back = document.createElement('div'); back.className = 'fso-back';
+    back.innerHTML = `<div class="fso-dlg" role="dialog"><header><h3>${esc(cfg.title)}</h3><small>WHAT ACTUALLY COVERS THIS</small><button class="x" aria-label="Close">×</button></header>
+      <div class="fso-what">${esc(cfg.text)}</div><table class="fso-tbl"><tbody></tbody></table>
+      <div class="fso-foot">${document.getElementById('fsLiveChecksBtn') ? '<button class="live" type="button">ALL LIVE CHECKS</button>' : ''}${cfg.link ? `<button class="lnk" type="button">${esc(cfg.link[0])}</button>` : ''}</div></div>`;
+    document.body.append(back);
+    const tb = back.querySelector('tbody');
+    const draw = () => {
+      const live = Object.fromEntries((((M() && M().asc) || {}).live || []).map(r => [r[0], r]));
+      const defs = Object.fromEntries(((M() && M().ascDefs) || []).map(d => [d[0], d[2]]));
+      const lv = { '-1': ['○ NOT ACTIVE', 'unknown'], 0: ['● OK', 'ok'], 1: ['● OK', 'ok'], 2: ['● WARNING', 'warn'], 3: ['● CRITICAL', 'bad'] };
+      tb.innerHTML = cfg.checks.map(id => { const r = live[id]; const l = r ? lv[r[1]] || lv[-1] : ['— NO DATA', 'unknown'];
+        return `<tr><td class="lbl">${esc(defs[id] || id)}</td><td>${r && r[2] != null ? esc(r[2]) : '—'}</td><td class="fso-st ${l[1]}">${l[0]}${r && r[3] ? ' — ' + esc(r[3]) : ''}</td></tr>`; }).join('');
+    };
+    draw(); const timer = setInterval(draw, 1000);
+    const closeIt = () => { clearInterval(timer); back.remove(); open = null; };
+    back.querySelector('.x').onclick = closeIt;
+    back.addEventListener('click', e => { if (e.target === back) closeIt(); });
+    back.querySelector('.live')?.addEventListener('click', () => { closeIt(); document.getElementById('fsLiveChecksBtn').click(); });
+    back.querySelector('.lnk')?.addEventListener('click', () => { location.href = cfg.link[1]; });
+    open = { render: draw, close: closeIt };
+    return true;
+  }
+
+  window.AirsentFailsafes = { DEFS, ALL_NAMES, status, edit, values, rules,
+    openRule: (rule, label) => { const d = DEFS.find(x => x.rule === rule); if (d) return edit(d.id); const i = INFO[String(label || '').trim()]; return i ? info(i) : false; } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
