@@ -4,6 +4,7 @@ from health_telemetry import HealthTelemetry, gpu_percent
 from datalink_telemetry import start_monitor
 from mission_engine import MissionEngine, default_config, disk_free_gb
 from golden_params import GoldenParams
+from vehicle_mission import VehicleMission, MissionBusy
 from collections import deque
 import asyncio
 import websockets
@@ -502,6 +503,30 @@ def battery_soc_init():
             print(f"[BATT] reset failed: {e}")
 
 
+# ── COMMAND_ACK tracking ─────────────────────────
+# The reader thread records every COMMAND_ACK so command handlers can report
+# what the Pixhawk actually answered instead of "command sent".
+cmd_acks = {}                      # MAV_CMD id -> (result, time received)
+ack_cond = threading.Condition()
+ACK_RESULTS = {0: 'ACCEPTED', 1: 'TEMPORARILY REJECTED', 2: 'DENIED', 3: 'UNSUPPORTED', 4: 'FAILED',
+               5: 'IN PROGRESS', 6: 'CANCELLED'}
+vehicle_mission = VehicleMission()
+
+
+def wait_ack(command, since, timeout):
+    """Return the COMMAND_ACK result for `command` received after `since`, or None."""
+    end = time.time() + timeout
+    with ack_cond:
+        while True:
+            hit = cmd_acks.get(command)
+            if hit and hit[1] >= since:
+                return hit[0]
+            left = end - time.time()
+            if left <= 0:
+                return None
+            ack_cond.wait(left)
+
+
 def mavlink_reader():
     global mav_conn, _last_imu_accel, last_mav_report, last_mav_heartbeat
     while True:
@@ -515,6 +540,7 @@ def mavlink_reader():
                 rc_monitor.reset()
             last_mav_heartbeat = 0.0
             golden.reset()
+            vehicle_mission.reset()
             home_state.clear(); home_state['set'] = False
             hb = mav.wait_heartbeat(timeout=15)
             if hb is None:
@@ -557,6 +583,12 @@ def mavlink_reader():
                 with rc_lock:
                     rc_monitor.update(msg, _now)
                 last_mav_msg = _now
+                if t == 'COMMAND_ACK':
+                    with ack_cond:
+                        cmd_acks[msg.command] = (msg.result, _now)
+                        ack_cond.notify_all()
+                elif t.startswith('MISSION_'):
+                    vehicle_mission.observe(msg)
                 if _now - last_mav_report > 5:
                     last_mav_report = _now
                     print(f"[MAV] alive {t} mode={telem.get('flight_mode')} sats={telem.get('sats')} rssi={telem.get('rssi')}")
@@ -753,6 +785,28 @@ def disarm_drone(mav):
     )
     log_mavlink("MAV_CMD_COMPONENT_ARM_DISARM → DISARM")
 
+def emergency_stop(mav, who='Operator'):
+    """FORCE disarm (param2 = 21196): the motors stop even in flight and the
+    aircraft falls. A normal disarm is refused by ArduPilot while flying.
+    Retries until the Pixhawk acknowledges or reports disarmed."""
+    with vel_lock:
+        vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+    log_mavlink(f"EMERGENCY STOP by {who}")
+    last = None
+    for attempt in range(1, 4):
+        since = time.time()
+        mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                  mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 0, 21196, 0, 0, 0, 0, 0)
+        log_mavlink(f"MAV_CMD_COMPONENT_ARM_DISARM → FORCE DISARM (attempt {attempt})")
+        last = wait_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, since, 0.7)
+        if last == 0:
+            return {'ok': True, 'msg': f'EMERGENCY STOP — motors stopped (Pixhawk accepted, attempt {attempt})'}
+    if not telem.get('armed'):
+        return {'ok': True, 'msg': 'EMERGENCY STOP — telemetry shows DISARMED (no acknowledgement received)'}
+    return {'ok': False, 'msg': 'EMERGENCY STOP NOT CONFIRMED — ' + (f'Pixhawk answered {ACK_RESULTS.get(last, last)}' if last is not None
+            else 'no answer from the Pixhawk') + '. Use the RC kill switch.'}
+
+
 def send_rtl(mav):
     set_mode(mav, 6, "RTL")
 
@@ -913,7 +967,31 @@ def mission_loop():
 
 
 # ── Command WebSocket handler ─────────────────────
+SLOW_ACTIONS = {'wp_upload', 'wp_download'}
+
+
 def process_command(raw):
+    """Run a command and make sure the reply carries the console's request_id,
+    so the console that asked can match it (the relay broadcasts every reply)."""
+    reply = _process_command(raw)
+    try:
+        cmd = json.loads(raw)
+        if isinstance(cmd, dict) and isinstance(reply, dict):
+            reply.setdefault('request_id', cmd.get('request_id'))
+            reply.setdefault('action', cmd.get('action'))
+    except Exception:
+        pass
+    return reply
+
+
+def is_slow_command(raw):
+    try:
+        return json.loads(raw).get('action') in SLOW_ACTIONS
+    except Exception:
+        return False
+
+
+def _process_command(raw):
     """Execute a single command (JSON string) and return a reply dict.
     Shared by BOTH the local cmd_handler (port 8767) and vps_cmd_relay
     (VPS:9004) so remote commands run the exact same code as local ones.
@@ -962,12 +1040,53 @@ def process_command(raw):
             return {'ok': True, 'msg': 'LAND initiated'}
 
         elif action == 'arm':
+            since = time.time()
             arm_drone(mav)
-            return {'ok': True, 'msg': 'ARM command sent'}
+            r = wait_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, since, 2.0)
+            if r == 0:
+                return {'ok': True, 'msg': 'ARMED — Pixhawk accepted'}
+            why = (last_prearm_text(time.time()) or '') if r is not None else ''
+            return {'ok': False, 'msg': 'ARM refused by Pixhawk: ' + ACK_RESULTS.get(r, str(r)) + (f' — {why}' if why else '')
+                    if r is not None else 'ARM sent, no answer from the Pixhawk — check telemetry'}
 
         elif action == 'disarm':
+            since = time.time()
             disarm_drone(mav)
-            return {'ok': True, 'msg': 'DISARM command sent'}
+            r = wait_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, since, 2.0)
+            if r == 0:
+                return {'ok': True, 'msg': 'DISARMED — Pixhawk accepted'}
+            if r is None:
+                return {'ok': False, 'msg': 'DISARM sent, no answer from the Pixhawk — check telemetry'}
+            return {'ok': False, 'msg': 'DISARM refused: ' + ACK_RESULTS.get(r, str(r))
+                    + (' — the aircraft is flying; use EMERGENCY STOP to cut the motors' if telem.get('armed') else '')}
+
+        elif action == 'emergency_stop':
+            return emergency_stop(mav, cmd.get('operator') or 'Operator')
+
+        elif action == 'wp_upload':
+            if telem.get('armed'):
+                return {'ok': False, 'msg': 'Mission upload is blocked while the aircraft is armed'}
+            home = (home_state['lat'], home_state['lon']) if home_state.get('set') else None
+            who = cmd.get('operator') or 'Operator'
+            try:
+                r = vehicle_mission.upload_plan(mav, cmd.get('plan') or {}, home, who=who,
+                                                limits={'max_alt': float(os.environ.get('AIRSENT_WP_MAX_ALT', 120)),
+                                                        'max_range': float(os.environ.get('AIRSENT_WP_MAX_RANGE', 2000))})
+            except (ValueError, RuntimeError) as e:
+                log_mavlink(f"MISSION UPLOAD FAILED — {e}")
+                return {'ok': False, 'msg': str(e), 'vehicle_mission': vehicle_mission.snapshot()}
+            log_mavlink(f"MISSION UPLOADED + VERIFIED — {r['nav_items']} waypoints ({r['items']} items) by {who}")
+            return {'ok': True, 'msg': f"Uploaded and verified {r['nav_items']} waypoints on the Pixhawk",
+                    'warnings': r['warnings'], 'result': r, 'vehicle_mission': vehicle_mission.snapshot()}
+
+        elif action == 'wp_download':
+            home = (home_state['lat'], home_state['lon']) if home_state.get('set') else None
+            try:
+                r = vehicle_mission.download_plan(mav, home, who=cmd.get('operator') or 'Operator')
+            except RuntimeError as e:
+                return {'ok': False, 'msg': str(e)}
+            return {'ok': True, 'msg': f"Downloaded {len(r['waypoints'])} waypoints from the Pixhawk",
+                    'result': r, 'vehicle_mission': vehicle_mission.snapshot()}
 
         elif action == 'takeoff':
             if SIM_MODE: vel_last_cmd_ts = 0.0
@@ -1082,14 +1201,41 @@ def process_command(raw):
         return {'ok': False, 'msg': str(e), 'type':'pilot_setting_result' if action=='pilot_setting' else 'command_error', 'request_id':cmd.get('request_id')}
 
 
+_bg_commands = set()
+
+
+async def serve_commands(source, sink):
+    """Run commands from one socket. Quick commands run in order; slow ones
+    (mission upload/download) run in the background so an EMERGENCY STOP or
+    ABORT sent during a transfer is never queued behind it."""
+    send_lock = asyncio.Lock()
+
+    async def run(raw):
+        reply = await asyncio.to_thread(process_command, raw)
+        async with send_lock:
+            await sink.send(json.dumps(reply))
+
+    async def run_bg(raw):
+        try:
+            await run(raw)
+        except Exception as e:
+            print(f"[CMD] background reply failed: {e}")
+
+    async for raw in source:
+        if is_slow_command(raw):
+            task = asyncio.create_task(run_bg(raw))
+            _bg_commands.add(task)
+            task.add_done_callback(_bg_commands.discard)
+        else:
+            await run(raw)
+
+
 async def cmd_handler(websocket):
     """Local command WebSocket (port 8767). Works on the LAN. Delegates the
     actual work to process_command so local and remote behave identically."""
     print(f"[CMD] Client: {websocket.remote_address}")
     try:
-        async for raw in websocket:
-            reply = await asyncio.to_thread(process_command, raw)
-            await websocket.send(json.dumps(reply))
+        await serve_commands(websocket, websocket)
     except websockets.exceptions.ConnectionClosed:
         print("[CMD] Disconnected")
         with vel_lock:
@@ -1173,6 +1319,7 @@ def build_telemetry_payload(include_mission=True):
         payload.pop('vib_z', None)
     payload['home'] = dict(home_state)
     if include_mission:
+        payload['vehicle_mission'] = vehicle_mission.snapshot()
         payload['mission'] = mission_cache['mission']
         payload['faults'] = mission_cache['faults']
     return payload
@@ -1979,12 +2126,7 @@ async def vps_cmd_relay():
             )
             print("[VPS] Command relay connected")
 
-            async for raw in remote:
-                reply = await asyncio.to_thread(process_command, raw)
-                try:
-                    await remote.send(json.dumps(reply))
-                except Exception:
-                    break
+            await serve_commands(remote, remote)
 
         except Exception as e:
             print(f"[VPS] Command relay error: {e}")

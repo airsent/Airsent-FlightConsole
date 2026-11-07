@@ -387,7 +387,7 @@ function executeFlightCommand(buttonEl) {
       case "RETURN TO BASE": sent = sendCmd({ action: "set_rtl" });          break;
       case "MISSION START":  sent = sendCmd({ action: "set_auto" });         break;
       case "GUIDED":         sent = sendCmd({ action: "set_guided" });       break;
-      case "EMERGENCY STOP": sent = sendCmd({ action: "disarm" });           break;
+      case "EMERGENCY STOP": sent = sendCmd({ action: "emergency_stop" });   break;   // FORCE disarm: works in flight
       default:               sent = false;
     }
     // Actual aircraft state is rendered from telemetry on every device.
@@ -545,7 +545,7 @@ function openFlightSlider(buttonEl) {
   closeFlightSlider();
   pendingFlightSliderButton = buttonEl;
   const command = buttonEl.dataset.command || "COMMAND";
-  if (title) title.textContent = command === "EMERGENCY STOP" ? "EMERGENCY STOP" : `CONFIRM ${command}`;
+  if (title) title.textContent = command === "EMERGENCY STOP" ? "E-STOP · CUTS MOTORS · DRONE FALLS" : `CONFIRM ${command}`;
   box.classList.remove("hidden");
   resetFlightSliderPosition();
   resetFlightSliderIdle();

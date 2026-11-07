@@ -111,6 +111,8 @@ body {
   gap: 4px;
 }
 .mp-stat b { color: #fff; font-weight:700; }
+#statDroneVal.ok { color: #00e383; } #statDroneVal.warn { color: #ffb800; } #statDroneVal.idle { color: #5d7a92; }
+.mp-btn.busy { opacity: .6; pointer-events: none; }
 
 /* ── Main layout ──────────────────────────────────────────── */
 .mp-body {
@@ -528,6 +530,8 @@ body {
   </button>
 
   <div class="mp-topbar-right">
+    <div class="mp-stat" id="statDrone" title="What is stored on the Pixhawk">ON DRONE <b id="statDroneVal">--</b></div>
+    <div class="mp-topbar-sep"></div>
     <div class="mp-stat">WP COUNT <b id="statWpCount">0</b></div>
     <div class="mp-topbar-sep"></div>
     <div class="mp-stat">TOTAL DIST <b id="statDist">0.0 m</b></div>
@@ -658,6 +662,7 @@ body {
 const DEFAULT_ALT = 30;
 const CRUISE_SPEED = 10; // m/s for time estimate
 
+let uploadedRef = null; // { fingerprint, signature, by, at } of the last verified upload
 let waypoints = []; // { id, lat, lon, alt, cmd, speed, radius, marker, selected }
 let homeLat = 33.4136;
 let homeLon = -111.9196;
@@ -957,7 +962,8 @@ function saveMissionToStorage() {
   try {
     const data = {
       home: { lat: homeLat, lon: homeLon },
-      waypoints: waypoints.map(w => ({ id: w.id, lat: w.lat, lon: w.lon, alt: w.alt, cmd: w.cmd, speed: w.speed, radius: w.radius }))
+      waypoints: waypoints.map(w => ({ id: w.id, lat: w.lat, lon: w.lon, alt: w.alt, cmd: w.cmd, speed: w.speed, radius: w.radius })),
+      uploaded: uploadedRef
     };
     localStorage.setItem('airsent_mission_v1', JSON.stringify(data));
   } catch(e) {}
@@ -969,6 +975,7 @@ function saveMissionToStorage() {
     const raw = localStorage.getItem('airsent_mission_v1');
     if (!raw) return;
     const data = JSON.parse(raw);
+    uploadedRef = data.uploaded || null;
     if (data.waypoints && data.waypoints.length) {
       data.waypoints.forEach(w => {
         const id = ++wpIdCounter;
@@ -985,7 +992,7 @@ function saveMissionToStorage() {
 // Apply authoritative plans from other operators without publishing a second edit.
 window.addEventListener('airsent-shared-change', e => {
  if(e.detail.key!=='airsent_mission_v1')return;
- const plan=e.detail.value;selectedWpId=null;document.getElementById('wpDetail').classList.remove('visible');
+ const plan=e.detail.value;selectedWpId=null;uploadedRef=plan.uploaded||null;document.getElementById('wpDetail').classList.remove('visible');
  waypoints.forEach(w=>{if(w.marker)map.removeLayer(w.marker)});waypoints.length=0;
  if(plan.home){homeLat=plan.home.lat;homeLon=plan.home.lon;if(homeMarker)homeMarker.setLatLng([homeLat,homeLon]);}
  (plan.waypoints||[]).forEach(w=>{const wp={...w,id:++wpIdCounter,marker:null,selected:false};waypoints.push(wp);wp.marker=createMarker(wp)});
@@ -1077,13 +1084,68 @@ document.getElementById('btnLoad').addEventListener('click', () => {
   input.click();
 });
 
-document.getElementById('btnUpload').addEventListener('click', () => {
-  alert('Upload to drone: Connect via telemetry and use the MAVLink mission upload command.\n\nWaypoint count: ' + waypoints.length);
-});
+// ── Upload / download to the Pixhawk (through the Jetson) ─────────────────
+// The Jetson uploads with the MAVLink mission protocol, reads the mission back
+// and only reports success if every item on the Pixhawk matches.
+const planFingerprint = () => JSON.stringify(waypoints.map(w => [w.cmd, +w.lat.toFixed(7), +w.lon.toFixed(7), +(+w.alt).toFixed(2), w.speed, w.radius]));
+const notify = (msg, kind) => window.airsentMissionUI ? window.airsentMissionUI.toast(msg, kind) : alert(msg);
 
-document.getElementById('btnDownload').addEventListener('click', () => {
-  alert('Download from drone: Connect via telemetry and the mission will be loaded automatically.');
-});
+function renderDroneStatus() {
+  const el = document.getElementById('statDroneVal');
+  const vm = window.airsentMission && window.airsentMission.vehicleMission;
+  let text = 'UNKNOWN', cls = 'idle', tip = 'Not checked since the Pixhawk connected. Use Download to read it.';
+  if (vm && vm.known) {
+    const same = uploadedRef && vm.signature && vm.signature === uploadedRef.signature;
+    if (same && planFingerprint() === uploadedRef.fingerprint) { text = '✓ THIS PLAN'; cls = 'ok'; tip = `Verified on the Pixhawk · uploaded by ${vm.by || '?'}`; }
+    else if (same) { text = 'EDITED SINCE UPLOAD'; cls = 'warn'; tip = 'The Pixhawk has the last uploaded version. Upload again to send your edits.'; }
+    else if (!vm.count || vm.count <= 1) { text = 'EMPTY'; cls = 'warn'; tip = 'No mission stored on the Pixhawk.'; }
+    else { text = `DIFFERENT (${vm.nav_count ?? vm.count - 1} WP)`; cls = 'warn'; tip = 'The Pixhawk holds a different mission. Download to see it, or Upload this plan.'; }
+  }
+  el.textContent = text; el.className = cls; document.getElementById('statDrone').title = tip;
+}
+setInterval(renderDroneStatus, 1000);
+
+async function droneTransfer(btn, label, fn) {
+  if (window.airsentViewerReadOnly?.()) { notify('Viewer mode — read only', 'err'); return; }
+  if (!window.airsentMission) { notify('Command link not loaded', 'err'); return; }
+  const old = btn.innerHTML;
+  btn.classList.add('busy'); btn.innerHTML = `<span class="mp-btn-icon">⏳</span> ${label}…`;
+  try { await fn(); } finally { btn.classList.remove('busy'); btn.innerHTML = old; renderDroneStatus(); }
+}
+
+document.getElementById('btnUpload').addEventListener('click', e => droneTransfer(e.currentTarget, 'Uploading', async () => {
+  if (!waypoints.length) { notify('Add waypoints before uploading', 'err'); return; }
+  const last = waypoints[waypoints.length - 1].cmd;
+  if (!confirm(`Upload ${waypoints.length} waypoint(s) to the drone?\n\nThis REPLACES the mission stored on the Pixhawk.` +
+               (last === 'RTL' || last === 'LAND' ? '' : `\n\n⚠ The plan does not end with RTL or LAND — the drone will hover at the last waypoint.`))) return;
+  const plan = { name: 'Mission planner', home: { lat: homeLat, lon: homeLon },
+                 waypoints: waypoints.map(w => ({ lat: w.lat, lon: w.lon, alt: +w.alt, cmd: w.cmd, speed: +w.speed, radius: +w.radius })) };
+  const r = await window.airsentMission.send('wp_upload', { plan }, { timeout: 45000 });
+  if (r.vehicle_mission) window.airsentMission.vehicleMission = r.vehicle_mission;
+  if (!r.ok) { notify('UPLOAD FAILED — ' + r.msg, 'alert'); return; }
+  uploadedRef = { fingerprint: planFingerprint(), signature: r.result.signature, by: window.airsentMission.operatorName, at: Date.now() };
+  saveMissionToStorage();
+  notify('✓ ' + r.msg);
+  if (r.warnings && r.warnings.length) alert('Uploaded, with warnings:\n\n• ' + r.warnings.join('\n• '));
+}));
+
+document.getElementById('btnDownload').addEventListener('click', e => droneTransfer(e.currentTarget, 'Reading', async () => {
+  if (waypoints.length && !confirm('Replace the plan on screen with the mission stored on the Pixhawk?')) return;
+  const r = await window.airsentMission.send('wp_download', {}, { timeout: 45000 });
+  if (r.vehicle_mission) window.airsentMission.vehicleMission = r.vehicle_mission;
+  if (!r.ok) { notify('DOWNLOAD FAILED — ' + r.msg, 'alert'); return; }
+  selectedWpId = null; document.getElementById('wpDetail').classList.remove('visible');
+  waypoints.forEach(w => { if (w.marker) map.removeLayer(w.marker); }); waypoints.length = 0;
+  r.result.waypoints.forEach(w => {
+    const wp = { id: ++wpIdCounter, lat: w.lat, lon: w.lon, alt: w.alt || DEFAULT_ALT, cmd: w.cmd || 'WAYPOINT',
+                 speed: w.speed || CRUISE_SPEED, radius: w.radius || 5, marker: null, selected: false };
+    waypoints.push(wp); wp.marker = createMarker(wp);
+  });
+  uploadedRef = r.result.signature ? { fingerprint: planFingerprint(), signature: r.result.signature, by: 'Pixhawk', at: Date.now() } : null;
+  renderWpList(); redrawPath(); updateStats(); saveMissionToStorage();
+  if (waypoints.length) map.setView([waypoints[0].lat, waypoints[0].lon], 16);
+  notify('✓ ' + r.msg);
+}));
 
 // ── Init ──────────────────────────────────────────────────
 renderWpList();

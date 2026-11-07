@@ -72,19 +72,20 @@
     api.telemetryAt = performance.now();
     if (data && data.mission) { api.state = data.mission; api.receivedAt = performance.now(); }
     if (data && data.faults) api.faults = data.faults;
+    if (data && data.vehicle_mission) api.vehicleMission = data.vehicle_mission;
     if (data && (data.mission || data.faults)) emit();
   }
   api.accept = accept;
 
   // ── requests ─────────────────────────────────────────────────────────────
   let cmd = null, rid = 0;
-  function send(action, data = {}) {
+  function send(action, data = {}, opts = {}) {
     if (!canCommand) return Promise.resolve({ ok: false, msg: 'Viewer mode is read only' });
     if (mode === 'demo') return Promise.resolve(demo.handle({ action, console_id: consoleId, operator: api.operatorName, ...data }));
     return new Promise(resolve => {
       if (!cmd || cmd.readyState !== WebSocket.OPEN) { resolve({ ok: false, msg: 'No command link to the Jetson' }); return; }
       const request_id = consoleId.slice(0, 8) + '-' + (++rid);
-      const timer = setTimeout(() => { pending.delete(request_id); resolve({ ok: false, msg: 'No reply from the Jetson (request may not have arrived)' }); }, 6000);
+      const timer = setTimeout(() => { pending.delete(request_id); resolve({ ok: false, msg: 'No reply from the Jetson (request may not have arrived)' }); }, opts.timeout || 6000);
       pending.set(request_id, reply => { clearTimeout(timer); resolve(reply); });
       cmd.send(JSON.stringify({ action, console_id: consoleId, operator: api.operatorName, request_id, page: location.pathname.split('/').pop(), ...data }));
     });
@@ -232,6 +233,7 @@
       if (st.held) faults.set('mission:hold', { id: 'D2', key: 'mission:hold', severity: 'critical', source: 'Countdown', message: 'HOLD — ' + st.hold_reason, since: st.hold_since, acked_by: null });
       else faults.delete('mission:hold');
     }
+    let demoRoute = null;
     function handle(c) {
       const who = c.operator || 'Operator', ok = msg => { tick(); return { ok: true, msg }; }, no = msg => ({ ok: false, msg });
       switch (c.action) {
@@ -270,6 +272,23 @@
         case 'fault_ack':
           faults.forEach(f => { if (c.fault_id === 'all' || f.id === c.fault_id) f.acked_by = f.acked_by || who; }); return ok('Acknowledged');
         case 'mission_claim_pic': st.pic = { console: c.console_id, name: who }; return ok('You are pilot in command');
+        case 'emergency_stop': return ok('EMERGENCY STOP — motors stopped (demo)');
+        case 'wp_upload': {
+          const wps = (c.plan && c.plan.waypoints) || [];
+          if (!wps.length) return no('The plan has no waypoints');
+          const bad = wps.findIndex(w => !['RTL', 'LAND'].includes(w.cmd) && (w.alt < 2 || w.alt > 120));
+          if (bad >= 0) return no(`WP ${bad + 1}: altitude ${wps[bad].alt} m outside 2-120 m`);
+          const last = wps[wps.length - 1].cmd;
+          demoRoute = wps.map(w => ({ ...w }));
+          api.vehicleMission = { known: true, verified: true, count: wps.length + 2, nav_count: wps.length, signature: 'demo' + Date.now(), by: who, at: now() };
+          return { ok: true, msg: `Uploaded and verified ${wps.length} waypoints on the Pixhawk (demo)`, vehicle_mission: api.vehicleMission,
+            result: { signature: api.vehicleMission.signature, nav_items: wps.length },
+            warnings: ['RTL', 'LAND'].includes(last) ? [] : ['The mission does not end with RTL or LAND — the drone will hover at the last waypoint'] };
+        }
+        case 'wp_download':
+          if (!demoRoute) return no('No mission stored on the demo drone');
+          return { ok: true, msg: `Downloaded ${demoRoute.length} waypoints from the Pixhawk (demo)`, vehicle_mission: api.vehicleMission,
+            result: { waypoints: demoRoute.map(w => ({ ...w })), signature: api.vehicleMission.signature } };
         default: return no('Unknown action');
       }
     }
