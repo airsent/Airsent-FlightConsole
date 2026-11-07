@@ -704,6 +704,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
     const fontBoost = Math.min(1.12, Math.max(1, 1 + (1 - scale) * 0.32));
     document.documentElement.style.setProperty('--dashboard-scale', scale.toFixed(5));
     document.documentElement.style.setProperty('--dashboard-virtual-height', `${virtualHeight.toFixed(2)}px`);
+    document.documentElement.style.setProperty('--dashboard-virtual-width', `${Math.max(REF_W, width / scale).toFixed(2)}px`);
     document.documentElement.style.setProperty('--dashboard-row-scale', rowScale.toFixed(5));
     document.documentElement.style.setProperty('--dashboard-font-boost', fontBoost.toFixed(5));
   }
