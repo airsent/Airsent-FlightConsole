@@ -109,6 +109,8 @@ class MissionEngineTests(unittest.TestCase):
         self.vehicle.alt = 4.8
         self.tick(1)
         self.assertEqual(self.engine.stage, 'flight')
+        motor = next(c for c in self.engine.checks if c['id'] == 'motor_health')
+        self.assertEqual(motor['raw'], 'pass', 'motor health measured at idle must stay latched in flight')
         self.vehicle.alt = 0
         self.vehicle.armed = False
         self.tick(1)
@@ -201,6 +203,15 @@ class MissionEngineTests(unittest.TestCase):
         self.assertIn('Motor health', self.engine.hold_reason)
         self.assertNotIn(('takeoff', 5.0), self.vehicle.calls)
         self.assertFalse(self.vehicle.armed)
+
+    def test_manual_checks_are_due_at_go_nogo_not_at_handover(self):
+        self.send('mission_ping'); self.tick()
+        self.assertTrue(self.send('mission_create', name='M', confirm='flight', total=180)['ok'])
+        self.run_to(61)
+        self.assertFalse(self.engine.held, self.engine.hold_reason)
+        self.run_to(59.5)
+        self.assertTrue(self.engine.held)
+        self.assertIn('Wind', self.engine.hold_reason)
 
     # ── restart, abort, roles ────────────────────────────────────────────────
     def test_jetson_restart_comes_back_held(self):

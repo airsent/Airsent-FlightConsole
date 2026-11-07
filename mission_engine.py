@@ -41,7 +41,7 @@ ACTIVE = ('countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed
 
 # Gate -> first stage at which a failing check blocks the sequence.
 GATE_STAGE = {'create': 'countdown', 'countdown': 'countdown', 'prearm': 'prearm',
-              'armed': 'armed', 'takeoff': 'takeoff'}
+              'gonogo': 'gonogo', 'armed': 'armed', 'takeoff': 'takeoff'}
 
 MANUAL_CHECKS = {
     'manual_wind':      'Wind and weather within limits',
@@ -263,8 +263,8 @@ def evaluate_checks(s, engine):
 
     for key, label in MANUAL_CHECKS.items():
         ticked = engine.manual.get(key)
-        out.append(check(key, 'Manual', label, 'prearm', bool(ticked),
-                         f"✓ {ticked['by']}" if ticked else 'NOT CONFIRMED', 'pilot confirms'))
+        out.append(check(key, 'Manual', label, 'gonogo', bool(ticked),
+                         f"✓ {ticked['by']}" if ticked else 'NOT CONFIRMED', 'confirm by T-60'))
 
     out.append(check('go_poll', 'GO/NO-GO', 'Pilot in command GO (area and props clear)', 'armed',
                      bool(engine.go), f"GO · {engine.go['by']}" if engine.go else 'WAITING', 'GO by T-10'))
@@ -518,7 +518,11 @@ class MissionEngine:
             return check('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', False,
                          'NOT VERIFIED', 'ESC telemetry', warn=True,
                          note='ESC telemetry unavailable; motor health not verified')
+        latched = getattr(self, '_motor_latched', None)
+        if self.stage in ('takeoff', 'flight', 'landed', 'safed') and latched:
+            return latched                      # result measured at idle before takeoff
         if self.stage != 'armed' or not self.arm_sent_at or self.clock() - self.arm_sent_at < 3:
+            self._motor_latched = None
             return check('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', None,
                          'WAITING FOR SPIN-UP', 'evaluated after arming')
         rpms = [c.get('rpm') or 0 for c in channels]
@@ -528,12 +532,19 @@ class MissionEngine:
         ok = mean > 0 and min(rpms) > 0 and spread <= cfg['motor_spread'] and not errors
         value = ' / '.join(str(r) for r in rpms) + ' rpm'
         note = f"ESC status flags on {errors}" if errors else ('a motor is not spinning' if min(rpms) <= 0 else '')
-        return check('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', ok, value,
-                     f"all spinning, spread <= {cfg['motor_spread']:.0%}", note=note)
+        self._motor_latched = check('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', ok, value,
+                                    f"all spinning, spread <= {cfg['motor_spread']:.0%}", note=note)
+        return self._motor_latched
 
     # ── requests from consoles ───────────────────────────────────────────────
     def handle(self, cmd):
-        """Returns a reply dict. Never raises for bad input."""
+        """Returns a reply dict (echoing request_id). Never raises for bad input."""
+        reply = self._handle(cmd)
+        if cmd.get('request_id') is not None:
+            reply['request_id'] = str(cmd.get('request_id'))[:64]
+        return reply
+
+    def _handle(self, cmd):
         with self.lock:
             action = cmd.get('action', '')
             console = str(cmd.get('console_id') or '')[:64]
