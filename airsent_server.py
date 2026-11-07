@@ -941,8 +941,29 @@ def system_fault_conditions(s, now):
     return c
 
 
+# Pixhawk failsafe parameters shown and edited on the Failsafe page / dashboard.
+FAILSAFE_PARAMS = ['FS_THR_ENABLE', 'FS_THR_VALUE', 'RC_FS_TIMEOUT',
+                   'BATT_FS_LOW_ACT', 'BATT_LOW_VOLT', 'BATT_LOW_MAH', 'BATT_FS_CRT_ACT', 'BATT_CRT_VOLT', 'BATT_CRT_MAH',
+                   'FS_GCS_ENABLE', 'FS_GCS_TIMEOUT', 'SYSID_MYGCS',
+                   'FS_EKF_ACTION', 'FS_EKF_THRESH',
+                   'FENCE_ENABLE', 'FENCE_ACTION', 'FENCE_TYPE', 'FENCE_ALT_MAX', 'FENCE_RADIUS',
+                   'FS_CRASH_CHECK', 'ARMING_CHECK', 'FS_VIBE_ENABLE',
+                   'RTL_ALT', 'RTL_ALT_FINAL', 'RTL_LOIT_TIME', 'RTL_SPEED']
+_failsafe_rules_sent = [0.0]
+
+
+def failsafe_payload(now):
+    """Failsafe parameter values for every console; the approved ranges every 10 s."""
+    out = {'failsafe_params': param_store.snapshot(FAILSAFE_PARAMS)}
+    if now - _failsafe_rules_sent[0] > 10:
+        _failsafe_rules_sent[0] = now
+        out['failsafe_rules'] = {n: {k: v for k, v in r.items() if k in ('value', 'min', 'max', 'in')}
+                                 for n, r in golden.rules.items() if n in FAILSAFE_PARAMS}
+    return out
+
+
 def mission_loop():
-    last_golden = last_home = last_disk = 0.0
+    last_golden = last_home = last_disk = last_fs = last_hb = 0.0
     disk = None
     while True:
         try:
@@ -950,9 +971,18 @@ def mission_loop():
             with mav_lock:
                 mav = mav_conn
             if mav is not None:
+                if now - last_hb >= 1:
+                    # GCS heartbeat from the Jetson. If this loop or the server dies, the
+                    # heartbeats stop and the Pixhawk's GCS failsafe (FS_GCS_ENABLE) triggers.
+                    last_hb = now
+                    mav.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS, mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
                 if now - last_golden > 20:
                     last_golden = now
                     golden.request(mav)
+                if now - last_fs > 20:
+                    last_fs = now
+                    for n in FAILSAFE_PARAMS:          # answers land in param_store via the reader
+                        mav.mav.param_request_read_send(mav.target_system, mav.target_component, n.encode(), -1)
                 if now - last_home > 5:
                     last_home = now
                     mav.mav.command_long_send(mav.target_system, mav.target_component,
@@ -1358,6 +1388,7 @@ def build_telemetry_payload(include_mission=True):
     payload['home'] = dict(home_state)
     if include_mission:
         payload['vehicle_mission'] = vehicle_mission.snapshot()
+        payload.update(failsafe_payload(now))
         payload['mission'] = mission_cache['mission']
         payload['faults'] = mission_cache['faults']
     return payload
