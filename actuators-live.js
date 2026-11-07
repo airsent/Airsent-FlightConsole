@@ -28,9 +28,37 @@
   const histories = [[],[],[],[]];
   let socket=null, retry=null, lastReceived=0, started=0, latest={};
   const maxAge=2500;
-  document.querySelectorAll('.test-btn').forEach(button => { button.disabled=true; button.title='Run motor tests in QGroundControl while monitoring here'; });
-  const warning=document.querySelector('.tests-warning');
-  if(warning) warning.textContent='LIVE MONITORING — Run motor tests in QGroundControl with propellers removed. These buttons do not control motors.';
+  // ── Props-off motor test through the Jetson (MAV_CMD_DO_MOTOR_TEST). Disarmed only, 5–20 %, ≤ 3 s.
+  (function motorTest(){
+    const panel=document.querySelector('.actuator-tests-panel'); if(!panel) return;
+    const viewer=mode==='viewer';
+    const warning=panel.querySelector('.tests-warning');
+    if(warning) warning.textContent='PROPS MUST BE REMOVED. Each test spins the motor for the set time, then stops by itself. Disarmed only.';
+    const stop=panel.querySelector('[data-motor="all-stop"]');
+    if(stop){stop.dataset.motor='0';stop.textContent='ALL MOTORS IN TURN';stop.classList.remove('stop-btn');}
+    const ctl=document.createElement('div');ctl.className='mt-ctl';
+    ctl.innerHTML='<label>THROTTLE <select id="mtThrottle"><option>5</option><option selected>8</option><option>10</option><option>15</option><option>20</option></select> %</label>'+
+      '<label>TIME <select id="mtSeconds"><option>1</option><option selected>2</option><option>3</option></select> s</label>'+
+      '<label class="mt-props"><input type="checkbox" id="mtProps"> PROPELLERS ARE REMOVED</label><div id="mtMsg" class="mt-msg"></div>';
+    panel.querySelector('.tests-grid').before(ctl);
+    const st=document.createElement('style');st.textContent='.mt-ctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:8px 0;font-size:11px;color:#9fb3c4}'+
+      '.mt-ctl select{background:#0b1620;color:#e8f4ff;border:1px solid #2a3e4e;padding:2px 4px}.mt-props{color:#ffb800;font-weight:700}.mt-msg{flex-basis:100%;min-height:14px;font-size:11px}'+
+      '.mt-msg.ok{color:#00e383}.mt-msg.err{color:#ff5c7a}.test-btn.running{background:#ffb800!important;color:#000!important}';document.head.appendChild(st);
+    const buttons=[...panel.querySelectorAll('.test-btn')];
+    const props=el('mtProps');
+    const sync=()=>buttons.forEach(b=>{b.disabled=viewer||!props.checked;b.title=viewer?'Viewer mode — read only':props.checked?'Spin this motor':'Tick "propellers are removed" first';});
+    props.addEventListener('change',sync);sync();
+    let busy=false;
+    buttons.forEach(b=>b.addEventListener('click',async()=>{
+      if(busy||viewer||!props.checked)return;
+      if(latest.armed){text('mtMsg','Disarm first — motor test is blocked while armed');el('mtMsg').className='mt-msg err';return;}
+      const motor=Number(b.dataset.motor),throttle=Number(el('mtThrottle').value),seconds=Number(el('mtSeconds').value);
+      busy=true;b.classList.add('running');text('mtMsg','Sending…');el('mtMsg').className='mt-msg';
+      const r=window.airsentMission?await window.airsentMission.send('motor_test',{motor,throttle,seconds,props_off_confirmed:true},{timeout:6000}):{ok:false,msg:'Command link not loaded'};
+      text('mtMsg',(r.ok?'✓ ':'✗ ')+r.msg);el('mtMsg').className='mt-msg '+(r.ok?'ok':'err');
+      setTimeout(()=>{b.classList.remove('running');busy=false;},r.ok?seconds*1000*(motor===0?4:1)+300:0);
+    }));
+  })();
   ['statusSelect','flightModeSelect'].forEach(id=>{if(el(id)) el(id).disabled=true;});
   ['failsafeStateTop','summaryFailsafe'].forEach(id=>{const node=el(id);if(node) node.parentElement.childNodes.forEach(child=>{if(child.nodeType===3)child.textContent=child.textContent.replace(/FAILSAFE:/g,'ESC STATUS:');});});
   const escLabel=el('failsafeStateTop')?.parentElement.querySelector('.subbar-label');if(escLabel)escLabel.textContent='ESC STATUS:';

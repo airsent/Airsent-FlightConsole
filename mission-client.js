@@ -76,6 +76,7 @@
     if (data && data.failsafe_params) { api.failsafeParams = data.failsafe_params; api.failsafeAt = performance.now(); }
     if (data && data.failsafe_rules) api.failsafeRules = data.failsafe_rules;
     if (data && data.asc) { api.asc = data.asc; if (data.asc.defs) api.ascDefs = data.asc.defs; }
+    if (data && data.param_rev) api.paramRev = data.param_rev;
     if (data && (data.mission || data.faults)) emit();
   }
   api.accept = accept;
@@ -276,6 +277,14 @@
           faults.forEach(f => { if (c.fault_id === 'all' || f.id === c.fault_id) f.acked_by = f.acked_by || who; }); return ok('Acknowledged');
         case 'mission_claim_pic': st.pic = { console: c.console_id, name: who }; return ok('You are pilot in command');
         case 'emergency_stop': return ok('EMERGENCY STOP — motors stopped (demo)');
+        case 'goto': {
+          if (!(c.alt >= 2 && c.alt <= 115)) return no('Altitude must be 2–115 m');
+          return ok(`Flying to the point at ${Math.round(c.alt)} m (demo)`);
+        }
+        case 'motor_test':
+          if (!c.props_off_confirmed) return no('Confirm the propellers are removed');
+          if (!(c.throttle >= 5 && c.throttle <= 20) || !(c.seconds >= 0.5 && c.seconds <= 3)) return no('Throttle must be 5–20 % and time 0.5–3 s');
+          return ok(`Motor test running — ${c.motor ? 'M' + c.motor : 'all motors in turn'} at ${c.throttle}% for ${c.seconds} s (demo)`);
         case 'wp_upload': {
           const wps = (c.plan && c.plan.waypoints) || [];
           if (!wps.length) return no('The plan has no waypoints');
