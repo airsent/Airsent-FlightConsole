@@ -1,0 +1,16 @@
+[Unit]
+Description=Airsent link manager (WiFi first, cellular fallback for the VPS link)
+After=NetworkManager.service ModemManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /usr/local/bin/airsent-netlink
+Restart=always
+RestartSec=2
+Environment=AIRSENT_VPS_IP=146.190.50.189
+Environment=AIRSENT_CELL_PLAN_GB=5
+# Environment=AIRSENT_CELL_IFACE=wwan0     # only if auto-detection picks the wrong interface
+
+[Install]
+WantedBy=multi-user.target
