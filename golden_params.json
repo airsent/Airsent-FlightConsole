@@ -100,6 +100,76 @@
         4
       ],
       "why": "Fence breach: RTL (or brake)"
+    },
+    "RNGFND1_POS_X": {
+      "min": 0.177,
+      "max": 0.197,
+      "why": "H-Flow LiDAR 7.375 in forward of the centre of gravity"
+    },
+    "RNGFND1_POS_Y": {
+      "min": -0.01,
+      "max": 0.01,
+      "why": "H-Flow LiDAR on the centre line"
+    },
+    "RNGFND1_POS_Z": {
+      "min": 0.061,
+      "max": 0.081,
+      "why": "H-Flow LiDAR 2.79 in below the centre of gravity"
+    },
+    "FLOW_POS_X": {
+      "min": 0.177,
+      "max": 0.197,
+      "why": "H-Flow optical flow 7.375 in forward of the centre of gravity"
+    },
+    "FLOW_POS_Y": {
+      "min": -0.01,
+      "max": 0.01,
+      "why": "H-Flow optical flow on the centre line"
+    },
+    "FLOW_POS_Z": {
+      "min": 0.061,
+      "max": 0.081,
+      "why": "H-Flow optical flow 2.79 in below the centre of gravity"
+    },
+    "FLOW_ORIENT_YAW": {
+      "value": 0,
+      "why": "H-Flow arrow points to the nose"
+    },
+    "GPS1_POS_X": {
+      "min": -0.079,
+      "max": -0.059,
+      "why": "H-RTK antenna 2.7 in behind the centre of gravity",
+      "alt": {
+        "GPS_POS1_X": {
+          "min": -0.079,
+          "max": -0.059,
+          "why": "H-RTK antenna 2.7 in behind the centre of gravity"
+        }
+      }
+    },
+    "GPS1_POS_Y": {
+      "min": -0.075,
+      "max": -0.055,
+      "why": "H-RTK antenna 2.55 in left of the centre line",
+      "alt": {
+        "GPS_POS1_Y": {
+          "min": -0.075,
+          "max": -0.055,
+          "why": "H-RTK antenna 2.55 in left of the centre line"
+        }
+      }
+    },
+    "GPS1_POS_Z": {
+      "min": -0.223,
+      "max": -0.203,
+      "why": "H-RTK antenna 8.375 in above the centre of gravity (mast)",
+      "alt": {
+        "GPS_POS1_Z": {
+          "min": -0.223,
+          "max": -0.203,
+          "why": "H-RTK antenna 8.375 in above the centre of gravity (mast)"
+        }
+      }
     }
   }
 }
