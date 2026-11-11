@@ -24,7 +24,9 @@
   const ages=d.sensor_ages||{},rangeFresh=px&&(ages.rangefinder===undefined?number(d.rangefinder)&&d.rangefinder>0:fresh(ages.rangefinder,5));
   const flowFresh=px&&(ages.of===undefined?number(d.of_quality)&&d.of_quality>0:fresh(ages.of,5));
   const device=value=>feed&&value?.connected===true&&fresh(value.age,5)?value:null;
-  return {ground:device(d.ground_computer),rtkBase:device(d.rtk_base),feed,px,state,reported,rcConnected,rcFresh,rcPercent:rcConnected&&number(rc.percent)&&rc.percent>=0&&rc.percent<=100?rc.percent:null,
+  // The ground station has no link of its own; the rover holding RTK proves its corrections are arriving.
+  const rc0=d.rtk_corrections||{},rtkLink={online:px&&rc0.online===true,ever:px&&rc0.ever===true,age:number(rc0.age)?rc0.age:null,fix:rc0.fix||null,forS:number(rc0.for_s)?rc0.for_s:null};
+  return {ground:device(d.ground_computer),rtkBase:device(d.rtk_base),rtkLink,feed,px,state,reported,rcConnected,rcFresh,rcPercent:rcConnected&&number(rc.percent)&&rc.percent>=0&&rc.percent<=100?rc.percent:null,
    escCount:channels.length,escError:esc.error||'',voltage,current,battery,network,type,strength,
    range:rangeFresh&&number(d.rangefinder)&&d.rangefinder>0?d.rangefinder:null,agl:rangeFresh&&number(d.rangefinder_agl)?d.rangefinder_agl:null,
    flow:flowFresh&&number(d.of_quality)&&d.of_quality>=0&&d.of_quality<=255?Math.round(d.of_quality*100/255):null};
