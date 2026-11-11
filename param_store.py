@@ -137,6 +137,7 @@ class ParamStore:
             target = float(round(value))
         else:
             target = _f32(value)
+        refused = None
         with self._write_lock:
             for attempt in range(retries + 1):
                 since = self.clock()
@@ -145,7 +146,14 @@ class ParamStore:
                     got = self.get(name)['value']
                     if abs(got - target) <= max(1e-6, abs(target) * 1e-6):
                         return self._out(self.get(name))
-                    raise RuntimeError(f'{name}: Pixhawk kept {got:g} (asked for {target:g}) — value refused')
+                    # Not necessarily a refusal: writing one element of a vector parameter
+                    # (e.g. GPS1_POS_X) makes ArduPilot re-announce all three, so a late echo
+                    # of the old GPS1_POS_Y can land just after we ask for the new one.
+                    # Ask again before calling it refused (found on the ZD650).
+                    refused = got
+                    time.sleep(0.3)
+        if refused is not None:
+            raise RuntimeError(f'{name}: Pixhawk kept {refused:g} (asked for {target:g}) — value refused')
         raise RuntimeError(f'{name}: no confirmation from the Pixhawk')
 
     def write_many(self, mav, changes):
