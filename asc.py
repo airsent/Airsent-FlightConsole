@@ -461,7 +461,7 @@ class ASC:
         """A console asked for a mode change (so the next mode change is not 'external')."""
         self.console_mode_at = now or self.clock()
 
-    QUIET = {'mission_ping', 'param_read', 'wp_download', 'get_log'}
+    QUIET = {'mission_ping', 'param_read', 'wp_download', 'get_log', 'cam_watch', 'log_list', 'log_detail', 'log_file'}
 
     def note_command(self, action, who='Operator', data=None, now=None):
         """Operator commands go into the flight record (joystick input into its own file)."""

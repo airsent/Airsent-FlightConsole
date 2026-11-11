@@ -20,8 +20,16 @@ for f in $FILES; do cp "$f" "$TARGET/"; done
 echo "Copied to $TARGET: $(echo $FILES | tr '\n' ' ')"
 python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py" "$TARGET/pixhawk_log.py" "$TARGET/video_record.py"
 command -v ffmpeg >/dev/null || echo "⚠ ffmpeg is not installed — videos stay as raw .h265/.mjpeg. Fix: sudo apt install -y ffmpeg"
+# Link manager (root service): WiFi first, cellular fallback for everything going to the VPS
+sudo install -m 755 netlink.py /usr/local/bin/airsent-netlink
+sudo install -m 644 deploy/airsent-netlink.service /etc/systemd/system/airsent-netlink.service
+sudo systemctl daemon-reload
+sudo systemctl enable --quiet airsent-netlink
+sudo systemctl restart airsent-netlink
+sleep 3
+systemctl is-active --quiet airsent-netlink && echo "✓ airsent-netlink running: $(python3 -c 'import json;d=json.load(open("/run/airsent-netlink/status.json"));print("active link =", d.get("active"), "| wifi", d["wifi"].get("iface"), "| cellular", d["cellular"].get("iface") or "none")' 2>/dev/null)" || echo "⚠ airsent-netlink is not running — journalctl -u airsent-netlink"
 sudo systemctl restart airsent-server
 echo "Restarted airsent-server — waiting 12 s for the Pixhawk link…"
 sleep 12
-journalctl -u airsent-server -n 60 --no-pager | grep -E "H.265 recorder|Pixhawk connected|Streams @|Command relay connected|Telemetry relay connected|Traceback|Error|error" | tail -12
+journalctl -u airsent-server -n 60 --no-pager | grep -E "\[NET\]|H.265 recorder|Pixhawk connected|Streams @|Command relay connected|Telemetry relay connected|Traceback|Error|error" | tail -12
 systemctl is-active --quiet airsent-server && echo "✓ airsent-server is running" || { echo "✗ airsent-server is NOT running"; exit 1; }

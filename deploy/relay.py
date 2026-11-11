@@ -57,7 +57,7 @@ async def telem_browser(ws):
         print(f"[RELAY] Browser telem disconnected ({len(browsers['telem'])} remaining)")
 
 # Reads and joystick input are not operator actions worth journaling.
-QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
+QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download', 'cam_watch'}
 # request_id -> browser socket, so large replies (log file chunks) go only to the console that asked.
 pending = {}
 

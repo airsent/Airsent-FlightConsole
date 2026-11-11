@@ -255,6 +255,93 @@ def read_network_link(run=subprocess.run):
 network_link = {'connected': False, 'last_seen': 0.0}
 
 
+# ── Link manager: WiFi first, cellular fallback (netlink.py runs as root) ─────
+# netlink.py picks the link and steers the VPS traffic; here we read its status, and
+# when the active link changes we reconnect everything to the VPS at once (instead of
+# waiting ~15 s for the old sockets to time out) and switch the video to that link's profile.
+NETLINK_STATUS = os.environ.get('AIRSENT_NETLINK_STATUS', '/run/airsent-netlink/status.json')
+NETLINK_PREFER = os.path.join(os.path.dirname(NETLINK_STATUS), 'prefer')
+netlink = {'status': None, 'epoch': 0, 'active': None}
+
+
+def read_netlink(now=None, path=None):
+    try:
+        with open(path or NETLINK_STATUS) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return st if (now or time.time()) - float(st.get('at', 0)) <= 5 else None
+
+
+def netlink_step(st):
+    """Track the active link; returns (from, to, reason) when it changed, else None."""
+    netlink['status'] = st
+    act = (st or {}).get('active')
+    if not st or act == netlink['active']:
+        return None
+    prev, netlink['active'] = netlink['active'], act
+    if prev is None:
+        return None
+    netlink['epoch'] += 1
+    return prev, act, ((st.get('last_switch') or {}).get('reason') or '')
+
+
+def netlink_reader():
+    while True:
+        ch = netlink_step(read_netlink())
+        if ch:
+            log_mavlink(f"[NET] {str(ch[0]).upper()} → {str(ch[1]).upper()} ({ch[2]}) — reconnecting to the VPS")
+        time.sleep(0.5)
+
+
+def link_kind():
+    """'cellular' or 'wifi' (wired / unknown count as wifi)."""
+    st = netlink['status']
+    if st and st.get('active'):
+        return st['active']
+    return 'cellular' if network_link.get('type') == 'cellular' else 'wifi'
+
+
+def _envi(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except ValueError:
+        return default
+
+
+# Video per link. Cellular: lower bitrate and frame rate, and only while someone watches.
+VIDEO_PROFILES = {
+    'wifi': {'front': {'min': 1500, 'max': 10000, 'start': 4000, 'fps': 30},
+             'down': {'min': 400, 'max': 3000, 'start': 1000, 'fps': 15}},
+    'cellular': {'front': {'min': _envi('AIRSENT_CELL_FRONT_MIN', 500), 'max': _envi('AIRSENT_CELL_FRONT_MAX', 2000),
+                           'start': _envi('AIRSENT_CELL_FRONT_START', 1200), 'fps': _envi('AIRSENT_CELL_FRONT_FPS', 20)},
+                 'down': {'min': 250, 'max': _envi('AIRSENT_CELL_DOWN_MAX', 700), 'start': 500, 'fps': _envi('AIRSENT_CELL_DOWN_FPS', 10)}},
+}
+# 'cellular' (default): stream only while watched when on cellular; 'always': on every link; 'off': stream all the time
+VIDEO_ON_DEMAND = os.environ.get('AIRSENT_VIDEO_ON_DEMAND', 'cellular')
+WATCH_HOLD_S = 15.0
+cam_watch = {'front': 0.0, 'down': 0.0}
+
+
+def video_profile(cam):
+    return VIDEO_PROFILES['cellular' if link_kind() == 'cellular' else 'wifi'][cam]
+
+
+def cam_wanted(cam, now=None):
+    if VIDEO_ON_DEMAND == 'off' or (VIDEO_ON_DEMAND == 'cellular' and link_kind() != 'cellular'):
+        return True
+    return (now or time.time()) - cam_watch.get(cam, 0) < WATCH_HOLD_S
+
+
+def netlink_payload():
+    st = netlink['status']
+    return {'ok': bool(st), 'active': (st or {}).get('active'), 'prefer': (st or {}).get('prefer', 'auto'),
+            'wifi': (st or {}).get('wifi'), 'cellular': (st or {}).get('cellular'), 'data': (st or {}).get('data'),
+            'switches': (st or {}).get('switches', 0), 'last_switch': (st or {}).get('last_switch'),
+            'video': {'on_demand': VIDEO_ON_DEMAND, 'front': cam_wanted('front'), 'down': cam_wanted('down'),
+                      'front_kbps': globals().get('frontcam_bitrate_kbps', 0), 'down_kbps': globals().get('downcam_bitrate_kbps', 0)}}
+
+
 def cellular_signal_reader():
     """Refresh active network state independently of MAVLink/RC status."""
     while True:
@@ -1465,7 +1552,7 @@ FLY_ACTIONS = {'arm', 'takeoff', 'set_auto', 'motor_test', 'goto', 'set_guided'}
 LINK_ACTIONS = {'param_write', 'param_read', 'wp_upload', 'wp_download'}      # need replies the log stream can crowd out
 SLOW_ACTIONS = {'bin_download', 'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
 # Reads and joystick input: kept out of the shared events journal by the relay.
-QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download'}
+QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download', 'cam_watch'}
 param_changes = {'rev': 0, 'values': {}, 'by': None}      # last confirmed parameter write, for every console
 
 
@@ -1516,6 +1603,24 @@ def _process_command(raw):
 
     # Launch sequencer requests are handled by the Jetson mission engine,
     # including abort/hold when the Pixhawk link is down.
+    if action == 'cam_watch':
+        now = time.time()
+        for cam in cmd.get('cams') or []:
+            if cam in cam_watch:
+                cam_watch[cam] = now
+        return {'ok': True, 'quiet': True, 'msg': 'watching'}
+    if action == 'net_prefer':
+        mode = cmd.get('mode')
+        if mode not in ('auto', 'wifi', 'cellular'):
+            return {'ok': False, 'msg': 'mode must be auto, wifi or cellular'}
+        if mode != 'auto' and telem.get('armed'):
+            return {'ok': False, 'msg': 'Forcing a link is for ground testing — not while armed'}
+        try:
+            with open(NETLINK_PREFER, 'w') as f:
+                f.write(mode)
+        except OSError as e:
+            return {'ok': False, 'msg': f'Link manager not running ({e.strerror}) — install airsent-netlink'}
+        return {'ok': True, 'msg': 'Network: automatic (WiFi first, cellular fallback)' if mode == 'auto' else f'Network forced to {mode.upper()} — set back to AUTO before flying'}
     if isinstance(action, str) and (action.startswith('mission_') or action == 'fault_ack'):
         if action == 'mission_create' and cmd.get('route'):
             vm = vehicle_mission.snapshot()
@@ -1875,6 +1980,7 @@ def build_telemetry_payload(include_mission=True):
     if not network['connected']:
         network['percent'] = None
     payload['network_link'] = network
+    payload['netlink'] = netlink_payload()
     # Compatibility for existing consumers expecting cellular-only measurements.
     payload['cellular_signal'] = dict(network) if network.get('type') == 'cellular' else {
         'connected': False, 'percent': None, 'age': network['age'], 'technology': None,
@@ -2278,8 +2384,7 @@ def cam_rtmp_thread():
 
     W, H, FPS      = 1280, 720, FRONTCAM_FPS
     SRT_LATENCY_MS = 150            # lower to ~150 once you trust the link (≈3-4x ping)
-    BR_MIN, BR_MAX = 1500, 10000    # kbps floor / ceiling
-    BR_START       = 4000           # kbps at (re)connect
+    BR_MIN, BR_MAX, BR_START = 1500, 10000, 4000     # kbps; replaced by the link's profile below
     STEP_UP        = 500            # kbps added after a clean window
     DOWN_FACTOR    = 0.7            # multiply on congestion
     CLEAN_SECS     = 3              # clean seconds before stepping up
@@ -2323,11 +2428,18 @@ def cam_rtmp_thread():
         if not ready:
             time.sleep(2)
             continue
+        if not cam_wanted('front'):
+            frontcam_bitrate_kbps = 0
+            time.sleep(0.5)                       # on demand: nobody watching, send nothing
+            continue
         if not rtmp_port_reachable():
             print("[SRT] VPS unreachable — retrying in 3s")
             time.sleep(3)
             continue
 
+        prof = video_profile('front')
+        BR_MIN, BR_MAX, BR_START = prof['min'], prof['max'], prof['start']
+        ep, fast = netlink['epoch'], False
         pipe = None
         try:
             pipe = build()
@@ -2336,12 +2448,12 @@ def cam_rtmp_thread():
             sink = pipe.get_by_name('sink')
             bus  = pipe.get_bus()
             pipe.set_state(Gst.State.PLAYING)
-            print(f"[SRT] Streaming front cam → {uri} streamid=publish:frontcam | ABR {BR_MIN}-{BR_MAX} kbps, start {BR_START}")
+            print(f"[SRT] Streaming front cam over {link_kind().upper()} → {uri} | {prof['fps']} fps, ABR {BR_MIN}-{BR_MAX} kbps, start {BR_START}")
 
             br, clean, rtt_base, prev = BR_START, 0, None, None
             pushed, ctl_n = 0, 0
             frontcam_bitrate_kbps = br
-            interval, last_sent, last_frame, last_ctl = 1.0 / FPS, 0.0, None, time.time()
+            interval, last_sent, last_frame, last_ctl = 1.0 / prof['fps'], 0.0, None, time.time()
 
             while True:
                 msg = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
@@ -2359,6 +2471,21 @@ def cam_rtmp_thread():
                 if now - last_ctl >= 1.0:
                     last_ctl = now
                     ctl_n += 1
+                    if netlink['epoch'] != ep:
+                        print("[SRT] Network switched — reconnecting front cam on the new link")
+                        fast = True
+                        break
+                    if not cam_wanted('front'):
+                        print("[SRT] Nobody watching the front cam — stream paused (on demand)")
+                        fast = True
+                        break
+                    prof = video_profile('front')
+                    BR_MIN, BR_MAX = prof['min'], prof['max']
+                    interval = 1.0 / prof['fps']
+                    if br > BR_MAX:
+                        br = BR_MAX
+                        enc.set_property('bitrate', br)
+                        frontcam_bitrate_kbps = br
                     if ctl_n % 5 == 0:
                         print(f"[SRT-FPS] pushing {pushed/5:.1f} fps @ {br} kbps")
                         pushed = 0
@@ -2413,7 +2540,8 @@ def cam_rtmp_thread():
                     pipe.set_state(Gst.State.NULL)
                 except Exception:
                     pass
-        time.sleep(3)
+            frontcam_bitrate_kbps = 0
+        time.sleep(0.3 if fast else 3)
 
 
 # ── Down camera → VPS: GStreamer x264 → SRT, adaptive bitrate (front cam has priority) ──
@@ -2430,8 +2558,7 @@ def downcam_rtmp_thread():
 
     W, H, FPS      = STREAM_W, STREAM_H, DOWNCAM_FPS
     SRT_LATENCY_MS = 150
-    BR_MIN, BR_MAX = 400, 3000      # kbps
-    BR_START       = 1000
+    BR_MIN, BR_MAX, BR_START = 400, 3000, 1000       # kbps; replaced by the link's profile below
     STEP_UP        = 250
     DOWN_FACTOR    = 0.7
     CLEAN_SECS     = 3
@@ -2442,8 +2569,8 @@ def downcam_rtmp_thread():
     def ceiling():
         fb = globals().get('frontcam_bitrate_kbps', 0) or 0
         if fb == 0 or fb >= 6000: return BR_MAX     # front idle or link healthy
-        if fb >= 3000:            return 1500
-        return 600                                  # link struggling: pilot view first
+        if fb >= 3000:            return min(BR_MAX, 1500)
+        return min(BR_MAX, 600)                     # link struggling: pilot view first
 
     def build():
         desc = (
@@ -2481,11 +2608,18 @@ def downcam_rtmp_thread():
         if not ready:
             time.sleep(2)
             continue
+        if not cam_wanted('down'):
+            downcam_bitrate_kbps = 0
+            time.sleep(0.5)
+            continue
         if not rtmp_port_reachable():
             print("[SRT-DOWN] VPS unreachable — retrying in 3s")
             time.sleep(3)
             continue
 
+        prof = video_profile('down')
+        BR_MIN, BR_MAX, BR_START = prof['min'], prof['max'], prof['start']
+        ep, fast = netlink['epoch'], False
         pipe = None
         try:
             pipe = build()
@@ -2499,7 +2633,7 @@ def downcam_rtmp_thread():
             br, clean, rtt_base, prev = BR_START, 0, None, None
             downcam_bitrate_kbps = br
             pushed, ctl_n = 0, 0
-            interval, last_sent, last_frame, last_ctl = 1.0 / FPS, 0.0, None, time.time()
+            interval, last_sent, last_frame, last_ctl = 1.0 / prof['fps'], 0.0, None, time.time()
 
             while True:
                 msg = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
@@ -2517,6 +2651,17 @@ def downcam_rtmp_thread():
                 if now - last_ctl >= 1.0:
                     last_ctl = now
                     ctl_n += 1
+                    if netlink['epoch'] != ep or not cam_wanted('down'):
+                        print("[SRT-DOWN] " + ("Network switched — reconnecting" if netlink['epoch'] != ep else "Nobody watching the down cam — stream paused (on demand)"))
+                        fast = True
+                        break
+                    prof = video_profile('down')
+                    BR_MIN, BR_MAX = prof['min'], prof['max']
+                    interval = 1.0 / prof['fps']
+                    if br > min(BR_MAX, ceiling()):
+                        br = max(BR_MIN, min(BR_MAX, ceiling()))
+                        enc.set_property('bitrate', br)
+                        downcam_bitrate_kbps = br
                     if ctl_n % 5 == 0:
                         print(f"[SRT-DOWN-FPS] pushing {pushed/5:.1f} fps @ {br} kbps (cap {ceiling()})")
                         pushed = 0
@@ -2571,7 +2716,8 @@ def downcam_rtmp_thread():
                     pipe.set_state(Gst.State.NULL)
                 except Exception:
                     pass
-        time.sleep(3)
+            downcam_bitrate_kbps = 0
+        time.sleep(0.3 if fast else 3)
 
 
 # ── April tag detection ──────────────────────────
@@ -2722,18 +2868,27 @@ async def downcam_handler(websocket):
         traceback.print_exc()
 
 # ── VPS telemetry relay ──────────────────────────
+async def _close_on_link_switch(remote, ep):
+    """Drop a VPS socket the moment the link manager changes link, so it reconnects over
+    the new one now instead of after the ~15 s ping timeout."""
+    while netlink['epoch'] == ep:
+        await asyncio.sleep(0.2)
+    print("[VPS] Network switched — reconnecting on the new link")
+    await remote.close()
+
+
 async def vps_telem_relay():
     while True:
+        ep = netlink['epoch']
+        watcher = None
         try:
             print("[VPS] Connecting telemetry relay...")
 
-            remote = await websockets.connect(
-                VPS_TELEM_URL,
-                ping_interval=5, ping_timeout=10
-            )
+            remote = await asyncio.wait_for(websockets.connect(VPS_TELEM_URL, ping_interval=5, ping_timeout=10), 8)
 
-            print("[VPS] Telemetry relay connected")
+            print(f"[VPS] Telemetry relay connected ({link_kind().upper()})")
             vps_relay_state['telem'] = True
+            watcher = asyncio.create_task(_close_on_link_switch(remote, ep))
             last_mission = 0.0
 
             while True:
@@ -2745,9 +2900,12 @@ async def vps_telem_relay():
 
         except Exception as e:
             print(f"[VPS] Relay error: {e}")
+        finally:
+            if watcher:
+                watcher.cancel()
         vps_relay_state['telem'] = False
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.2 if netlink['epoch'] != ep else 2)
 
 # ── VPS command relay ────────────────────────────
 # The reverse of vps_telem_relay: dials OUT to the VPS command port and HOLDS
@@ -2760,23 +2918,26 @@ VPS_CMD_URL = os.environ.get("VPS_CMD_URL", "ws://146.190.50.189:9004")
 
 async def vps_cmd_relay():
     while True:
+        ep = netlink['epoch']
+        watcher = None
         try:
             print("[VPS] Connecting command relay...")
-            remote = await websockets.connect(
-                VPS_CMD_URL,
-                ping_interval=5, ping_timeout=10
-            )
-            print("[VPS] Command relay connected")
+            remote = await asyncio.wait_for(websockets.connect(VPS_CMD_URL, ping_interval=5, ping_timeout=10), 8)
+            print(f"[VPS] Command relay connected ({link_kind().upper()})")
+            watcher = asyncio.create_task(_close_on_link_switch(remote, ep))
 
             await serve_commands(remote, remote)
 
         except Exception as e:
             print(f"[VPS] Command relay error: {e}")
+        finally:
+            if watcher:
+                watcher.cancel()
 
         # On any disconnect, zero velocity for safety (same as local handler).
         with vel_lock:
             vel_setpoint.update({'vx':0,'vy':0,'vz':0,'yaw_rate':0})
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.2 if netlink['epoch'] != ep else 2)
 
 # ── Main ─────────────────────────────────────────
 async def main():
@@ -2806,6 +2967,7 @@ if __name__ == "__main__":
     threading.Thread(target=mavlink_reader,         daemon=True).start()
     threading.Thread(target=battery_soc_init,       daemon=True).start()
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
+    threading.Thread(target=netlink_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
     threading.Thread(target=mission_loop,           daemon=True).start()
     threading.Thread(target=asc_loop,               daemon=True).start()
