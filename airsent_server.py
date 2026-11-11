@@ -652,6 +652,31 @@ COPTER_MODE_NAMES = {0: 'STABILIZE', 1: 'ACRO', 2: 'ALT HOLD', 3: 'AUTO', 4: 'GU
                      25: 'SYSTEMID', 26: 'AUTOROTATE', 27: 'AUTO_RTL', 28: 'TURTLE'}
 
 
+# ── RTK base / ground station, inferred from the drone ─────────────────────
+# The ground station has no internet of its own, so it can't report itself. But the rover
+# can only reach RTK FLOAT / RTK FIX with live corrections from the base, so the drone
+# being in RTK means the base station and the ground computer's radio bridge are working.
+# (DGPS doesn't count: that can come from SBAS satellites alone.)
+RTK_ONLINE_S = 10.0
+rtk_link = {'last': 0.0, 'since': 0.0, 'fix': None, 'ever': False}
+
+
+def rtk_corrections_seen(fix_type, now):
+    if fix_type in (5, 6):
+        if now - rtk_link['last'] > RTK_ONLINE_S:
+            rtk_link['since'] = now                  # a new streak of corrections
+        rtk_link.update(last=now, fix='RTK FIX' if fix_type == 6 else 'RTK FLOAT', ever=True)
+
+
+def rtk_link_payload(now=None):
+    now = now or time.time()
+    age = now - rtk_link['last'] if rtk_link['ever'] else None
+    online = age is not None and age <= RTK_ONLINE_S
+    return {'online': online, 'ever': rtk_link['ever'], 'age': round(age, 1) if age is not None else None,
+            'fix': rtk_link['fix'] if online else None,
+            'for_s': round(now - rtk_link['since']) if online else None, 'source': 'rover RTK fix'}
+
+
 def mavlink_reader():
     global mav_conn, _last_imu_accel, last_mav_report, last_mav_heartbeat
     while True:
@@ -752,6 +777,7 @@ def mavlink_reader():
                 elif t == 'GPS_RAW_INT':
                     fix_map={0:'NO FIX',1:'NO FIX',2:'2D FIX',3:'3D FIX',4:'DGPS',5:'RTK FLOAT',6:'RTK FIX'}
                     telem['fix_type'] = fix_map.get(msg.fix_type,'NO FIX')
+                    rtk_corrections_seen(msg.fix_type, time.time())
                     telem['sats']     = msg.satellites_visible
                     telem['hdop']     = round(msg.eph/100, 2)
                 elif t == 'SYS_STATUS':
@@ -1980,6 +2006,7 @@ def build_telemetry_payload(include_mission=True):
     if not network['connected']:
         network['percent'] = None
     payload['network_link'] = network
+    payload['rtk_corrections'] = rtk_link_payload()
     payload['netlink'] = netlink_payload()
     # Compatibility for existing consumers expecting cellular-only measurements.
     payload['cellular_signal'] = dict(network) if network.get('type') == 'cellular' else {

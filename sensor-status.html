@@ -433,6 +433,7 @@ body {
       <div class="row"><span class="row-label">Fix Type</span><span class="row-val blue" id="gps-fix">--</span></div>
       <div class="row"><span class="row-label">Satellites</span><span class="row-val" id="gps-sats">--</span></div>
       <div class="row"><span class="row-label">HDOP</span><span class="row-val" id="gps-hdop">--</span></div>
+      <div class="row" title="The ground station can't report itself; the drone holding RTK FLOAT/FIX proves its corrections are arriving"><span class="row-label">RTK Base / Ground Stn</span><span class="row-val" id="gps-rtkbase">--</span></div>
       <div class="row"><span class="row-label">Latitude</span><span class="row-val" id="gps-lat">--</span></div>
       <div class="row"><span class="row-label">Longitude</span><span class="row-val" id="gps-lon">--</span></div>
       <div class="bar-row">
@@ -794,6 +795,10 @@ function applyData(d) {
   setVal("gps-fix",  pxOk?(d.fix_type||"--"):"--", gpsOk?"blue":"amber");
   setVal("gps-sats", pxOk&&d.sats!=null?String(d.sats):"--", d.sats>=10?"green":"amber");
   setVal("gps-hdop", pxOk&&d.hdop!=null?d.hdop.toFixed(2):"--", d.hdop<1.5?"green":"amber");
+  const rl = d.rtk_corrections || {};
+  const ago = x => x == null ? "" : x < 60 ? `${Math.round(x)} s` : `${Math.round(x/60)} min`;
+  setVal("gps-rtkbase", !pxOk ? "--" : rl.online ? `ONLINE · ${rl.fix}` : rl.ever ? `NO CORRECTIONS · ${ago(rl.age)}` : "NOT SEEN",
+         !pxOk ? "" : rl.online ? "green" : rl.ever ? "red" : "amber");
   setVal("gps-lat",  pxOk&&d.lat!=null?d.lat.toFixed(5)+"°":"--");
   setVal("gps-lon",  pxOk&&d.lon!=null?d.lon.toFixed(5)+"°":"--");
   setBar("gps-bar", pxOk?(d.sats||0)/25*100:0, "blue", "gps-barpct");
@@ -938,7 +943,7 @@ function runDemo() {
 
   setInterval(()=>{
     applyData({
-      fix_type:"RTK FIX", sats:Math.floor(rnd(16,22)), hdop:rnd(0.5,1.2),
+      fix_type:"RTK FIX", sats:Math.floor(rnd(16,22)), hdop:rnd(0.5,1.2), rtk_corrections:{online:true, ever:true, fix:"RTK FIX", age:0.2, for_s:640},
       lat:33.4136+rnd(-0.001,0.001), lon:-111.9196+rnd(-0.001,0.001),
       roll:rnd(-4,4), pitch:rnd(-3,3), yaw:rnd(0,359),
       ekf_healthy:true,

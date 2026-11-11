@@ -795,6 +795,22 @@ function applyData(d){
     }else ['pi-cpu','pi-ram','pi-temp','pi-ntrip','pi-radio','pi-pad'].forEach(id=>txt(id,'--'));
     if(h.rtkBase){const base=h.rtkBase;const fixed=['RTK FIX','RTK FIXED','3D FIX'].includes(base.fix_type);setState('rtkbase',fixed?'ok':'warn');setBadge('rtkbase',fixed?'ok':'warn',base.fix_type||'NO FIX');txt('nd-rtkbase',Number.isFinite(base.sats)?base.sats:'--');txt('nd-rtkfix',base.fix_type||'--');}
     else {txt('nd-rtkbase','--');txt('nd-rtkfix','--');}
+    // No direct report from the ground station (it has no internet): infer it from the drone.
+    // Rover in RTK FLOAT/FIX = corrections are arriving = base station + radio bridge are working.
+    const rl=h.rtkLink;
+    if(rl&&(rl.online||rl.ever)){
+      const ago=s=>s==null?'':s<60?`${Math.round(s)} s`:`${Math.round(s/60)} min`;
+      if(!h.rtkBase){
+        if(rl.online){setState('rtkbase','ok');setBadge('rtkbase','ok','ONLINE · VIA RTK');txt('nd-rtkfix',rl.fix);cls('nd-rtkfix','ok');}
+        else{setState('rtkbase','err');setBadge('rtkbase','err','NO CORRECTIONS');txt('nd-rtkfix',`LOST ${ago(rl.age)} AGO`);cls('nd-rtkfix','err');}
+      }
+      if(!h.ground){
+        if(rl.online){setState('pi','ok');setBadge('pi','ok','ONLINE · VIA RTK');txt('pi-radio','OK');el('pi-radio')?.classList.remove('err');el('pi-radio')?.classList.add('ok');}
+        else{setState('pi','err');setBadge('pi','err','NO CORRECTIONS');txt('pi-radio','LOST');el('pi-radio')?.classList.remove('ok');el('pi-radio')?.classList.add('err');}
+      }
+      const tip=rl.online?`The drone is in ${rl.fix} — only possible with live corrections from the base station (for ${ago(rl.forS)})`:`No RTK corrections for ${ago(rl.age)} — check the base station, ground computer and radio`;
+      for(const id of ['node-rtkbase','node-pi'])el(id)?.setAttribute('title',tip);
+    }
   }
 
   /* Cameras are updated by the WebRTC stream probe below. In demo mode only,

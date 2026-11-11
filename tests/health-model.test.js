@@ -14,3 +14,10 @@ console.log('PASS: health evidence, RC without RSSI, ESC telemetry vs PWM, raw f
 assert.equal(model({...frame,ground_computer:{connected:true,age:0,cpu:0}}).ground.cpu,0);
 assert.equal(model({...frame,ground_computer:{connected:true,age:6,cpu:20}}).ground,null);
 assert.equal(model({...frame,rtk_base:{connected:true,age:0,fix_type:'RTK FIX',sats:20}}).rtkBase.sats,20);
+
+// Ground station inferred from the rover's RTK fix (the station has no link of its own)
+assert.equal(model({...frame,rtk_corrections:{online:true,ever:true,age:0.3,fix:'RTK FIX',for_s:12}}).rtkLink.online,true);
+assert.equal(model({...frame,rtk_corrections:{online:true,ever:true,age:0.3,fix:'RTK FIX'}}).rtkLink.fix,'RTK FIX');
+assert.equal(model({...frame,rtk_corrections:{online:false,ever:true,age:42}}).rtkLink.online,false);
+assert.equal(model({...frame,pixhawk_connected:false,rtk_corrections:{online:true,ever:true,age:0.3}}).rtkLink.online,false);
+assert.equal(model({...frame}).rtkLink.ever,false);
