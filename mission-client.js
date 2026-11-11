@@ -79,6 +79,7 @@
     if (data && data.param_rev) api.paramRev = data.param_rev;
     if (data && data.bin_log) api.binLog = data.bin_log;
     if (data && data.video) api.video = data.video;
+    if (data && data.netlink) api.netlink = data.netlink;
     if (data && (data.mission || data.faults)) emit();
   }
   api.accept = accept;
@@ -114,6 +115,30 @@
     if (canCommand && cmd && cmd.readyState === WebSocket.OPEN)
       cmd.send(JSON.stringify({ action: 'mission_ping', console_id: consoleId, operator: api.operatorName, page: location.pathname.split('/').pop() }));
   }
+
+  // ── video on demand: tell the Jetson which cameras are on screen ─────────
+  // On cellular the Jetson only streams a camera while some console shows it
+  // (elements marked data-cam-watch="front|down" that are visible right now).
+  function watchedCams() {
+    if (document.hidden) return [];
+    const cams = new Set();
+    document.querySelectorAll('[data-cam-watch]').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden')
+        el.dataset.camWatch.split(/\s+/).filter(Boolean).forEach(c => cams.add(c));
+    });
+    return [...cams].sort();
+  }
+  api.watchedCams = watchedCams;
+  let lastWatch = '', lastWatchAt = 0;
+  setInterval(() => {
+    if (mode === 'demo' || !canCommand || !cmd || cmd.readyState !== WebSocket.OPEN) return;
+    const cams = watchedCams(), key = cams.join(',');
+    const now = performance.now();
+    if (!cams.length || (key === lastWatch && now - lastWatchAt < 4000)) { if (!cams.length) lastWatch = ''; return; }
+    lastWatch = key; lastWatchAt = now;                       // new camera on screen: tell the Jetson at once
+    cmd.send(JSON.stringify({ action: 'cam_watch', cams, console_id: consoleId, operator: api.operatorName }));
+  }, 1000);
 
   function connectTelemetry() {
     let ws;

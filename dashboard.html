@@ -521,7 +521,7 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
   <div id="leafletMap" class="map-body real-map"></div>
  
   <!-- Front camera (OAK-D Lite) view, hidden until selected. WebRTC <video>. -->
-  <div class="cam-view" id="frontCamView">
+  <div class="cam-view" id="frontCamView" data-cam-watch="front">
     <video id="frontCamVideo" class="cam-view-img" autoplay muted playsinline
            style="width:100%;height:100%;object-fit:cover;display:block;background:#03070c"></video>
     <div class="cam-offline-overlay" id="frontCamOffline">
@@ -534,7 +534,7 @@ FAILSAFE <a href="failsafe.html" class="dashboard-failsafe-link">OPEN ↗</a>
   </div>
 
   <!-- Down camera (IMX219) view, hidden until selected. WebRTC <video>. -->
-  <div class="cam-view" id="downCamView">
+  <div class="cam-view" id="downCamView" data-cam-watch="down">
     <video id="downCamVideo" class="cam-view-img" autoplay muted playsinline
            style="width:100%;height:100%;object-fit:cover;display:block;background:#03070c"></video>
     <div class="cam-offline-overlay" id="downCamOffline">
@@ -906,7 +906,8 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
   connectDownCam();
 })();
 </script>
-<script src="mission-client.js?v=5"></script>
+<script src="mission-client.js?v=6"></script>
+<script src="network-panel.js?v=1"></script>
 <script src="mission-ui.js?v=4"></script>
 <script src="failsafe-onboard.js?v=4"></script>
 <script src="presence.js?v=sitl-1"></script>
