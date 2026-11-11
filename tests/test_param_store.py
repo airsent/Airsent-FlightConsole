@@ -75,6 +75,27 @@ class ParamStoreTests(unittest.TestCase):
         self.assertEqual(self.store.write(fc, 'RTL_ALT', 2500, timeout=0.2), 2500)
         self.assertEqual(len(fc.sets), 2)
 
+    def test_vector_param_late_echo_is_not_a_refusal(self):
+        # ZD650 finding: writing GPS1_POS_X makes ArduPilot re-announce X, Y and Z; the old
+        # GPS1_POS_Y echo arrives right after we ask for the new Y.
+        vec = {'GPS1_POS_X': (0.0, ps.REAL32), 'GPS1_POS_Y': (0.0, ps.REAL32), 'GPS1_POS_Z': (0.0, ps.REAL32)}
+
+        class VectorPixhawk(FakePixhawk):
+            def param_set_send(s, ts, tc, name, value, ptype):
+                n = name.decode()
+                if n.endswith('_X'):
+                    super().param_set_send(ts, tc, name, value, ptype)
+                    for other in ('GPS1_POS_Y', 'GPS1_POS_Z'):          # late re-announcement of the old values
+                        v, t = s.params[other]
+                        threading.Timer(0.05, s.store.observe, [Msg(param_id=other.encode(), param_value=v, param_type=t, param_count=3)]).start()
+                else:
+                    super().param_set_send(ts, tc, name, value, ptype)
+
+        fc = VectorPixhawk(self.store, vec)
+        done, err = self.store.write_many(fc, {'GPS1_POS_X': -0.069, 'GPS1_POS_Y': -0.065, 'GPS1_POS_Z': -0.213})
+        self.assertIsNone(err)
+        self.assertAlmostEqual(done['GPS1_POS_Y']['value'] if isinstance(done['GPS1_POS_Y'], dict) else done['GPS1_POS_Y'], -0.065, places=4)
+
     def test_refused_and_clamped_values_fail(self):
         fc = FakePixhawk(self.store, PARAMS, refuse={'ARMING_CHECK'}, clamp={'WPNAV_SPEED': (20, 2000)})
         with self.assertRaisesRegex(RuntimeError, 'kept 1'):
