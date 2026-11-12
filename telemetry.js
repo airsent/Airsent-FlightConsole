@@ -604,18 +604,21 @@ function updateAttitude(data) {
   }
 }
 
-// Pixhawk command PWM and Datalink-measured output are independent sources.
+// OUTPUT % = the Pixhawk's motor command (PWM) across its MOT_PWM_MIN..MAX range: 0 % idle-off,
+// 100 % full throttle. (The Datalink's own "output" field uses a different scale and read ~3 %
+// at full throttle on the ZD650, so it isn't used for this column.) RPM comes from the ESCs.
 function updateMotors(data) {
   const finite = value => typeof value === "number" && Number.isFinite(value);
   const esc = data.esc_telemetry;
   const linkFresh = esc?.connected === true && finite(esc.age) && esc.age >= 0 && esc.age < 2;
+  const range = data.mot_pwm || {};
+  const lo = finite(range.min) ? range.min : 1100, hi = finite(range.max) && range.max > lo ? range.max : 1940;
   const outputs = [];
   for (let id = 1; id <= 4; id++) {
     const pwm = data.pixhawk_connected === true && finite(data[`m${id}`]) ? Math.floor(data[`m${id}`]) : null;
     const row = esc?.channels?.find(item => item.channel === id);
     const sampleFresh = linkFresh && row?.connected === true && finite(row.age) && row.age >= 0 && row.age < 2;
-    const valid = sampleFresh && finite(row.output_percent) && row.output_percent >= 0 && row.output_percent <= 100;
-    const percent = valid ? row.output_percent : null;
+    const percent = pwm === null || pwm <= 0 ? null : Math.max(0, Math.min(100, (pwm - lo) / (hi - lo) * 100));
     setText(`m${id}pwm`, pwm === null ? "--" : pwm);
     setText(`m${id}rpm`, sampleFresh && finite(row.rpm) && row.rpm >= 0 ? Math.round(row.rpm).toLocaleString("en-US") : "--");
     setText(`m${id}out`, percent === null ? "--" : `${Math.round(percent)}%`);
