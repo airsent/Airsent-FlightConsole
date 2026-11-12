@@ -1,6 +1,6 @@
 /* Airsent console alarm tones — no words, no sound files: tones are synthesised with Web Audio.
  *
- *   MASTER WARNING  (critical, unacknowledged): harsh buzzer, two bursts, repeats every 1.6 s until the
+ *   MASTER WARNING  (critical, unacknowledged): triple harsh buzz, repeats every 1.6 s until the
  *                   fault is acknowledged (ACK / ACK ALL) or clears. Viewers (who can't ACK) hear 3 rounds.
  *   MASTER CAUTION  (new warning): two short dry alert pulses, once per new warning (grouped, max 1 per 3 s).
  *   CLEARED         (a critical fault went away): a short soft falling note.
@@ -55,26 +55,21 @@
     const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + dur + 0.02);
     if (harmonic) { const h = c.createOscillator(), hg = c.createGain(); h.frequency.value = f * 2; hg.gain.value = harmonic; h.connect(hg).connect(g); h.start(t0); h.stop(t0 + dur + 0.02); }
   }
-  // Harsh buzzer: two detuned square waves through a low-pass, chopped by a fast flutter.
-  function buzz(at, dur, f = 330, peak = 0.5) {
+  // Angry buzz: two detuned square waves + a saw an octave up, low-passed. Short and harsh.
+  function buzz(at, dur, f = 440, peak = 0.6) {
     const c = audio(); if (!c || prefs.muted) return;
     const t0 = c.currentTime + at;
-    const out = c.createGain();
-    out.gain.setValueAtTime(0.0001, t0);
-    out.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
-    out.gain.setValueAtTime(peak, t0 + dur - 0.02);
-    out.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.7;
-    const am = c.createGain(); am.gain.value = 0.55;                 // flutter: gain 0.1..1.0 at 32 Hz
-    const lfo = c.createOscillator(), lfoG = c.createGain(); lfo.type = 'square'; lfo.frequency.value = 32; lfoG.gain.value = 0.45;
-    lfo.connect(lfoG).connect(am.gain);
-    [f, f * 1.019, f * 2.01].forEach((fr, i) => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = i === 2 ? 'sawtooth' : 'square'; o.frequency.value = fr; g.gain.value = i === 2 ? 0.18 : 0.32;
-      o.connect(g).connect(lp); o.start(t0); o.stop(t0 + dur + 0.03);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
+    g.gain.setValueAtTime(peak, t0 + dur - 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000;
+    [[f, 'square'], [f * 1.018, 'square'], [f * 2.001, 'sawtooth']].forEach(([fr, type]) => {
+      const o = c.createOscillator(), og = c.createGain(); o.type = type; o.frequency.value = fr; og.gain.value = 0.33;
+      o.connect(og).connect(lp); o.start(t0); o.stop(t0 + dur + 0.02);
     });
-    lp.connect(am).connect(out).connect(master);
-    lfo.start(t0); lfo.stop(t0 + dur + 0.03);
+    lp.connect(g).connect(master);
   }
   // Serious alert pulse: a dissonant-free fifth, square tone softened by a low-pass, short and dry.
   function pulse(at, dur, f, peak = 0.42) {
@@ -93,7 +88,7 @@
     lp.connect(g).connect(master);
   }
   const SOUNDS = {
-    warning: () => { buzz(0, 0.5); buzz(0.68, 0.5); },                   // BZZZZT ... BZZZZT, every 1.6 s until ACK
+    warning: () => { buzz(0, 0.16); buzz(0.22, 0.16); buzz(0.44, 0.16); },   // BZT-BZT-BZT, every 1.6 s until ACK
     caution: () => { pulse(0, 0.16, 620); pulse(0.24, 0.16, 620); },    // two short, dry alert pulses
     cleared: () => { tone(660, 0, 0.12, 'sine', 0.25); tone(495, 0.13, 0.22, 'sine', 0.22); },
   };
@@ -204,7 +199,7 @@
       let m = b.querySelector('.aa-menu');
       if (m) { m.remove(); return; }
       m = document.createElement('div'); m.className = 'aa-menu';
-      m.innerHTML = `<div><b>FAULT TONES</b> — critical: buzzer until ACK · warning: two pulses · cleared: soft tone</div>
+      m.innerHTML = `<div><b>FAULT TONES</b> — critical: triple buzz until ACK · warning: two pulses · cleared: soft tone</div>
         <div class="r"><button data-a="mute">${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button></div>
         <label style="display:block;margin-top:8px">VOLUME<input type="range" min="0.1" max="1" step="0.05" value="${prefs.volume}"></label>
         <div class="r"><button data-a="warning">TEST WARNING</button><button data-a="caution">TEST CAUTION</button><button data-a="cleared">TEST CLEARED</button></div>`;

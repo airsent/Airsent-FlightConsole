@@ -431,7 +431,7 @@
     };
     if (window.AirsentAlarm) return add();
     const sc = document.createElement('script');
-    sc.src = 'fault-audio.js?v=2'; sc.onload = add;
+    sc.src = 'fault-audio.js?v=3'; sc.onload = add;
     document.head.appendChild(sc);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
