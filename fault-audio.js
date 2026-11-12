@@ -1,9 +1,11 @@
 /* Airsent console alarm tones — no words, no sound files: tones are synthesised with Web Audio.
  *
- *   MASTER WARNING  (critical, unacknowledged): hi-lo double pulse, repeats every 1.6 s until the
+ *   MASTER WARNING  (critical, unacknowledged): triple harsh buzz, repeats every 1.6 s until the
  *                   fault is acknowledged (ACK / ACK ALL) or clears. Viewers (who can't ACK) hear 3 rounds.
- *   MASTER CAUTION  (new warning): one two-note chime, once per new warning (grouped, max 1 per 3 s).
- *   CLEARED         (a critical fault went away): a short soft falling note.
+ *   MASTER CAUTION  (new warning): two short dry alert pulses, once per new warning (grouped, max 1 per 3 s).
+ *   CLEARED         (a critical fault went away) and countdown cues (start, VEHICLE HANDOVER, GO/NO-GO,
+ *                   ARM, TAKE-OFF, LANDED / DISARMED): a short soft falling note.
+ *   Mute is locked while the aircraft is armed (and switches itself back on at arming).
  *
  * Only one console tab per browser sounds (the visible one, else the oldest), so a pilot with
  * five console pages open hears one alarm. Browsers block audio until the page has been clicked
@@ -55,21 +57,41 @@
     const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + dur + 0.02);
     if (harmonic) { const h = c.createOscillator(), hg = c.createGain(); h.frequency.value = f * 2; hg.gain.value = harmonic; h.connect(hg).connect(g); h.start(t0); h.stop(t0 + dur + 0.02); }
   }
-  function bell(f, at, peak = 0.45) {                // struck-bell style: fast attack, long decay
+  // Angry buzz: two detuned square waves + a saw an octave up, low-passed. Short and harsh.
+  function buzz(at, dur, f = 440, peak = 0.6) {
     const c = audio(); if (!c || prefs.muted) return;
-    const t0 = c.currentTime + at, g = c.createGain();
+    const t0 = c.currentTime + at;
+    const g = c.createGain();
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
-    g.connect(master);
-    [[1, 1], [2.76, 0.25], [5.4, 0.08]].forEach(([m, a]) => {
-      const o = c.createOscillator(), og = c.createGain(); o.frequency.value = f * m; og.gain.value = a;
-      o.connect(og).connect(g); o.start(t0); o.stop(t0 + 0.95);
+    g.gain.setValueAtTime(peak, t0 + dur - 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000;
+    [[f, 'square'], [f * 1.018, 'square'], [f * 2.001, 'sawtooth']].forEach(([fr, type]) => {
+      const o = c.createOscillator(), og = c.createGain(); o.type = type; o.frequency.value = fr; og.gain.value = 0.33;
+      o.connect(og).connect(lp); o.start(t0); o.stop(t0 + dur + 0.02);
     });
+    lp.connect(g).connect(master);
+  }
+  // Serious alert pulse: a dissonant-free fifth, square tone softened by a low-pass, short and dry.
+  function pulse(at, dur, f, peak = 0.42) {
+    const c = audio(); if (!c || prefs.muted) return;
+    const t0 = c.currentTime + at;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
+    g.gain.setValueAtTime(peak, t0 + dur - 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 0.5;
+    [[f, 'square', 0.32], [f * 1.5, 'square', 0.16], [f / 2, 'triangle', 0.25]].forEach(([fr, type, a]) => {
+      const o = c.createOscillator(), og = c.createGain(); o.type = type; o.frequency.value = fr; og.gain.value = a;
+      o.connect(og).connect(lp); o.start(t0); o.stop(t0 + dur + 0.03);
+    });
+    lp.connect(g).connect(master);
   }
   const SOUNDS = {
-    warning: () => { tone(880, 0, 0.17, 'triangle', 0.55, 0.15); tone(660, 0.21, 0.17, 'triangle', 0.55, 0.15); tone(880, 0.42, 0.17, 'triangle', 0.55, 0.15); tone(660, 0.63, 0.17, 'triangle', 0.55, 0.15); },
-    caution: () => { bell(1046.5, 0); bell(784, 0.32); },
+    warning: () => { buzz(0, 0.16); buzz(0.22, 0.16); buzz(0.44, 0.16); },   // BZT-BZT-BZT, every 1.6 s until ACK
+    caution: () => { pulse(0, 0.16, 620); pulse(0.24, 0.16, 620); },    // two short, dry alert pulses
     cleared: () => { tone(660, 0, 0.12, 'sine', 0.25); tone(495, 0.13, 0.22, 'sine', 0.22); },
   };
 
@@ -114,8 +136,25 @@
     loopTimer = setTimeout(loop, 1600);
   }
 
+  // Countdown phases that play the soft 'cleared' tone (operator's choice): start, each phase,
+  // take-off, and landed / disarmed at the end.
+  const PHASE_TONE = new Set(['countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'landed', 'safed']);
+  let lastStage = null, endToned = false, armedNow = false;
+  function phase(stage) {
+    if (stage === lastStage) return;
+    const prev = lastStage; lastStage = stage;
+    if (prev === null || stage == null) return;                   // first look after page load: no tone
+    if (stage === 'countdown') endToned = false;
+    if (!PHASE_TONE.has(stage)) return;
+    if (stage === 'landed' || stage === 'safed') { if (endToned) return; endToned = true; }
+    play('cleared');
+  }
+
   function update(list, opts = {}) {
     viewerMode = !!opts.viewer;
+    armedNow = !!opts.armed;
+    if (armedNow && prefs.muted) { prefs.muted = false; save(); }   // no muted alarms on a live aircraft
+    if ('stage' in opts) phase(opts.stage);
     const open = (list || []).filter(f => !f.acked_by && f.severity !== 'info');
     const crit = open.filter(f => f.severity === 'critical');
     const critIds = new Set((list || []).filter(f => f.severity === 'critical').map(f => f.id));
@@ -179,18 +218,19 @@
       let m = b.querySelector('.aa-menu');
       if (m) { m.remove(); return; }
       m = document.createElement('div'); m.className = 'aa-menu';
-      m.innerHTML = `<div><b>FAULT TONES</b> — critical: repeating until ACK · warning: one chime · cleared: soft tone</div>
-        <div class="r"><button data-a="mute">${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button></div>
+      m.innerHTML = `<div><b>FAULT TONES</b> — critical (any time, incl. holds): triple buzz until ACK · new warning: two pulses · countdown start, each phase, take-off, landed and fault cleared: soft tone</div>
+        <div class="r"><button data-a="mute" ${armedNow && !prefs.muted ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button>${armedNow ? '<span style="color:#ffb800;align-self:center">locked on while armed — ACK silences the buzzer</span>' : ''}</div>
         <label style="display:block;margin-top:8px">VOLUME<input type="range" min="0.1" max="1" step="0.05" value="${prefs.volume}"></label>
         <div class="r"><button data-a="warning">TEST WARNING</button><button data-a="caution">TEST CAUTION</button><button data-a="cleared">TEST CLEARED</button></div>`;
       m.addEventListener('click', ev => {
         ev.stopPropagation();
         const a = ev.target.closest('[data-a]'); if (!a) return;
-        if (a.dataset.a === 'mute') { prefs.muted = !prefs.muted; save(); if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop(); m.remove(); paint(); return; }
+        if (a.dataset.a === 'mute') { if (armedNow && !prefs.muted) return; prefs.muted = !prefs.muted; save(); if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop(); m.remove(); paint(); return; }
         test(a.dataset.a);
       });
       m.querySelector('input').addEventListener('input', ev => { prefs.volume = +ev.target.value; save(); if (master) master.gain.value = prefs.volume; });
       b.appendChild(m);
+      if (b.getBoundingClientRect().left < window.innerWidth / 2) { m.style.left = '0'; m.style.right = 'auto'; }   // keep it on screen
       const close = ev => { if (!b.contains(ev.target)) { m.remove(); document.removeEventListener('click', close, true); } };
       setTimeout(() => document.addEventListener('click', close, true), 0);
     });
