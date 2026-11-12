@@ -415,6 +415,7 @@ cam_device_available = False
 downcam_device_available = False
 
 cam_color_buf = {'frame': None}
+front_frame_at = [0.0]          # last colour frame from the OAK-D (proof the front camera works)
 cam_buf_lock  = threading.Lock()
 
 stop_dist_global = pilot_settings.values["stop_distance"]
@@ -527,9 +528,15 @@ def check_oak_d_connected():
         result = subprocess.run(
             ['lsusb'], capture_output=True, text=True, timeout=3
         )
-        return '03e7:2485' in result.stdout or 'luxonis' in result.stdout.lower()
+        # 03e7 = Intel Movidius / Luxonis. The product ID changes once DepthAI boots the camera
+        # (2485 before boot, f63b while running), so match the vendor, not one product ID.
+        return '03e7:' in result.stdout or 'luxonis' in result.stdout.lower()
     except Exception:
         return False
+
+def front_cam_active(now=None):
+    """Connected = seen on USB, or colour frames arriving in the last 5 s."""
+    return bool(cam_device_available or (now or time.time()) - front_frame_at[0] < 5)
 
 def thermal_monitor():
     global cam_device_available, downcam_device_available
@@ -2048,7 +2055,7 @@ def build_telemetry_payload(include_mission=True):
         if val is not None:
             payload[key] = val
             payload[f'jetson_{key}'] = val
-    payload['front_cam_active'] = cam_device_available
+    payload['front_cam_active'] = front_cam_active()
     payload['down_cam_active']  = downcam_device_available
     with apriltag_lock:
         payload['apriltag'] = dict(apriltag_result)
@@ -2298,6 +2305,7 @@ def cam_capture_thread():
                             _cc[0], _cc[1] = 0, time.time()
                         with cam_buf_lock:
                             cam_color_buf['frame'] = f
+                        front_frame_at[0] = time.time()
                         _now = time.time()
                         if _now - _nn_t[0] >= NN_FEED_INTERVAL:
                             _nn_t[0] = _now
