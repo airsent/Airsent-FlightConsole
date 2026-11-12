@@ -338,14 +338,32 @@ def netlink_payload():
     return {'ok': bool(st), 'active': (st or {}).get('active'), 'prefer': (st or {}).get('prefer', 'auto'),
             'wifi': (st or {}).get('wifi'), 'cellular': (st or {}).get('cellular'), 'data': (st or {}).get('data'),
             'switches': (st or {}).get('switches', 0), 'last_switch': (st or {}).get('last_switch'),
+            'back_to_wifi_s': (st or {}).get('back_to_wifi_s'),
             'video': {'on_demand': VIDEO_ON_DEMAND, 'front': cam_wanted('front'), 'down': cam_wanted('down'),
                       'front_kbps': globals().get('frontcam_bitrate_kbps', 0), 'down_kbps': globals().get('downcam_bitrate_kbps', 0)}}
+
+
+def merge_netlink(result, st):
+    """The link manager knows which link carries the VPS traffic and reads the modem's real
+    signal (RSRP). ModemManager's 'signal quality' is 0 % when the RM520N runs its own data
+    connection (ECM), which showed as WEAK on a perfectly good link — so prefer netlink."""
+    if not st or not st.get('active'):
+        return result
+    if st['active'] == 'cellular':
+        c = st.get('cellular') or {}
+        result.update(connected=bool(c.get('answering', True)), type='cellular', interface=c.get('iface') or result.get('interface'),
+                      percent=c.get('percent'), technology=c.get('technology') or result.get('technology'),
+                      source='airsent-netlink (modem RSRP)')
+        for k in ('rsrp', 'rsrq', 'sinr', 'operator'):
+            if c.get(k) is not None:
+                result[k] = c[k]
+    return result
 
 
 def cellular_signal_reader():
     """Refresh active network state independently of MAVLink/RC status."""
     while True:
-        result = read_network_link()
+        result = merge_netlink(read_network_link(), netlink['status'])
         result['last_seen'] = time.time()
         with cellular_lock:
             network_link.clear()

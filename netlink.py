@@ -30,6 +30,9 @@ RUN_DIR = os.environ.get('AIRSENT_NETLINK_RUN', '/run/airsent-netlink')
 STATE_DIR = os.environ.get('AIRSENT_NETLINK_STATE', '/var/lib/airsent-netlink')
 FAIL_TO_SWITCH = int(os.environ.get('AIRSENT_NET_FAIL_TO_SWITCH', '3'))
 BACK_TO_WIFI = int(os.environ.get('AIRSENT_NET_BACK_TO_WIFI', '10'))
+WIFI_MAX_LOSS = float(os.environ.get('AIRSENT_NET_WIFI_MAX_LOSS', '10'))   # % over the last 30 s to count as good again
+FLAP_WINDOW = 120.0          # WiFi failing again this soon after we went back to it = flapping
+BACKOFF_MAX = 300            # longest WiFi must prove itself before we return to it
 CELL_IFACE = os.environ.get('AIRSENT_CELL_IFACE', '')          # override auto-detection
 WIFI_IFACE = os.environ.get('AIRSENT_WIFI_IFACE', '')
 PLAN_GB = float(os.environ.get('AIRSENT_CELL_PLAN_GB', '5'))
@@ -144,6 +147,9 @@ class Link:
         else:
             self.ok_run, self.fail_run = self.ok_run + 1, 0
 
+    def loss_pct(self):
+        return 100.0 * sum(r is None for r in self.history) / len(self.history) if self.history else 100.0
+
     @property
     def healthy(self):
         return self.iface is not None and self.fail_run == 0 and self.ok_run >= 1
@@ -157,15 +163,19 @@ class Link:
 
 
 # ── deciding ───────────────────────────────────────────────────────────────
-def choose(active, wifi, cell, prefer='auto'):
-    """Pure decision so it can be unit-tested. Returns (new_active, reason or None)."""
+def choose(active, wifi, cell, prefer='auto', back_needed=None):
+    """Pure decision so it can be unit-tested. Returns (new_active, reason or None).
+    back_needed: seconds of good WiFi required before leaving cellular (grows when WiFi flaps)."""
+    back_needed = back_needed or BACK_TO_WIFI
     if prefer in ('wifi', 'cellular'):
         want = wifi if prefer == 'wifi' else cell
         if want.iface:
             return (prefer, None if active == prefer else f'operator forced {prefer.upper()}')
     if active == 'cellular':
-        if wifi.iface and wifi.ok_run >= BACK_TO_WIFI:
-            return 'wifi', f'WiFi answering again for {BACK_TO_WIFI} s'
+        # WiFi must be genuinely good again, not just answering: a lossy WiFi that answers
+        # 10 pings in a row and then drops caused 22 switches in 4 minutes on the ZD650.
+        if wifi.iface and wifi.ok_run >= back_needed and wifi.loss_pct() <= WIFI_MAX_LOSS:
+            return 'wifi', f'WiFi good again for {back_needed} s (loss {wifi.loss_pct():.0f}%)'
         if not cell.iface and wifi.iface:
             return 'wifi', 'cellular link gone'
         return 'cellular', None
@@ -257,20 +267,61 @@ class Usage:
                 'plan_pct': round(100 * used / (PLAN_GB * 1000), 1) if PLAN_GB else None}
 
 
-def cell_signal():
-    """Signal from ModemManager if a modem is managed (cached by the caller)."""
-    code, out = sh(['mmcli', '-m', 'any', '--output-json'], timeout=3)
-    if code != 0:
-        return {}
+_signal_setup = [0.0]
+
+
+def _num(v):
     try:
-        g = json.loads(out).get('modem', {}).get('generic', {})
-        q = g.get('signal-quality', {}).get('value')
-        tech = g.get('access-technologies') or []
-        op = json.loads(out).get('modem', {}).get('3gpp', {}).get('operator-name')
-        return {'percent': int(q) if str(q).isdigit() else None, 'technology': ','.join(tech) if isinstance(tech, list) else tech,
-                'operator': op}
-    except (ValueError, AttributeError):
-        return {}
+        f = float(v)
+        return f if f == f else None
+    except (TypeError, ValueError):
+        return None
+
+
+def rsrp_percent(rsrp):
+    """RSRP (dBm) to 0-100 %: -140 dBm = 0 %, -80 dBm or better = 100 %."""
+    return None if rsrp is None else int(max(0, min(100, round((rsrp + 140) / 60 * 100))))
+
+
+def cell_signal():
+    """Radio signal from the modem. With the RM520N doing its own data connection (ECM),
+    ModemManager's 'signal quality' stays 0 %, so read the real RSRP/RSRQ/SINR instead."""
+    now = time.time()
+    if now - _signal_setup[0] > 600:                       # extended signal polling (root)
+        sh(['mmcli', '-m', 'any', '--signal-setup=5'], timeout=5)
+        _signal_setup[0] = now
+    out = {}
+    code, raw = sh(['mmcli', '-m', 'any', '--signal-get', '--output-json'], timeout=4)
+    if code == 0:
+        try:
+            sig = json.loads(raw).get('modem', {}).get('signal', {})
+        except ValueError:
+            sig = {}
+        for tech, label in (('5g', '5G'), ('lte', 'LTE'), ('umts', '3G')):
+            blk = sig.get(tech) or {}
+            rsrp = _num(blk.get('rsrp'))
+            if rsrp is not None:
+                out = {'technology': label, 'rsrp': rsrp, 'rsrq': _num(blk.get('rsrq')),
+                       'sinr': _num(blk.get('snr') if blk.get('snr') is not None else blk.get('sinr')),
+                       'percent': rsrp_percent(rsrp)}
+                break
+    code, raw = sh(['mmcli', '-m', 'any', '--output-json'], timeout=4)
+    if code == 0:
+        try:
+            m = json.loads(raw).get('modem', {})
+            op = (m.get('3gpp') or {}).get('operator-name')
+            if op and op != '--':
+                out['operator'] = op
+            if 'percent' not in out:
+                q = (m.get('generic') or {}).get('signal-quality', {}).get('value')
+                if str(q).isdigit() and int(q) > 0:            # 0 = "don't know" with an ECM modem
+                    out['percent'] = int(q)
+                tech = (m.get('generic') or {}).get('access-technologies') or []
+                if tech:
+                    out['technology'] = ','.join(tech) if isinstance(tech, list) else tech
+        except (ValueError, AttributeError):
+            pass
+    return out
 
 
 def read_prefer():
@@ -288,6 +339,7 @@ def main():
     usage = Usage(os.path.join(STATE_DIR, 'usage.json'))
     wifi, cell = Link('wifi'), Link('cellular')
     active, switches, last_switch = None, 0, None
+    back_needed, to_wifi_at = BACK_TO_WIFI, 0.0
     links, links_at, sig, sig_at = {}, 0, {}, 0
     print(f'[NETLINK] steering traffic to {VPS}: WiFi first, cellular fallback', flush=True)
     while True:
@@ -297,19 +349,27 @@ def main():
         wifi.update(links.get('wifi'), probe(links['wifi']) if links.get('wifi') else None)
         cell.update(links.get('cellular'), probe(links['cellular']) if links.get('cellular') else None)
         prefer = read_prefer()
-        new, reason = choose(active, wifi, cell, prefer)
+        new, reason = choose(active, wifi, cell, prefer, back_needed)
         iface = {'wifi': wifi.iface, 'cellular': cell.iface}.get(new)
         if new != active or current_route_iface() != iface:
             if apply_route(iface):
                 if new != active:
+                    if new == 'wifi' and active == 'cellular':
+                        to_wifi_at = t0                                       # a real return to WiFi
+                    elif active == 'wifi' and new == 'cellular' and t0 - to_wifi_at < FLAP_WINDOW:
+                        back_needed = min(BACKOFF_MAX, back_needed * 3)       # flapping: make WiFi prove itself longer
+                        reason = f'{reason}; WiFi unstable — next return to WiFi needs {back_needed} s of good WiFi'
                     switches += 1
                     last_switch = {'at': t0, 'from': active, 'to': new, 'reason': reason}
                     print(f'[NETLINK] {active} → {new}: {reason}', flush=True)
                 active = new
+        if active == 'wifi' and back_needed > BACK_TO_WIFI and t0 - to_wifi_at > 600:
+            back_needed = BACK_TO_WIFI                                        # stable for 10 min: forgive
         usage.add(cell.iface, t0)
         if cell.iface and t0 - sig_at > 10:
             sig, sig_at = cell_signal(), t0
         status = {'at': t0, 'active': active, 'iface': iface, 'prefer': prefer, 'switches': switches, 'last_switch': last_switch,
+                  'back_to_wifi_s': back_needed,
                   'wifi': wifi.summary(), 'cellular': {**cell.summary(), **(sig if cell.iface else {})},
                   'data': usage.summary(t0)}
         tmp = os.path.join(RUN_DIR, 'status.json.tmp')

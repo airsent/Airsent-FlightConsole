@@ -40,7 +40,9 @@ class Decide(unittest.TestCase):
 
     def test_back_to_wifi_only_after_it_is_steady(self):
         self.assertEqual(nl.choose('cellular', link('wifi', 'wlan', ok=nl.BACK_TO_WIFI - 1), link('cellular', 'wwan0', ok=9))[0], 'cellular')
-        new, why = nl.choose('cellular', link('wifi', 'wlan', ok=nl.BACK_TO_WIFI), link('cellular', 'wwan0', ok=9))
+        w = link('wifi', 'wlan', ok=nl.BACK_TO_WIFI)
+        w.history = [5.0] * nl.BACK_TO_WIFI
+        new, why = nl.choose('cellular', w, link('cellular', 'wwan0', ok=9))
         self.assertEqual(new, 'wifi')
 
     def test_operator_force(self):
@@ -161,3 +163,48 @@ class ServerSide(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AntiFlap(unittest.TestCase):
+    def lossy_wifi(self, ok_run):
+        w = link('wifi', 'wlan', ok=ok_run)
+        w.history = ([5.0, None, 5.0, None, 5.0] * 6)[:30 - ok_run] + [5.0] * ok_run     # ~40% loss earlier
+        return w
+
+    def test_lossy_wifi_that_answers_10_in_a_row_does_not_win(self):
+        # ZD650 finding: 40-47% loss WiFi answered 10 pings in a row, won, failed, 22 switches in 4 min
+        new, _ = nl.choose('cellular', self.lossy_wifi(10), link('cellular', 'eth', ok=50))
+        self.assertEqual(new, 'cellular')
+
+    def test_genuinely_good_wifi_wins_back(self):
+        w = link('wifi', 'wlan', ok=30)
+        w.history = [5.0] * 30
+        self.assertEqual(nl.choose('cellular', w, link('cellular', 'eth', ok=50))[0], 'wifi')
+
+    def test_backoff_requires_longer_proof(self):
+        w = link('wifi', 'wlan', ok=15)
+        w.history = [5.0] * 15
+        self.assertEqual(nl.choose('cellular', w, link('cellular', 'eth', ok=50), back_needed=30)[0], 'cellular')
+        self.assertEqual(nl.choose('cellular', w, link('cellular', 'eth', ok=50), back_needed=10)[0], 'wifi')
+
+    def test_rsrp_percent(self):
+        self.assertEqual(nl.rsrp_percent(-140), 0)
+        self.assertEqual(nl.rsrp_percent(-80), 100)
+        self.assertEqual(nl.rsrp_percent(-95), 75)
+        self.assertIsNone(nl.rsrp_percent(None))
+
+
+class MergeNetlink(unittest.TestCase):
+    def test_modem_ethernet_shows_as_cellular_with_real_signal(self):
+        mm = {'connected': True, 'type': 'ethernet', 'interface': 'enx6a0b', 'percent': 0, 'technology': None}
+        st = {'active': 'cellular', 'cellular': {'iface': 'enx6a0b', 'answering': True, 'percent': 72, 'technology': '5G', 'rsrp': -97.0}}
+        r = srv.merge_netlink(dict(mm), st)
+        self.assertEqual((r['type'], r['percent'], r['technology'], r['rsrp']), ('cellular', 72, '5G', -97.0))
+
+    def test_unknown_signal_is_unknown_not_weak(self):
+        st = {'active': 'cellular', 'cellular': {'iface': 'enx', 'answering': True}}
+        self.assertIsNone(srv.merge_netlink({'percent': 0}, st)['percent'])
+
+    def test_wifi_untouched(self):
+        r = {'type': 'wifi', 'percent': 80}
+        self.assertEqual(srv.merge_netlink(dict(r), {'active': 'wifi'}), r)
