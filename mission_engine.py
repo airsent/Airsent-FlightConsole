@@ -93,6 +93,23 @@ def default_config(sim=False):
     }
 
 
+# Bench test (props OFF): runs the whole sequence, arms at T-10, never takes off.
+# These groups are shown but not enforced, because on a bench indoors GPS/RTK, the
+# battery, the parameter set and the sensors usually aren't flight-ready.
+# Still enforced: links, the RC gate + receiver, disarmed-before-arm, storage, obstacles.
+BENCH_WAIVED_GROUPS = {'GPS', 'Estimator', 'Battery', 'Config', 'Sensors', 'Motors', 'Jetson'}
+BENCH_KEEP = {'disk'}
+
+
+def bench_waive(checks):
+    out = []
+    for c in checks:
+        if c['raw'] == 'fail' and c['group'] in BENCH_WAIVED_GROUPS and c['id'] not in BENCH_KEEP:
+            c = {**c, 'raw': 'warn', 'note': ('BENCH: not enforced' + (' · ' + c['note'] if c.get('note') else ''))}
+        out.append(c)
+    return out
+
+
 def fmt_clock(seconds):
     seconds = max(0, int(math.ceil(seconds)))
     return f"{seconds // 60:02d}:{seconds % 60:02d}"
@@ -628,8 +645,10 @@ class MissionEngine:
     def _create(self, cmd, console, who, now):
         if self.stage != 'standby':
             raise ValueError('A mission is already active')
-        if str(cmd.get('confirm', '')).strip().lower() != 'flight':
-            raise ValueError("Type 'flight' to confirm a real flight")
+        bench = bool(cmd.get('bench'))
+        word = 'bench' if bench else 'flight'
+        if str(cmd.get('confirm', '')).strip().lower() != word:
+            raise ValueError(f"Type '{word}' to confirm " + ('a props-off bench test' if bench else 'a real flight'))
         name = safe_name(cmd.get('name'))
         if not name:
             raise ValueError('Mission name is required')
@@ -639,7 +658,8 @@ class MissionEngine:
             raise ValueError(f"Countdown must be {self.config['min_total']}-{self.config['max_total']} seconds")
         if not console:
             raise ValueError('Console identity missing')
-        blocking = [c for c in self.checks if c['gate'] == 'create' and c['raw'] == 'fail'
+        checks = bench_waive(self.checks) if bench else self.checks
+        blocking = [c for c in checks if c['gate'] == 'create' and c['raw'] == 'fail'
                     and c['id'] != 'pic_console']
         if blocking:
             raise ValueError('Cannot start: ' + blocking[0]['label'] + f" ({blocking[0]['value']})")
@@ -652,7 +672,7 @@ class MissionEngine:
         self._reset_state()
         self.mission = {'name': str(cmd.get('name'))[:60], 'slug': name, 'folder': str(folder),
                         'created_at': now, 'operator': who, 'pack_id': str(cmd.get('pack_id') or '')[:40],
-                        'route': bool(cmd.get('route'))}
+                        'route': bool(cmd.get('route')) and not bench, 'bench': bench}
         self.recorder.open(folder)
         self.total = int(total)
         self.remaining = float(total)
@@ -661,7 +681,8 @@ class MissionEngine:
         self.pic_console, self.pic_name = console, who
         self.consoles[console] = {'last': now, 'operator': who, 'page': ''}
         self.recorder.write('mission.json', {**self.mission, 'config': self.config})
-        self._event('create', f"Mission '{self.mission['name']}' created, countdown T-{fmt_clock(total)} started", who)
+        self._event('create', ("BENCH TEST (props off, no takeoff) " if bench else '') +
+                    f"Mission '{self.mission['name']}' created, countdown T-{fmt_clock(total)} started", who)
         self._save()
         return self._ok(f"Mission started: {folder.name}")
 
@@ -757,6 +778,14 @@ class MissionEngine:
             'events': list(self.events)[::-1],
         }
 
+    @property
+    def bench(self):
+        return bool(self.mission and self.mission.get('bench'))
+
+    def _evaluate(self, s):
+        checks = evaluate_checks(s, self)
+        return bench_waive(checks) if self.bench else checks
+
     # ── periodic update ──────────────────────────────────────────────────────
     def tick(self, s, extra_faults=None):
         """Call ~5 Hz with the latest telemetry snapshot (+ Jetson extras)."""
@@ -765,10 +794,10 @@ class MissionEngine:
             s = dict(s)
             s['_now'] = now
             self.last_snapshot = s
-            self.checks = evaluate_checks(s, self)
+            self.checks = self._evaluate(s)
             self._advance(s, now)
             # Re-evaluate after a stage change so the display is current.
-            self.checks = evaluate_checks(s, self)
+            self.checks = self._evaluate(s)
             self._update_faults(s, extra_faults or {})
             if self.mission and self.stage in ACTIVE and now - self.recorder.last_telemetry >= 0.2:
                 self.recorder.last_telemetry = now
@@ -848,11 +877,22 @@ class MissionEngine:
                 return  # _advance holds with the reason
             if self.vehicle:
                 self.vehicle.set_mode('GUIDED')
-                self.vehicle.arm()
+                # Bench: force-arm past ArduPilot's own pre-arm checks (indoor GPS etc.)
+                self.vehicle.arm(force=self.bench)
             self.arm_sent_at = now
             self.motor_samples = []
-            self._event('arm', f"ARM — motors to idle (T-{fmt_clock(cfg['arm_at'])})")
+            self._event('arm', ('BENCH: FORCE ARM' if self.bench else 'ARM') + f" — motors to idle (T-{fmt_clock(cfg['arm_at'])})")
             self.recorder.write('params_at_arm.json', {'t': now, 'golden': s.get('_golden')})
+        elif stage == 'takeoff' and self.bench:
+            # Bench test ends here: no takeoff, motors back off.
+            if self.vehicle:
+                self.vehicle.disarm()
+            self.remaining = 0
+            self.deadline = None
+            self.stage = 'landed'
+            self.landed_at = now
+            self.recorder.write('checks_t0.json', {'t': now, 'checks': self.checks})
+            self._event('landed', 'BENCH TEST: T-0 reached — no takeoff, disarmed. Sequence complete.')
         elif stage == 'takeoff':
             if not s.get('armed'):
                 self.stage = 'armed'
