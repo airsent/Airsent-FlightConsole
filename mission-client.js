@@ -226,7 +226,7 @@
             if (s === 'prearm') ev('handover', 'VEHICLE HANDOVER — full pre-arm check');
             if (s === 'gonogo') ev('gonogo', 'GO/NO-GO — pilot: confirm area clear, RC pilot: switch to ARM');
             if (s === 'armed' && !blocking('armed').length) { st.armed = true; st.armed_at = t; ev('arm', 'ARM — motors to idle (T-00:10)'); }
-            if (s === 'takeoff') { st.takeoff_at = t; st.remaining = 0; ev('takeoff', `T-0 — TAKEOFF to ${st.profile === 'flight1' ? 2 : 5} m`); return; }
+            if (s === 'takeoff') { st.takeoff_at = t; st.remaining = 0; st.home = { lat: 33.4242, lon: -111.9281, heading: 0, at: t }; ev('home', 'HOME POINT SET — 33.424200, -111.928100'); ev('takeoff', `T-0 — TAKEOFF to ${st.profile === 'flight1' ? 2 : 5} m`); return; }
           }
           const b = blocking(s);
           if (b.length) { hold(b[0].label + ': ' + b[0].value); return; }
@@ -276,6 +276,13 @@
           if (msg) ev('profile', msg);
         }
         st.f2 = step;
+        const d = 60, dLat = d / 111320, dLon = d / (111320 * Math.cos(33.4242 * Math.PI / 180)), h = st.home;
+        const path = [[h.lat, h.lon], [h.lat + dLat, h.lon], [h.lat + dLat, h.lon - dLon], [h.lat, h.lon - dLon], [h.lat, h.lon]];
+        const sides = pos >= 6 ? 4 : pos === 5 ? step.leg : 0, k = pos === 5 ? step.leg : null;
+        let at = path[0];
+        if (k != null) { const f = ((e - 78) % 4) / 4, a = path[k], b = path[k + 1]; at = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+        else if (pos >= 6) at = path[4];
+        st.demoPlan = { path, sides_done: sides, leg: k }; st.demoPos = at;
         st.step = { ...step, pos, labels, plan, results, at_pos: null, failed: false };
       } else if (st.stage === 'flight' && st.abort) {
         st.alt = Math.max(0, st.alt - 0.15);
@@ -297,6 +304,7 @@
         motors: [1, 2, 3, 4].map(i => ({ ch: i, rpm: st.armed ? 1480 + i * 8 + (st.alt > 0 ? 2600 : 0) : 0, current: st.armed ? (st.alt > 0 ? 9.5 : 0.8) : 0, connected: true, status: 0 })),
         events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt, armed: !!st.armed,
         profile: st.mission ? st.profile : null, step: st.step || null,
+        home_point: st.home || null, plan: st.profile === 'flight2' && st.home ? st.demoPlan || null : null, pos: st.demoPos || (st.home ? [st.home.lat, st.home.lon] : null),
         config: { takeoff_alt: st.profile === 'flight1' ? 2 : 5, require_rtk: false, require_esc_telemetry: false, rc_gate_channel: 5, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
       };
     }
@@ -318,7 +326,7 @@
           if (!String(c.name || '').trim()) return no('Mission name is required');
           st = { ...st, stage: 'countdown', total: c.total || 180, remaining: c.total || 180, deadline: now() + (c.total || 180), held: false,
             mission: { name: c.name, folder: '~/airsent_missions/DEMO_' + c.name, operator: who, created_at: now(), profile: c.profile || 'hover', bench: !!c.bench }, profile: c.profile || 'hover', step: null, go: null, manual: {},
-            rc: 'SAFE', takeoff_at: null, alt: 0, armed: false, abort: null, pic: { console: c.console_id, name: who }, events: [] };
+            rc: 'SAFE', takeoff_at: null, alt: 0, armed: false, abort: null, pic: { console: c.console_id, name: who }, events: [], home: null, demoPlan: null, demoPos: null, f2: null };
           ev('create', `Mission '${c.name}' created (demo)`, who); return ok('Mission started (demo)');
         case 'mission_hold': if (!pre.includes(st.stage)) return no('Hold is only available before takeoff'); hold('Hold requested by ' + who, who); return ok('Held');
         case 'mission_resume': {

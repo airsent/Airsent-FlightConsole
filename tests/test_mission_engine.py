@@ -609,10 +609,10 @@ class Flight2ProfileTests(MissionEngineBase):
         r = self.send('mission_create', name='flight 2', confirm='flight', total=180, profile='flight2')
         self.assertTrue(r['ok'], r)
         self.send('mission_manual', key='manual_observers', value=True)
-        self.engine.stage = 'takeoff'
-        self.engine.takeoff_at = self.now
         self.vehicle.armed = True
         self.gate_pwm = 1000
+        self.engine.stage = 'takeoff'
+        self.engine._enter('takeoff', self.snapshot(), self.now)     # sets the home point and the box
 
     def fly(self, seconds, follow=True, **extra):
         """Fly the aircraft toward whatever the Jetson last commanded."""
@@ -734,3 +734,41 @@ class Flight2ProfileTests(MissionEngineBase):
         self.send('mission_ping'); self.tick()
         self.assertTrue(self.send('mission_create', name='f1', confirm='flight', total=180, profile='flight1')['ok'])
         self.assertEqual(self.engine.takeoff_alt(), 2.0)
+
+    def test_home_point_set_at_takeoff_and_box_planned(self):
+        self.launch()
+        snap = self.engine.snapshot()
+        self.assertEqual((snap['home_point']['lat'], snap['home_point']['lon']), (self.LAT, self.LON))
+        self.assertTrue(any(e['kind'] == 'home' and 'HOME POINT SET' in e['msg'] for e in self.engine.events))
+        plan = snap['plan']
+        self.assertEqual(len(plan['path']), 5)
+        self.assertEqual(plan['sides_done'], 0)
+        # heading 90° (east): the first side goes east, the box closes on the home point
+        self.assertGreater(plan['path'][1][1], self.LON)
+        self.assertAlmostEqual(plan['path'][1][0], self.LAT, places=6)
+        self.assertAlmostEqual(plan['path'][4][0], self.LAT, places=6)
+        self.assertAlmostEqual(plan['path'][4][1], self.LON, places=6)
+        self.assertEqual(snap['pos'], [self.LAT, self.LON])
+
+    def test_plan_progress_and_persistence(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        for _ in range(60):                       # fly the box a bit at a time
+            self.fly(1, follow=True)
+            if self.engine.step['name'] != 'leg':
+                break
+        self.assertEqual(self.engine.snapshot()['plan']['sides_done'], 4)
+        restarted = self.make_engine()
+        self.assertEqual(restarted.home_point['lat'], self.LAT)
+        self.assertEqual(len(restarted.plan_corners), 4)
+
+    def test_hover_profile_also_sets_home(self):
+        self.send('mission_ping'); self.tick()
+        self.assertTrue(self.send('mission_create', name='h', confirm='flight', total=180)['ok'])
+        self.vehicle.armed = True; self.gate_pwm = 1000
+        self.engine.stage = 'takeoff'
+        self.engine._enter('takeoff', self.snapshot(), self.now)
+        self.assertEqual(self.engine.snapshot()['home_point']['lon'], self.LON)
+        self.assertIsNone(self.engine.snapshot()['plan'])

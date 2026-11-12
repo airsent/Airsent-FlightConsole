@@ -529,6 +529,8 @@ class MissionEngine:
     def _reset_state(self):
         self.stage = 'standby'
         self.mission = None
+        self.home_point = None      # exact launch spot, set at takeoff
+        self.plan_corners = None    # FLIGHT 2 box corners, fixed at takeoff
         self.total = 180
         self.deadline = None
         self.remaining = 180.0
@@ -552,7 +554,7 @@ class MissionEngine:
 
     PERSIST = ('stage', 'mission', 'total', 'deadline', 'remaining', 'held', 'hold_reason', 'hold_since',
                'go', 'manual', 'pic_console', 'pic_name', 'arm_sent_at', 'takeoff_at', 'flight_started',
-               'landed_at', 'abort', 'max_alt', 'handover_logged', 'step')
+               'landed_at', 'abort', 'max_alt', 'handover_logged', 'step', 'home_point', 'plan_corners')
 
     def _save(self):
         data = {k: getattr(self, k) for k in self.PERSIST}
@@ -1006,6 +1008,18 @@ class MissionEngine:
                 self.stage = 'armed'
                 self._hold('Aircraft is not armed at T-0')
                 return
+            lat, lon = s.get('lat'), s.get('lon')
+            if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and (lat or lon):
+                self.home_point = {'lat': lat, 'lon': lon, 'heading': s.get('yaw'), 'at': now}
+                self._event('home', f"HOME POINT SET — {lat:.6f}, {lon:.6f}")
+                if self.profile == 'flight2':
+                    heading, la, lo, corners = s.get('yaw') or 0.0, lat, lon, []
+                    for _, rel in BOX_LEGS:
+                        la, lo = _offset(la, lo, heading + rel, self.config['f2_box'])
+                        corners.append([la, lo])
+                    self.plan_corners = corners
+            else:
+                self._event('home', "HOME POINT NOT SET — no GPS position at takeoff", 'Jetson')
             if self.vehicle:
                 self.vehicle.takeoff(self.takeoff_alt())
             self.takeoff_at = now
@@ -1199,13 +1213,8 @@ class MissionEngine:
             st['yaw_prev'], st['yaw_acc'] = cur, acc
             if abs(acc) >= 345.0:
                 self._event('profile', "FLIGHT 2: 360° turn complete — flying the box")
-                lat0, lon0 = point
-                heading = cur if cur is not None else 0.0
-                corners, la, lo = [], lat0, lon0
-                for _, rel in BOX_LEGS:
-                    la, lo = _offset(la, lo, heading + rel, cfg['f2_box'])
-                    corners.append([la, lo])
-                self.step = {**st, 'name': 'leg', 'leg': 0, 'since': now, 'corners': corners, 'target': 'front'}
+                corners = st['corners']
+                self.step = {**st, 'name': 'leg', 'leg': 0, 'since': now, 'target': 'front'}
                 if self.vehicle:
                     self.vehicle.goto_alt(alts[-1], *corners[0])
                 self._save()
@@ -1223,11 +1232,11 @@ class MissionEngine:
                 if k + 1 < len(BOX_LEGS):
                     if self.vehicle:
                         self.vehicle.goto_alt(alts[-1], *st['corners'][k + 1])
-                    self.step = {**st, 'leg': k + 1, 'since': now, 'arrived': None, 'target': BOX_LEGS[k + 1][0]}
+                    self.step = {**st, 'leg': k + 1, 'sides': k + 1, 'since': now, 'arrived': None, 'target': BOX_LEGS[k + 1][0]}
                 else:
                     if self.vehicle:
                         self.vehicle.goto_alt(alts[-1], *point)
-                    self.step = {**st, 'name': 'home', 'since': now, 'arrived': None, 'target': 'home'}
+                    self.step = {**st, 'name': 'home', 'sides': 4, 'since': now, 'arrived': None, 'target': 'home'}
                     self._event('profile', f"FLIGHT 2: box complete — returning to the home point at {alts[-1]:g} m")
                 self._save()
             elif t > cfg['f2_leg_timeout']:
@@ -1243,6 +1252,20 @@ class MissionEngine:
             elif t > cfg['f2_leg_timeout']:
                 self._f1_land(now, f"home point not reached in {cfg['f2_leg_timeout']:.0f} s — landing here")
                 self._save()
+
+    def _plan_view(self):
+        """Planned ground track for the map (FLIGHT 2 box): home → four corners (the last is home)."""
+        st = self.step
+        if self.profile != 'flight2' or not self.home_point or not self.plan_corners:
+            return None
+        n = (st or {}).get('name')
+        return {'path': [[self.home_point['lat'], self.home_point['lon']]] + self.plan_corners,
+                'sides_done': (st or {}).get('sides', 0), 'leg': st.get('leg') if n == 'leg' else None}
+
+    def _pos_view(self):
+        s = self.last_snapshot or {}
+        lat, lon = s.get('lat'), s.get('lon')
+        return [lat, lon] if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) else None
 
     def _watch_takeoff(self, s, now):
         cfg = self.config
@@ -1288,8 +1311,10 @@ class MissionEngine:
                 self.step = {'name': 'hold_low', 'since': now, 'point': [s.get('lat'), s.get('lon')], 'samples': [],
                              'checks': None, 'target': cfg['f1_low_alt']}
             if f2:
-                self.step = {'name': 'hold', 'i': 0, 'since': now, 'point': [s.get('lat'), s.get('lon')], 'samples': [],
-                             'results': [], 'target': cfg['f2_alts'][0]}
+                hp = self.home_point or {}
+                point = [hp.get('lat', s.get('lat')), hp.get('lon', s.get('lon'))]
+                self.step = {'name': 'hold', 'i': 0, 'since': now, 'point': point, 'samples': [], 'results': [],
+                             'target': cfg['f2_alts'][0], 'corners': self.plan_corners or []}
         else:
             return
         self._save()
@@ -1329,6 +1354,7 @@ class MissionEngine:
                 'stage': self.stage, 'held': self.held, 'hold_reason': self.hold_reason,
                 'armed': bool((self.last_snapshot or {}).get('armed')),
                 'profile': self.profile if self.mission else None, 'step': self.step_view(now),
+                'home_point': self.home_point, 'plan': self._plan_view(), 'pos': self._pos_view(),
                 'hold_elapsed': round(now - self.hold_since, 1) if self.held and self.hold_since else 0,
                 'mission': self.mission, 'total': self.total,
                 'remaining': round(self.countdown_remaining(now), 2),
