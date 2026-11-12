@@ -76,7 +76,7 @@ class MissionEngineTests(unittest.TestCase):
         self.tick()
         reply = self.send('mission_create', name='Mission 1', confirm='flight', total=total)
         self.assertTrue(reply['ok'], reply)
-        for key in ('manual_airspace', 'manual_observers', 'manual_payload'):
+        for key in ('manual_observers',):
             self.assertTrue(self.send('mission_manual', key=key, value=True)['ok'])
 
     def run_to(self, remaining):
@@ -134,6 +134,24 @@ class MissionEngineTests(unittest.TestCase):
         self.run_to(170)
         self.assertTrue(self.engine.held)
         self.assertIn('GPS', self.engine.hold_reason)
+
+    def test_countdown_list_trimmed(self):
+        import mission_engine as me
+        self.assertEqual(list(me.MANUAL_CHECKS), ['manual_observers'])        # no wind, airspace, payload
+        self.assertFalse(me.default_config()['require_rtk'])                  # 3D fix is enough to lift off
+        self.tick()
+        ids = {c['id'] for c in self.engine.checks}
+        self.assertNotIn('obstacles', ids)
+
+    def test_3d_fix_is_enough_without_rtk(self):
+        self.config.update(require_rtk=False)
+        self.engine = self.make_engine()
+        self.overrides = {'fix_type': '3D FIX'}
+        self.create()
+        self.run_to(61)
+        self.assertFalse(self.engine.held, self.engine.hold_reason)
+        gps = next(c for c in self.engine.checks if c['id'] == 'gps_fix')
+        self.assertEqual(gps['raw'], 'pass')
 
     # ── happy path ───────────────────────────────────────────────────────────
     def test_full_mission_from_creation_to_safed(self):
@@ -259,7 +277,7 @@ class MissionEngineTests(unittest.TestCase):
         self.assertFalse(self.engine.held, self.engine.hold_reason)
         self.run_to(59.5)
         self.assertTrue(self.engine.held)
-        self.assertIn('Airspace', self.engine.hold_reason)
+        self.assertIn('observers', self.engine.hold_reason)
 
     # ── restart, abort, roles ────────────────────────────────────────────────
     def test_jetson_restart_comes_back_held(self):

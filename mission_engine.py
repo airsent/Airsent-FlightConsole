@@ -43,10 +43,8 @@ ACTIVE = ('countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed
 GATE_STAGE = {'create': 'countdown', 'countdown': 'countdown', 'prearm': 'prearm',
               'gonogo': 'gonogo', 'armed': 'armed', 'takeoff': 'takeoff'}
 
-MANUAL_CHECKS = {          # (no wind/weather item: there's no wind data to confirm it against)
-    'manual_airspace':  'Airspace authorization (LAANC) confirmed',
+MANUAL_CHECKS = {          # removed (operator's call): wind/weather (no wind data), airspace, payload
     'manual_observers': 'Visual observers in position',
-    'manual_payload':   'Payload secured',
 }
 
 
@@ -73,7 +71,7 @@ def default_config(sim=False):
         'takeoff_alt': env_float('AIRSENT_TAKEOFF_ALT', 5.0),
         'recycle_after': 120,        # hold longer than this -> back to T-3:00
         'min_total': 60, 'max_total': 900,
-        'require_rtk': env_flag('AIRSENT_REQUIRE_RTK', True),
+        'require_rtk': env_flag('AIRSENT_REQUIRE_RTK', False),   # 3D fix is enough to lift off; RTK is for precision landing
         'require_esc_telemetry': env_flag('AIRSENT_REQUIRE_ESC_TELEMETRY', True),
         'rc_gate_channel': int(channel) if channel and channel.isdigit() else None,
         # ArduPilot "Motor Emergency Stop" (RCx_OPTION=31): HIGH = stopped.
@@ -293,10 +291,7 @@ def evaluate_checks(s, engine):
     out.append(check('go_poll', 'GO/NO-GO', 'Pilot in command GO (area and props clear)', 'armed',
                      bool(engine.go), f"GO · {engine.go['by']}" if engine.go else 'WAITING', 'GO by T-10'))
 
-    prox = s.get('proximity') or {}
-    obstacle = bool(prox.get('obstacle'))
-    out.append(check('obstacles', 'Safety', 'No obstacle close to the aircraft', 'takeoff', not obstacle,
-                     f"OBSTACLE {prox.get('dist', -1):.1f} m" if obstacle else 'CLEAR', 'clear'))
+    # (No obstacle check at T-0 — removed on the operator's call; obstacles are still shown on the pilot view.)
 
     if engine.stage in ('armed', 'takeoff'):
         armed = bool(s.get('armed'))

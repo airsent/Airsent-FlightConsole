@@ -165,8 +165,7 @@
     const ev = (kind, msg, who = 'Jetson') => st.events.unshift({ t: now(), kind, msg, who, stage: st.stage, clock: '' });
     const remaining = () => pre.includes(st.stage) && !st.held && st.deadline ? Math.max(0, st.deadline - now()) : st.remaining;
     const stageFor = r => r <= 0 ? 'takeoff' : r <= 10 ? 'armed' : r <= 60 ? 'gonogo' : r <= Math.min(180, st.total) ? 'prearm' : 'countdown';
-    const manualLabels = { manual_airspace: 'Airspace authorization (LAANC) confirmed',
-      manual_observers: 'Visual observers in position', manual_payload: 'Payload secured' };
+    const manualLabels = { manual_observers: 'Visual observers in position' };
     function checks() {
       const c = (id, group, label, gate, ok, value, need, warn) => ({ id, group, label, gate, raw: ok ? 'pass' : warn ? 'warn' : 'fail', value, need, note: '' });
       const list = [
@@ -202,7 +201,6 @@
       Object.entries(manualLabels).forEach(([k, label]) => list.push(c(k, 'Manual', label, 'gonogo', !!st.manual[k],
         st.manual[k] ? '✓ ' + st.manual[k].by : 'NOT CONFIRMED', 'confirm by T-60')));
       list.push(c('go_poll', 'GO/NO-GO', 'Pilot in command GO (area and props clear)', 'armed', !!st.go, st.go ? 'GO · ' + st.go.by : 'WAITING', 'GO by T-10'));
-      list.push(c('obstacles', 'Safety', 'No obstacle close to the aircraft', 'takeoff', true, 'CLEAR', 'clear'));
       const spun = (st.stage === 'armed' && st.armed_at && now() - st.armed_at > 3) || ['takeoff', 'flight', 'landed', 'safed'].includes(st.stage);
       list.push(c('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', spun, spun ? '1488 / 1502 / 1495 / 1510 rpm' : 'WAITING FOR SPIN-UP', 'all spinning, spread <= 25%'));
       return list;
@@ -255,7 +253,7 @@
         checks: checks().map(c => ({ ...c, status: (st.stage !== 'standby' && lvl >= order.indexOf(gateStage[c.gate])) || c.raw === 'pass' ? c.raw : 'pending' })),
         motors: [1, 2, 3, 4].map(i => ({ ch: i, rpm: st.armed ? 1480 + i * 8 + (st.alt > 0 ? 2600 : 0) : 0, current: st.armed ? (st.alt > 0 ? 9.5 : 0.8) : 0, connected: true, status: 0 })),
         events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt,
-        config: { takeoff_alt: 5, require_rtk: true, require_esc_telemetry: true, rc_gate_channel: 7, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
+        config: { takeoff_alt: 5, require_rtk: false, require_esc_telemetry: true, rc_gate_channel: 7, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
       };
     }
     function publish() {
