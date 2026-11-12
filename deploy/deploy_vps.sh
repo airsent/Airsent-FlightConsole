@@ -21,6 +21,7 @@ BACKUP="$HOME/gcs_backup_$(date +%F_%H%M%S)"; cp -r "$WEB" "$BACKUP"; echo "Back
 
 cp ./*.html ./*.js ./*.css "$WEB/"
 cp ./*.png "$WEB/" 2>/dev/null || true
+mkdir -p "$WEB/vendor" && cp -r ./vendor/. "$WEB/vendor/"     # Leaflet etc. served from our own site, no CDN
 [ -f "$WEB/console-local.js" ] && echo "✓ console-local.js (map key) kept" || echo "⚠ $WEB/console-local.js is missing — the map will have no key (see console-local.example.js)"
 
 cp event_journal.py presence_auth.py shared_state_server.py "$OPT/"
