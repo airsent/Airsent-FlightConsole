@@ -22,6 +22,12 @@ python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py" "$TARGET/pixh
 command -v ffmpeg >/dev/null || echo "⚠ ffmpeg is not installed — videos stay as raw .h265/.mjpeg. Fix: sudo apt install -y ffmpeg"
 # Link manager (root service): WiFi first, cellular fallback for everything going to the VPS
 sudo install -m 755 netlink.py /usr/local/bin/airsent-netlink
+# ModemManager can't read the RM520N's signal in ECM mode (and shows it as detached while data
+# flows); the modem dials by itself, so the link manager talks to it directly instead.
+# Undo with: sudo systemctl enable --now ModemManager
+if systemctl is-active --quiet ModemManager; then
+  sudo systemctl disable --now ModemManager >/dev/null 2>&1 && echo "Stopped ModemManager (the link manager reads the modem directly)"
+fi
 sudo install -m 644 deploy/airsent-netlink.service /etc/systemd/system/airsent-netlink.service
 sudo systemctl daemon-reload
 sudo systemctl enable --quiet airsent-netlink

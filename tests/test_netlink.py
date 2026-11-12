@@ -208,3 +208,63 @@ class MergeNetlink(unittest.TestCase):
     def test_wifi_untouched(self):
         r = {'type': 'wifi', 'percent': 80}
         self.assertEqual(srv.merge_netlink(dict(r), {'active': 'wifi'}), r)
+
+
+class ModemAT(unittest.TestCase):
+    """AT+QENG="servingcell" replies from the RM520N (formats from Quectel's RG/RM5xx AT manual)."""
+    LTE = ('\r\n+QENG: "servingcell","NOCONN","LTE","FDD",310,260,1A2B3C4,123,5110,12,5,5,9C41,-97,-11,-68,13,9,190,-\r\n\r\nOK\r\n')
+    NSA = ('\r\n+QENG: "servingcell","NOCONN"\r\n'
+           '+QENG: "LTE","FDD",310,260,1A2B3C4,123,66986,71,5,5,9C41,-101,-12,-70,8,10,190,-\r\n'
+           '+QENG: "NR5G-NSA",310,260,512,-92,18,-11,632256,41,12,1\r\n\r\nOK\r\n')
+    SA = ('\r\n+QENG: "servingcell","NOCONN","NR5G-SA","TDD",310,260,1A2B3C4D5,512,9C41,520110,41,12,-88,-10,22,1,-\r\n\r\nOK\r\n')
+
+    def test_lte(self):
+        s = nl.parse_qeng(self.LTE)
+        self.assertEqual((s['technology'], s['rsrp'], s['rsrq']), ('LTE', -97.0, -11.0))
+        self.assertEqual(s['percent'], nl.rsrp_percent(-97))
+
+    def test_5g_nsa_uses_nr_and_keeps_lte_anchor(self):
+        s = nl.parse_qeng(self.NSA)
+        self.assertEqual((s['technology'], s['rsrp'], s['sinr'], s['rsrq'], s['lte_rsrp']), ('5G NSA', -92.0, 18.0, -11.0, -101.0))
+
+    def test_5g_sa(self):
+        s = nl.parse_qeng(self.SA)
+        self.assertEqual((s['technology'], s['rsrp'], s['rsrq'], s['sinr']), ('5G SA', -88.0, -10.0, 22.0))
+
+    def test_no_service(self):
+        self.assertEqual(nl.parse_qeng('\r\n+QENG: "servingcell","SEARCH"\r\n\r\nOK\r\n'), {})
+        self.assertEqual(nl.parse_qeng('\r\nERROR\r\n'), {})
+        self.assertEqual(nl.parse_qeng(''), {})
+
+    def test_nsa_with_no_nr_reading_falls_back_to_lte(self):
+        s = nl.parse_qeng(self.NSA.replace('512,-92,', '512,-32768,'))
+        self.assertEqual((s['technology'], s['rsrp']), ('LTE', -101.0))
+
+    def test_operator(self):
+        self.assertEqual(nl.parse_cops('\r\n+COPS: 0,0,"T-Mobile",13\r\n\r\nOK\r\n'), 'T-Mobile')
+        self.assertIsNone(nl.parse_cops('\r\n+COPS: 0\r\n\r\nOK\r\n'))
+
+
+class BillingCycle(unittest.TestCase):
+    def at(self, day):
+        return time.mktime(time.strptime(day + ' 12:00', '%Y-%m-%d %H:%M'))
+
+    def test_cycle(self):
+        self.assertEqual(nl.billing_cycle(self.at('2026-11-20'), 15), ('2026-11-15', '2026-12-15'))
+        self.assertEqual(nl.billing_cycle(self.at('2026-11-10'), 15), ('2026-10-15', '2026-11-15'))
+        self.assertEqual(nl.billing_cycle(self.at('2026-01-05'), 15), ('2025-12-15', '2026-01-15'))
+        self.assertEqual(nl.billing_cycle(self.at('2026-02-28'), 31), ('2026-02-28', '2026-03-31'))
+        self.assertEqual(nl.billing_cycle(self.at('2026-11-01'), 1), ('2026-11-01', '2026-12-01'))
+
+    def test_left_with_plan_and_used_adjustment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            u = nl.Usage(os.path.join(tmp, 'usage.json'))
+            u.d = {'2026-11': {'rx': 0, 'tx': 0, 'days': {'2026-11-10': {'rx': 400e6, 'tx': 100e6},
+                                                         '2026-11-16': {'rx': 200e6, 'tx': 50e6}}}}
+            now = self.at('2026-11-20')
+            s = u.summary(now, {'plan_gb': 10, 'bill_day': 15})
+            self.assertEqual((s['cycle_mb'], s['left_gb'], s['resets']), (250.0, 9.75, '2026-12-15'))
+            s = u.summary(now, {'plan_gb': 10, 'bill_day': 15, 'adjust': {'cycle': '2026-11-15', 'mb': 2750}})
+            self.assertEqual((s['cycle_mb'], s['left_gb'], s['plan_pct']), (3000.0, 7.0, 30.0))
+            s = u.summary(now, {'plan_gb': 10, 'bill_day': 15, 'adjust': {'cycle': '2026-10-15', 'mb': 2750}})
+            self.assertEqual(s['cycle_mb'], 250.0)              # last cycle's correction doesn't carry over
