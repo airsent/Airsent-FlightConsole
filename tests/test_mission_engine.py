@@ -15,7 +15,7 @@ class FakeVehicle:
         self.alt = 0.0
 
     def set_mode(self, name): self.calls.append(('mode', name))
-    def arm(self): self.calls.append(('arm',)); self.armed = True
+    def arm(self, force=False): self.calls.append(('arm', force) if force else ('arm',)); self.armed = True
     def disarm(self, force=False): self.calls.append(('disarm', force)); self.armed = False
     def takeoff(self, alt): self.calls.append(('takeoff', alt))
     def land(self): self.calls.append(('land',))
@@ -86,6 +86,55 @@ class MissionEngineTests(unittest.TestCase):
                 return
             self.send('mission_ping')
             self.tick(min(1.0, self.engine.countdown_remaining() - remaining))
+
+    # ── bench test (props off) ───────────────────────────────────────────────
+    def test_bench_test_runs_indoors_force_arms_and_never_takes_off(self):
+        # indoors: no RTK, weak GPS, EKF degraded, low battery, parameters not approved
+        self.overrides = {'fix_type': '3D FIX', 'sats': 7, 'hdop': 2.6, 'ekf_healthy': False, 'battery': 43,
+                          '_golden': {'state': 'diff', 'count': 20, 'diffs': ['DISARM_DELAY=10']}}
+        self.send('mission_ping')
+        self.tick()
+        r = self.send('mission_create', name='bench', confirm='flight', total=180, bench=True)
+        self.assertFalse(r['ok'])
+        self.assertIn("'bench'", r['msg'])                       # bench needs its own confirm word
+        r = self.send('mission_create', name='bench', confirm='bench', total=180, bench=True)
+        self.assertTrue(r['ok'], r)
+        self.assertTrue(self.engine.mission['bench'])
+        for key in ('manual_wind', 'manual_airspace', 'manual_observers', 'manual_payload'):
+            self.send('mission_manual', key=key, value=True)
+        self.run_to(59.5)
+        self.assertFalse(self.engine.held, self.engine.hold_reason)
+        gps = next(c for c in self.engine.checks if c['id'] == 'gps_fix')
+        self.assertEqual(gps['raw'], 'warn')
+        self.assertIn('BENCH', gps['note'])
+        self.assertTrue(self.send('mission_go')['ok'])
+        self.gate_pwm = 1000
+        self.run_to(9.5)
+        self.assertEqual(self.engine.stage, 'armed')
+        self.assertIn(('arm', True), self.vehicle.calls)          # force-arm past ArduPilot pre-arm
+        self.run_to(0)
+        self.tick(0.4)
+        self.assertEqual(self.engine.stage, 'landed')
+        self.assertFalse(any(c[0] == 'takeoff' for c in self.vehicle.calls))
+        self.assertFalse(self.vehicle.armed)
+        self.gate_pwm = 1900
+        self.tick(1)
+        self.assertEqual(self.engine.stage, 'safed')
+
+    def test_bench_still_enforces_the_rc_gate(self):
+        self.gate_pwm = 1500                                       # switch not in SAFE
+        self.send('mission_ping')
+        self.tick()
+        r = self.send('mission_create', name='bench', confirm='bench', total=180, bench=True)
+        self.assertFalse(r['ok'])
+        self.assertIn('RC arm switch', r['msg'])
+
+    def test_real_flight_is_not_waived(self):
+        self.overrides = {'fix_type': '3D FIX'}
+        self.create()
+        self.run_to(170)
+        self.assertTrue(self.engine.held)
+        self.assertIn('GPS', self.engine.hold_reason)
 
     # ── happy path ───────────────────────────────────────────────────────────
     def test_full_mission_from_creation_to_safed(self):

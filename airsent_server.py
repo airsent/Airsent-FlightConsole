@@ -1255,9 +1255,16 @@ class MavVehicle:
         asc_engine.console_mode_command()
         return self._run('MODE ' + name, lambda mav: set_mode(mav, self.MODES[name], name))
 
-    def arm(self):
+    def arm(self, force=False):
         bin_log.cancel('Paused for flight — get it from the Logs page')
-        return self._run('ARM', arm_drone)
+        if not force:
+            return self._run('ARM', arm_drone)
+
+        def forced(mav):          # bench test only: bypass ArduPilot pre-arm checks (param2 2989)
+            mav.mav.command_long_send(mav.target_system, mav.target_component,
+                                      mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 1, 2989, 0, 0, 0, 0, 0)
+            log_mavlink("MAV_CMD_COMPONENT_ARM_DISARM → FORCE ARM (bench test)")
+        return self._run('FORCE ARM', forced)
 
     def disarm(self, force=False):
         with vel_lock:

@@ -271,7 +271,8 @@
         case 'mission_ping': return { ok: true };
         case 'mission_create':
           if (st.stage !== 'standby') return no('A mission is already active');
-          if (String(c.confirm || '').trim().toLowerCase() !== 'flight') return no("Type 'flight' to confirm a real flight");
+          const word = c.bench ? 'bench' : 'flight';
+          if (String(c.confirm || '').trim().toLowerCase() !== word) return no(`Type '${word}' to confirm`);
           if (!String(c.name || '').trim()) return no('Mission name is required');
           st = { ...st, stage: 'countdown', total: c.total || 180, remaining: c.total || 180, deadline: now() + (c.total || 180), held: false,
             mission: { name: c.name, folder: '~/airsent_missions/DEMO_' + c.name, operator: who, created_at: now() }, go: null, manual: {},
