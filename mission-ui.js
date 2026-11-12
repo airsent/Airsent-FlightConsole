@@ -76,11 +76,17 @@
       <label>MISSION NAME</label><input id="msnName" maxlength="48" placeholder="mission 1" autocomplete="off">
       <label>TYPE OF RUN</label><select id="msnKind"><option value="flight">REAL FLIGHT — all checks enforced, takes off at T-0</option>
         <option value="flight1">FLIGHT 1 — real checks · take off to 2 m · automatic check · climb to 5 m · hover 30 s · land</option>
+        <option value="flight2">FLIGHT 2 — real checks · 5 / 10 / 15 / 20 m staircase · 360° turn · 5 m box · home · land</option>
         <option value="bench">TEST MODE — checks bypassed (GPS / battery / parameters / sensors) · force-arms at T-10 · TAKES OFF at T-0</option></select>
       <div class="msn-note" id="msnKindNote" style="display:none;font:10px var(--msn-mono, monospace);color:#9fb3c4;margin:4px 0 2px;line-height:1.5">
         FLIGHT 1: hovers 20 s at 2 m while the Jetson checks height hold (±0.6 m), tilt (&lt;12°), vibration (&lt;30), drift (&lt;1.5 m),
         battery sag and EKF. All good → climbs to 5 m and hovers 30 s, then lands. Anything wrong → lands from 2 m.
         The RC pilot can take over at any time (mode switch) — the Jetson then stops sending commands.</div>
+      <div class="msn-note" id="msnKindNote2" style="display:none;font:10px var(--msn-mono, monospace);color:#9fb3c4;margin:4px 0 2px;line-height:1.5">
+        FLIGHT 2 (fly it only after Flight 1 passed and its tuning is written): takes off to 5 m, hovers 15 s and is checked at 5, 10, 15 and 20 m
+        (height ±0.6 m, tilt &lt;12°, vibration &lt;30, drift &lt;2.5 m, battery, EKF). Then a 360° turn, a 5 m box (front, left, back, right),
+        back over the home point at 20 m, and a landing. A failed check or an unsafe reading lands the aircraft where it is.
+        The RC pilot can take over at any time. Needs 20 m of clear sky and a fence set above 20 m.</div>
       <label>AFTER TAKEOFF</label><select id="msnRoute"><option value="">HOVER — the pilot flies from the console</option>${routeOption()}</select>
       <label>BATTERY PACK ID (OPTIONAL)</label><input id="msnPack" maxlength="40" placeholder="e.g. TATTU-03" autocomplete="off">
       <label>TYPE <b style="color:#ffb800" id="msnWord">flight</b> TO CONFIRM</label><input id="msnConfirm" autocomplete="off" spellcheck="false">
@@ -92,9 +98,11 @@
     $('msnKind').onchange = () => {
       const kind = $('msnKind').value, bench = kind === 'bench';
       $('msnWord').textContent = bench ? 'test' : 'flight';
-      $('msnRoute').disabled = bench || kind === 'flight1';
+      $('msnRoute').disabled = bench || kind === 'flight1' || kind === 'flight2';
       $('msnKindNote').style.display = kind === 'flight1' ? '' : 'none';
-      d.querySelector('h3').textContent = bench ? 'START A TEST FLIGHT (CHECKS BYPASSED)' : kind === 'flight1' ? 'START FLIGHT 1 (2 m → 5 m → LAND)' : 'START A REAL MISSION';
+      $('msnKindNote2').style.display = kind === 'flight2' ? '' : 'none';
+      d.querySelector('h3').textContent = bench ? 'START A TEST FLIGHT (CHECKS BYPASSED)' : kind === 'flight1' ? 'START FLIGHT 1 (2 m → 5 m → LAND)'
+        : kind === 'flight2' ? 'START FLIGHT 2 (STAIRCASE → 360° → BOX → LAND)' : 'START A REAL MISSION';
     };
     const submit = async () => {
       const op = $('msnOp').value.trim(), name = $('msnName').value.trim();
@@ -103,7 +111,7 @@
       $('msnStart').disabled = true;
       const r = await M.send('mission_create', { name, total: Number($('msnTotal').value), pack_id: $('msnPack').value.trim(), confirm: $('msnConfirm').value,
         route: $('msnKind').value === 'flight' && $('msnRoute').value === 'route', bench: $('msnKind').value === 'bench',
-        profile: $('msnKind').value === 'flight1' ? 'flight1' : undefined });
+        profile: ['flight1', 'flight2'].includes($('msnKind').value) ? $('msnKind').value : undefined });
       $('msnStart').disabled = false;
       if (!r.ok) { $('msnErr').textContent = r.msg || 'Could not start'; return; }
       d.remove(); toast(r.msg);
@@ -402,8 +410,34 @@
   // FLIGHT 1: live progress strip on every page while the profile runs.
   let f1El = null;
   const F1_STEPS = [['hold_low', 'CHECK AT 2 m'], ['climb', 'CLIMB'], ['hold_high', 'HOVER 5 m'], ['landing', 'LAND']];
+  function flight2Html(s, st) {
+    const labels = (st && st.labels) || ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND'];
+    const plan = (st && st.plan) || { alts: [5, 10, 15, 20], hold: 15, box: 5 };
+    const stopped = st && st.failed ? st.at_pos : null;
+    const pos = st ? (st.pos == null ? 0 : st.pos) : -1;
+    const res = (st && st.results) || [];
+    const steps = labels.map((label, i) => {
+      const bad = stopped === i || (res[i] && res[i].ok === false);
+      const done = !bad && (pos > i || (st && st.name === 'done')) && !(stopped != null && i >= stopped);
+      const now = !bad && i === pos && !(st && ['done', 'released'].includes(st.name)) && !(st && st.failed);
+      const col = bad ? '#ff4d4d' : now ? '#00c8ff' : done ? '#00e383' : '#4d6478';
+      let extra = '';
+      if (now && st.name === 'hold' && st.remaining != null) extra = ' ' + Math.ceil(st.remaining) + 's';
+      else if (now && st.name === 'yaw' && st.yaw_done != null) extra = ' ' + Math.min(360, Math.abs(st.yaw_done)) + '°';
+      else if (now && st.name === 'leg' && st.leg != null) extra = ' ' + (st.leg + 1) + '/4';
+      return `<span style="color:${col}">${bad ? '✗' : done ? '✓' : now ? '▶' : '·'} ${label}${extra}</span>`;
+    }).join('<span style="color:#4d6478"> → </span>');
+    let msg = '';
+    if (!st) msg = s.stage === 'takeoff' ? `taking off to ${plan.alts[0]} m` : `staged second flight · ${plan.alts.join(' / ')} m staircase → 360° → ${plan.box} m box → home → land`;
+    else if (st.name === 'released') msg = `<span style="color:#ffb800">HANDED TO THE PILOT — ${esc(st.why || '')}</span>`;
+    else if (st.failed) msg = `<span style="color:#ffb800">${esc(st.why || '')}</span>`;
+    else if (st.name === 'done') msg = 'FLIGHT 2 complete';
+    else if (res.length) { const r = res[res.length - 1], c = r.summary || {}; msg = `<span style="color:#00e383">${r.alt} m check passed</span> · height ±${c.alt_err_max} m · tilt ${c.tilt_max}° · vib ${c.vib_max}`; }
+    return `<span style="color:#00c8ff;font-weight:700">FLIGHT 2</span> &nbsp; ${steps}${msg ? `<div style="margin-top:3px;font-size:10px;color:#9fb3c4">${msg}</div>` : ''}`;
+  }
+
   function renderFlight1(s) {
-    const st = s && s.step, on = !!(s && s.profile === 'flight1' && s.stage && !['standby', 'safed', 'aborted'].includes(s.stage));
+    const st = s && s.step, on = !!(s && (s.profile === 'flight1' || s.profile === 'flight2') && s.stage && !['standby', 'safed', 'aborted'].includes(s.stage));
     if (!on) { if (f1El) { f1El.remove(); f1El = null; } return; }
     if (!f1El) {
       f1El = document.createElement('div');
@@ -411,6 +445,7 @@
         'padding:6px 12px;font:11px "Share Tech Mono",monospace;letter-spacing:1px;color:#c7d6e3;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.6);max-width:92vw';
       document.body.append(f1El);
     }
+    if (s.profile === 'flight2') { f1El.innerHTML = flight2Html(s, st); return; }
     const plan = (st && st.plan) || { low_alt: 2, low_hold: 20, high_alt: 5, high_hold: 30 };
     const cur = st ? st.name : (s.stage === 'takeoff' ? 'takeoff' : null);
     const idx = F1_STEPS.findIndex(x => x[0] === cur);

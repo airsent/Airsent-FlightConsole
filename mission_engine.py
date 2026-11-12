@@ -98,6 +98,18 @@ def default_config(sim=False):
         'f1_max_drift': env_float('AIRSENT_F1_MAX_DRIFT', 1.5),    # m from the take-off point
         'f1_min_volt': env_float('AIRSENT_F1_MIN_VOLT', 21.0),     # 6S under hover load (3.5 V/cell)
         'f1_climb_timeout': env_float('AIRSENT_F1_CLIMB_TIMEOUT', 20.0),
+        # FLIGHT 2: staircase 5/10/15/20 m (check at each), 360° yaw, 5 m box, home at 20 m, land
+        'f2_alts': (5.0, 10.0, 15.0, 20.0),
+        'f2_hold': env_float('AIRSENT_F2_HOLD', 15.0),             # s at each step (last 10 s are judged)
+        'f2_judge': 10.0,
+        'f2_max_drift': env_float('AIRSENT_F2_MAX_DRIFT', 2.5),    # m; more wind aloft than at 2 m
+        'f2_climb_timeout': env_float('AIRSENT_F2_CLIMB_TIMEOUT', 25.0),
+        'f2_yaw_rate': env_float('AIRSENT_F2_YAW_RATE', 30.0),     # deg/s
+        'f2_yaw_timeout': env_float('AIRSENT_F2_YAW_TIMEOUT', 30.0),
+        'f2_box': env_float('AIRSENT_F2_BOX', 5.0),                # m per side
+        'f2_leg_tol': 1.0,                                         # m: leg counts as flown inside this
+        'f2_leg_timeout': env_float('AIRSENT_F2_LEG_TIMEOUT', 25.0),
+        'f2_settle': 2.0,                                          # s pause at each corner
         'sim': sim,
     }
 
@@ -115,7 +127,19 @@ PROFILES = {
     'hover': 'Hover at the take-off height; the pilot flies from the console',
     'route': 'Fly the uploaded route (AUTO)',
     'flight1': 'FLIGHT 1: take off to 2 m, check the aircraft, climb to 5 m, hover, land',
+    'flight2': 'FLIGHT 2: 5/10/15/20 m staircase with a check at each step, 360° yaw, 5 m box, home at 20 m, land',
 }
+
+# Box sides, flown relative to the heading the aircraft has after the yaw: front, left, back, right
+BOX_LEGS = (('front', 0.0), ('left', -90.0), ('back', 180.0), ('right', 90.0))
+F2_LABELS = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND']
+
+
+def _offset(lat, lon, bearing_deg, metres):
+    """(lat, lon) moved `metres` along a compass bearing (small distances)."""
+    b = math.radians(bearing_deg)
+    return (lat + metres * math.cos(b) / 111_320.0,
+            lon + metres * math.sin(b) / (111_320.0 * math.cos(math.radians(lat))))
 
 
 def _dist_m(a, b):
@@ -127,7 +151,7 @@ def _dist_m(a, b):
     return math.hypot(dlat, dlon)
 
 
-def step_check(samples, cfg, target_alt, hold_point):
+def step_check(samples, cfg, target_alt, hold_point, max_drift=None):
     """Judge a hover window. samples: list of telemetry dicts. -> (ok, [failures], summary)"""
     fails = []
     alts = [x.get('alt') for x in samples if isinstance(x.get('alt'), (int, float))]
@@ -151,8 +175,9 @@ def step_check(samples, cfg, target_alt, hold_point):
         fails.append(f"tilted {summary['tilt_max']:.0f}° while hovering (limit {cfg['f1_max_tilt']:.0f}°)")
     if summary['vib_max'] is not None and summary['vib_max'] >= cfg['max_vibration']:
         fails.append(f"vibration {summary['vib_max']:.0f} m/s² (limit {cfg['max_vibration']:.0f})")
-    if summary['drift_max'] is not None and summary['drift_max'] > cfg['f1_max_drift']:
-        fails.append(f"drifted {summary['drift_max']:.1f} m from the take-off point (limit {cfg['f1_max_drift']:.1f} m)")
+    drift_limit = max_drift if max_drift is not None else cfg['f1_max_drift']
+    if summary['drift_max'] is not None and summary['drift_max'] > drift_limit:
+        fails.append(f"drifted {summary['drift_max']:.1f} m from the take-off point (limit {drift_limit:.1f} m)")
     if summary['volt_min'] is not None and not cfg.get('sim') and summary['volt_min'] < cfg['f1_min_volt']:
         fails.append(f"battery sagged to {summary['volt_min']:.1f} V under hover load (limit {cfg['f1_min_volt']:.1f} V)")
     if any(x.get('ekf_healthy') is False for x in samples):
@@ -560,9 +585,11 @@ class MissionEngine:
             self._event('info', 'Jetson server restarted during flight — monitoring resumed', 'Jetson')
             if self.step and self.step.get('name') not in ('done', 'released', 'landing'):
                 # never resume a scripted climb blind after a restart: hand it to the pilot
+                label = 'FLIGHT 2' if self.profile == 'flight2' else 'FLIGHT 1'
                 self.step = {**self.step, 'name': 'released', 'since': self.clock(),
-                             'why': 'Jetson restarted mid-profile — FLIGHT 1 stopped, pilot has the aircraft'}
-                self._event('profile', 'FLIGHT 1 stopped after a Jetson restart — land with the RC or console', 'Jetson')
+                             'pos': self._f2_pos(self.step) if self.profile == 'flight2' else None,
+                             'why': f'Jetson restarted mid-profile — {label} stopped, pilot has the aircraft'}
+                self._event('profile', f'{label} stopped after a Jetson restart — land with the RC or console', 'Jetson')
         self._save()
 
     def _event(self, kind, message, who='Jetson'):
@@ -770,6 +797,7 @@ class MissionEngine:
         self.recorder.write('mission.json', {**self.mission, 'config': self.config})
         self._event('create', ("TEST MODE (checks bypassed, will take off) " if bench else '') +
                     ("FLIGHT 1 profile (2 m check → 5 m hover → land) · " if profile == 'flight1' else '') +
+                    ("FLIGHT 2 profile (5/10/15/20 m staircase → 360° → box → home → land) · " if profile == 'flight2' else '') +
                     f"Mission '{self.mission['name']}' created, countdown T-{fmt_clock(total)} started", who)
         self._save()
         return self._ok(f"Mission started: {folder.name}")
@@ -934,7 +962,7 @@ class MissionEngine:
             alt = s.get('alt') or 0
             self.max_alt = max(self.max_alt, alt)
             if self.step and s.get('armed'):
-                self._run_flight1(s, now)
+                (self._run_flight2 if self.profile == 'flight2' else self._run_flight1)(s, now)
             if not s.get('armed'):
                 self.stage = 'landed'
                 self.landed_at = now
@@ -993,13 +1021,18 @@ class MissionEngine:
         return (self.mission or {}).get('profile') or ('route' if (self.mission or {}).get('route') else 'hover')
 
     def takeoff_alt(self):
+        if self.profile == 'flight2':
+            return self.config['f2_alts'][0]
         return self.config['f1_low_alt'] if self.profile == 'flight1' else self.config['takeoff_alt']
 
     def _f1_land(self, now, why, failed=True):
         if self.vehicle:
             self.vehicle.land()
-        self.step = {**self.step, 'name': 'landing', 'since': now, 'why': why, 'failed': failed}
-        self._event('profile', ('FLIGHT 1 STOPPED — ' if failed else 'FLIGHT 1 — ') + why)
+        pos = self._f2_pos(self.step) if self.profile == 'flight2' else None
+        self.step = {**self.step, 'name': 'landing', 'since': now, 'why': why, 'failed': failed,
+                     **({'at_pos': pos} if pos is not None and failed else {})}
+        label = 'FLIGHT 2' if self.profile == 'flight2' else 'FLIGHT 1'
+        self._event('profile', (f'{label} STOPPED — ' if failed else f'{label} — ') + why)
 
     def _run_flight1(self, s, now):
         """FLIGHT 1: 2 m hover → automatic health check → climb to 5 m → hover → land.
@@ -1066,6 +1099,8 @@ class MissionEngine:
         if not st:
             return None
         cfg = self.config
+        if self.profile == 'flight2':
+            return self._step_view2(st, now)
         dur = {'hold_low': cfg['f1_low_hold'], 'hold_high': cfg['f1_high_hold'], 'climb': cfg['f1_climb_timeout']}.get(st['name'])
         return {'name': st['name'], 'elapsed': round(now - st['since'], 1),
                 'remaining': round(max(0.0, dur - (now - st['since'])), 1) if dur else None,
@@ -1073,6 +1108,141 @@ class MissionEngine:
                 'checks': st.get('checks'), 'high': st.get('high'),
                 'plan': {'low_alt': cfg['f1_low_alt'], 'low_hold': cfg['f1_low_hold'],
                          'high_alt': cfg['f1_high_alt'], 'high_hold': cfg['f1_high_hold']}}
+
+    # ── FLIGHT 2 ─────────────────────────────────────────────────────────────
+    def _f2_pos(self, st):
+        n = st.get('name')
+        if n in ('hold', 'climb'):
+            return st.get('i', 0)
+        return {'yaw': 4, 'leg': 5, 'home': 6, 'landing': 7, 'done': 7}.get(n, st.get('pos', 0))
+
+    def _step_view2(self, st, now):
+        cfg = self.config
+        n = st['name']
+        dur = {'hold': cfg['f2_hold'], 'climb': cfg['f2_climb_timeout'], 'yaw': cfg['f2_yaw_timeout'],
+               'leg': cfg['f2_leg_timeout']}.get(n)
+        return {'name': n, 'elapsed': round(now - st['since'], 1),
+                'remaining': round(max(0.0, dur - (now - st['since'])), 1) if n == 'hold' else None,
+                'pos': self._f2_pos(st), 'at_pos': st.get('at_pos'), 'labels': F2_LABELS, 'i': st.get('i'), 'leg': st.get('leg'),
+                'yaw_done': round(st.get('yaw_acc', 0.0)) if n == 'yaw' else None,
+                'target': st.get('target'), 'why': st.get('why'), 'failed': st.get('failed'),
+                'results': st.get('results') or [],
+                'plan': {'alts': list(cfg['f2_alts']), 'hold': cfg['f2_hold'], 'box': cfg['f2_box']}}
+
+    def _run_flight2(self, s, now):
+        """FLIGHT 2: staircase with a check at every height, 360° yaw, box, home at the top, land.
+        Any failed check or unsafe reading lands the aircraft where it is. A mode change by the pilot
+        or a failsafe hands over: the Jetson stops commanding."""
+        cfg, st = self.config, self.step
+        name = st.get('name')
+        if name in ('done', 'released', 'landing'):
+            if name == 'landing' and (s.get('alt') or 0) < 0.3:
+                self.step = {**st, 'name': 'done', 'since': now}
+            return
+        mode = s.get('flight_mode')
+        if mode and mode != 'GUIDED':
+            self.step = {**st, 'name': 'released', 'pos': self._f2_pos(st), 'since': now,
+                         'why': f'mode changed to {mode} (pilot / failsafe)'}
+            self._event('profile', f"FLIGHT 2 handed over — mode is now {mode}; the Jetson sends no more commands")
+            self._save()
+            return
+        alts, point = cfg['f2_alts'], st.get('point') or [None, None]
+        t = now - st['since']
+        alt = s.get('alt') or 0
+        tilt = max(abs(s.get('roll') or 0), abs(s.get('pitch') or 0))
+        vib = max(s.get(k) or 0 for k in ('vib_x', 'vib_y', 'vib_z'))
+        if tilt > 25 or vib > 2 * cfg['max_vibration'] or s.get('ekf_healthy') is False:
+            self._f1_land(now, f"unsafe at {alt:.0f} m during '{name}' (tilt {tilt:.0f}°, vibration {vib:.0f}"
+                               f"{', EKF unhealthy' if s.get('ekf_healthy') is False else ''}) — landing here")
+            self._save()
+            return
+        if name == 'hold':
+            i = st['i']
+            if t > cfg['f2_hold'] - cfg['f2_judge']:
+                st['samples'] = (st.get('samples') or [])[-200:] + [
+                    {k: s.get(k) for k in ('alt', 'roll', 'pitch', 'vib_x', 'vib_y', 'vib_z', 'voltage', 'lat', 'lon', 'ekf_healthy')}]
+            if t >= cfg['f2_hold']:
+                ok, fails, summary = step_check(st['samples'], cfg, alts[i], point, max_drift=cfg['f2_max_drift'])
+                results = (st.get('results') or []) + [{'alt': alts[i], 'ok': ok, 'fails': fails, 'summary': summary, 'at': now}]
+                self.recorder.write('flight2_checks.json', results)
+                if not ok:
+                    self.step = {**st, 'results': results}
+                    self._f1_land(now, f"check at {alts[i]:g} m failed: " + '; '.join(fails) + ' — landing here')
+                elif i + 1 < len(alts):
+                    self._event('profile', f"FLIGHT 2 CHECK PASSED at {alts[i]:g} m (height ±{summary['alt_err_max']} m, tilt "
+                                           f"{summary['tilt_max']}°, vibration {summary['vib_max']}) — climbing to {alts[i + 1]:g} m")
+                    if self.vehicle:
+                        self.vehicle.goto_alt(alts[i + 1], *point)
+                    self.step = {**st, 'name': 'climb', 'i': i + 1, 'since': now, 'samples': [], 'results': results,
+                                 'target': alts[i + 1]}
+                else:
+                    self._event('profile', f"FLIGHT 2 CHECK PASSED at {alts[i]:g} m — turning 360°")
+                    if self.vehicle:
+                        self.vehicle.yaw(360.0, cfg['f2_yaw_rate'])
+                    self.step = {**st, 'name': 'yaw', 'since': now, 'samples': [], 'results': results,
+                                 'yaw_prev': s.get('yaw'), 'yaw_acc': 0.0, 'target': 360}
+                self._save()
+        elif name == 'climb':
+            i = st['i']
+            if alt >= alts[i] - 0.5:
+                self.step = {**st, 'name': 'hold', 'since': now, 'samples': []}
+                self._event('profile', f"FLIGHT 2: at {alt:.1f} m — hovering {cfg['f2_hold']:.0f} s")
+                self._save()
+            elif t > cfg['f2_climb_timeout']:
+                self._f1_land(now, f"did not reach {alts[i]:g} m in {cfg['f2_climb_timeout']:.0f} s — landing here")
+                self._save()
+        elif name == 'yaw':
+            cur, prev = s.get('yaw'), st.get('yaw_prev')
+            acc = st.get('yaw_acc', 0.0)
+            if cur is not None and prev is not None:
+                acc += (cur - prev + 180.0) % 360.0 - 180.0
+            st['yaw_prev'], st['yaw_acc'] = cur, acc
+            if abs(acc) >= 345.0:
+                self._event('profile', "FLIGHT 2: 360° turn complete — flying the box")
+                lat0, lon0 = point
+                heading = cur if cur is not None else 0.0
+                corners, la, lo = [], lat0, lon0
+                for _, rel in BOX_LEGS:
+                    la, lo = _offset(la, lo, heading + rel, cfg['f2_box'])
+                    corners.append([la, lo])
+                self.step = {**st, 'name': 'leg', 'leg': 0, 'since': now, 'corners': corners, 'target': 'front'}
+                if self.vehicle:
+                    self.vehicle.goto_alt(alts[-1], *corners[0])
+                self._save()
+            elif t > cfg['f2_yaw_timeout']:
+                self._f1_land(now, f"360° turn not finished in {cfg['f2_yaw_timeout']:.0f} s "
+                                   f"({abs(acc):.0f}° done) — landing here")
+                self._save()
+        elif name == 'leg':
+            k = st['leg']
+            dist = _dist_m(st['corners'][k], (s.get('lat'), s.get('lon')))
+            if dist is not None and dist <= cfg['f2_leg_tol'] and not st.get('arrived'):
+                st['arrived'] = now
+            if st.get('arrived') and now - st['arrived'] >= cfg['f2_settle']:
+                self._event('profile', f"FLIGHT 2: box side {k + 1}/4 ({BOX_LEGS[k][0]}) flown")
+                if k + 1 < len(BOX_LEGS):
+                    if self.vehicle:
+                        self.vehicle.goto_alt(alts[-1], *st['corners'][k + 1])
+                    self.step = {**st, 'leg': k + 1, 'since': now, 'arrived': None, 'target': BOX_LEGS[k + 1][0]}
+                else:
+                    if self.vehicle:
+                        self.vehicle.goto_alt(alts[-1], *point)
+                    self.step = {**st, 'name': 'home', 'since': now, 'arrived': None, 'target': 'home'}
+                    self._event('profile', f"FLIGHT 2: box complete — returning to the home point at {alts[-1]:g} m")
+                self._save()
+            elif t > cfg['f2_leg_timeout']:
+                self._f1_land(now, f"box side {k + 1} ({BOX_LEGS[k][0]}) not reached in {cfg['f2_leg_timeout']:.0f} s — landing here")
+                self._save()
+        elif name == 'home':
+            dist = _dist_m(point, (s.get('lat'), s.get('lon')))
+            if dist is not None and dist <= cfg['f2_leg_tol'] and not st.get('arrived'):
+                st['arrived'] = now
+            if st.get('arrived') and now - st['arrived'] >= cfg['f2_settle']:
+                self._f1_land(now, f"over the home point at {alts[-1]:g} m — descending and landing", failed=False)
+                self._save()
+            elif t > cfg['f2_leg_timeout']:
+                self._f1_land(now, f"home point not reached in {cfg['f2_leg_timeout']:.0f} s — landing here")
+                self._save()
 
     def _watch_takeoff(self, s, now):
         cfg = self.config
@@ -1108,13 +1278,18 @@ class MissionEngine:
             self.flight_started = now
             route = bool((self.mission or {}).get('route'))
             f1 = self.profile == 'flight1'
+            f2 = self.profile == 'flight2'
             self._event('flight', f"Climb complete — hovering at {alt:.1f} m" + (', starting the route (AUTO)' if route else '')
-                        + (f" — FLIGHT 1: checking the aircraft for {cfg['f1_low_hold']:.0f} s" if f1 else ''))
+                        + (f" — FLIGHT 1: checking the aircraft for {cfg['f1_low_hold']:.0f} s" if f1 else '')
+                        + (f" — FLIGHT 2: checking the aircraft at {cfg['f2_alts'][0]:g} m for {cfg['f2_hold']:.0f} s" if f2 else ''))
             if route and self.vehicle:
                 self.vehicle.set_mode('AUTO')
             if f1:
                 self.step = {'name': 'hold_low', 'since': now, 'point': [s.get('lat'), s.get('lon')], 'samples': [],
                              'checks': None, 'target': cfg['f1_low_alt']}
+            if f2:
+                self.step = {'name': 'hold', 'i': 0, 'since': now, 'point': [s.get('lat'), s.get('lon')], 'samples': [],
+                             'results': [], 'target': cfg['f2_alts'][0]}
         else:
             return
         self._save()

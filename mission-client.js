@@ -244,6 +244,39 @@
         else if (e < 53) { st.alt = 5; st.step = { name: 'hold_high', remaining: 53 - e, plan, checks: chk }; }
         else { if (st.step.name !== 'landing') ev('profile', 'FLIGHT 1 — 30 s hover at 5 m complete — landing'); st.alt = Math.max(0, 5 - (e - 53) * 0.8); st.step = { name: 'landing', remaining: null, plan, checks: chk };
           if (st.alt <= 0) { st.step = { name: 'done', plan, checks: chk }; st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); } }
+      } else if (st.stage === 'flight' && st.profile === 'flight2' && !st.abort) {
+        // demo FLIGHT 2: 15 s per step at 5/10/15/20 m (2 s climbs), 12 s turn, 4 x 4 s box, 4 s home, landing
+        const e = t - st.flight_at, labels = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND'];
+        const plan = { alts: [5, 10, 15, 20], hold: 15, box: 5 };
+        const sum = { alt_err_max: 0.14, tilt_max: 2.4, vib_max: 6.8, drift_max: 0.5 };
+        const results = [], mk = (a) => ({ alt: a, ok: true, fails: [], summary: sum });
+        let step, pos = 0;
+        if (e < 15 + 3 * 17) {                                   // staircase: 15 s hold + 2 s climb per step
+          const i = Math.min(3, Math.floor(e / 17)), r = e - i * 17;
+          for (let k = 0; k < i; k++) results.push(mk(plan.alts[k]));
+          pos = i; st.alt = r < 15 ? plan.alts[i] : plan.alts[i] + (r - 15) * 2.5;
+          step = { name: r < 15 ? 'hold' : 'climb', i, remaining: r < 15 ? 15 - r : null };
+          if (r >= 15 && i < 3) st.alt = Math.min(plan.alts[i + 1], plan.alts[i] + (r - 15) * 2.5);
+        } else if (e < 15 + 3 * 17 + 12) {
+          pos = 4; st.alt = 20; results.push(...plan.alts.map(mk));
+          step = { name: 'yaw', yaw_done: Math.round(((e - 66) / 12) * 360) };
+        } else if (e < 78 + 16) {
+          pos = 5; st.alt = 20; results.push(...plan.alts.map(mk));
+          step = { name: 'leg', leg: Math.min(3, Math.floor((e - 78) / 4)) };
+        } else if (e < 94 + 4) {
+          pos = 6; st.alt = 20; results.push(...plan.alts.map(mk)); step = { name: 'home' };
+        } else {
+          pos = 7; results.push(...plan.alts.map(mk)); st.alt = Math.max(0, 20 - (e - 98) * 1.5);
+          step = st.alt <= 0 ? { name: 'done' } : { name: 'landing' };
+          if (st.alt <= 0) { st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); }
+        }
+        if (!st.f2 || st.f2.name !== step.name) {
+          const msg = { yaw: 'FLIGHT 2 CHECK PASSED at 20 m — turning 360°', leg: 'FLIGHT 2: 360° turn complete — flying the box',
+                        home: 'FLIGHT 2: box complete — returning to the home point at 20 m', landing: 'FLIGHT 2 — over the home point — descending and landing' }[step.name];
+          if (msg) ev('profile', msg);
+        }
+        st.f2 = step;
+        st.step = { ...step, pos, labels, plan, results, at_pos: null, failed: false };
       } else if (st.stage === 'flight' && st.abort) {
         st.alt = Math.max(0, st.alt - 0.15);
         if (st.alt <= 0) { st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); }
