@@ -2005,6 +2005,10 @@ def build_telemetry_payload(include_mission=True):
     payload = dict(telem)
     payload['mavlink_log'] = log
     payload['esc_telemetry'] = esc_monitor.snapshot() if esc_monitor else None
+    # Motor output % is computed from the Pixhawk's command PWM against its own range.
+    lo, hi = param_store.get('MOT_PWM_MIN'), param_store.get('MOT_PWM_MAX')
+    payload['mot_pwm'] = {'min': (lo or {}).get('value') or 1100, 'max': (hi or {}).get('value') or 1940,
+                          'known': bool(lo and hi)}
     payload['simulation'] = SIM_MODE
     payload['telemetry_age'] = 0.0  # Local link; VPS relay overwrites with its measured age
     with mav_lock:
