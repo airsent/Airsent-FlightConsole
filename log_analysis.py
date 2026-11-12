@@ -29,7 +29,7 @@ AIRFRAME = {
     'props': 'CFProp NS16x5.4 carbon (16 in)',
     'escs': 'T-Motor Alpha 40A 6S FOC, PWM',
     'battery': 'Tattu Plus 6S 10000 mAh',
-    'flight_controller': 'Pixhawk 6C, ArduCopter 4.6',
+    'flight_controller': 'Pixhawk 6C (firmware version: see report.firmware)',
     'payload': 'Jetson Orin Nano, OAK-D Lite, RTK GPS, H-Flow, RM520N 5G modem',
 }
 
@@ -416,7 +416,8 @@ def analyse(path, progress=None):
     r['_series'] = series
     findings, proposals = rules(r)
     r['findings'], r['proposals'] = findings, proposals
-    r['verdict'] = ('no_go' if any(f['level'] == 'critical' for f in findings)
+    r['verdict'] = ('no_flight' if not (r['flight'].get('flying_s') or 0) > 5
+                    else 'no_go' if any(f['level'] == 'critical' for f in findings)
                     else 'caution' if any(f['level'] == 'warning' for f in findings) else 'go')
     r['analysed_s'] = round(time.time() - t0, 1)
     if progress:
@@ -534,7 +535,7 @@ def rules(r):
     prm = r.get('params', {})
     fl = r.get('flight', {})
     if not fl.get('flying_s'):
-        add('info', 'flight', 'The aircraft did not fly in this log (ground run or bench test) — flight numbers are empty.')
+        add('info', 'flight', 'No flight in this log (ground run or bench test) — there is nothing to judge the aircraft on; the numbers below are from the ground.')
     # vibration (m/s^2): < 15 good, 15-30 acceptable, > 30 problems; any clipping is bad
     for imu, v in (r.get('vibration') or {}).items():
         worst = max(v[a]['max'] or 0 for a in 'XYZ')
