@@ -76,7 +76,7 @@ class MissionEngineTests(unittest.TestCase):
         self.tick()
         reply = self.send('mission_create', name='Mission 1', confirm='flight', total=total)
         self.assertTrue(reply['ok'], reply)
-        for key in ('manual_wind', 'manual_airspace', 'manual_observers', 'manual_payload'):
+        for key in ('manual_airspace', 'manual_observers', 'manual_payload'):
             self.assertTrue(self.send('mission_manual', key=key, value=True)['ok'])
 
     def run_to(self, remaining):
@@ -88,25 +88,25 @@ class MissionEngineTests(unittest.TestCase):
             self.tick(min(1.0, self.engine.countdown_remaining() - remaining))
 
     # ── bench test (props off) ───────────────────────────────────────────────
-    def test_bench_test_runs_indoors_force_arms_and_never_takes_off(self):
-        # indoors: no RTK, weak GPS, EKF degraded, low battery, parameters not approved
+    def test_test_mode_bypasses_checks_force_arms_and_takes_off(self):
+        # outdoors-but-not-ready: no RTK, weak GPS, EKF degraded, low battery, parameters not approved, no ESC telemetry
         self.overrides = {'fix_type': '3D FIX', 'sats': 7, 'hdop': 2.6, 'ekf_healthy': False, 'battery': 43,
-                          '_golden': {'state': 'diff', 'count': 20, 'diffs': ['DISARM_DELAY=10']}}
+                          '_golden': {'state': 'diff', 'count': 20, 'diffs': ['DISARM_DELAY=10']},
+                          'esc_telemetry': {'connected': False, 'channels': []}}
         self.send('mission_ping')
         self.tick()
-        r = self.send('mission_create', name='bench', confirm='flight', total=180, bench=True)
+        r = self.send('mission_create', name='test', confirm='flight', total=180, bench=True)
         self.assertFalse(r['ok'])
-        self.assertIn("'bench'", r['msg'])                       # bench needs its own confirm word
-        r = self.send('mission_create', name='bench', confirm='bench', total=180, bench=True)
+        self.assertIn("'test'", r['msg'])                         # own confirm word
+        r = self.send('mission_create', name='test', confirm='test', total=180, bench=True)
         self.assertTrue(r['ok'], r)
-        self.assertTrue(self.engine.mission['bench'])
-        for key in ('manual_wind', 'manual_airspace', 'manual_observers', 'manual_payload'):
+        for key in ('manual_airspace', 'manual_observers', 'manual_payload'):
             self.send('mission_manual', key=key, value=True)
         self.run_to(59.5)
         self.assertFalse(self.engine.held, self.engine.hold_reason)
         gps = next(c for c in self.engine.checks if c['id'] == 'gps_fix')
         self.assertEqual(gps['raw'], 'warn')
-        self.assertIn('BENCH', gps['note'])
+        self.assertIn('TEST MODE', gps['note'])
         self.assertTrue(self.send('mission_go')['ok'])
         self.gate_pwm = 1000
         self.run_to(9.5)
@@ -114,18 +114,18 @@ class MissionEngineTests(unittest.TestCase):
         self.assertIn(('arm', True), self.vehicle.calls)          # force-arm past ArduPilot pre-arm
         self.run_to(0)
         self.tick(0.4)
-        self.assertEqual(self.engine.stage, 'landed')
-        self.assertFalse(any(c[0] == 'takeoff' for c in self.vehicle.calls))
-        self.assertFalse(self.vehicle.armed)
-        self.gate_pwm = 1900
-        self.tick(1)
-        self.assertEqual(self.engine.stage, 'safed')
+        self.assertEqual(self.engine.stage, 'takeoff', self.engine.hold_reason)
+        self.assertIn(('takeoff', 5.0), self.vehicle.calls)       # motors spin up and it flies
+
+    def test_no_wind_weather_item(self):
+        self.assertFalse(any('wind' in k for k in __import__('mission_engine').MANUAL_CHECKS))
+        self.assertFalse(self.send('mission_manual', key='manual_wind', value=True)['ok'])
 
     def test_bench_still_enforces_the_rc_gate(self):
         self.gate_pwm = 1500                                       # switch not in SAFE
         self.send('mission_ping')
         self.tick()
-        r = self.send('mission_create', name='bench', confirm='bench', total=180, bench=True)
+        r = self.send('mission_create', name='bench', confirm='test', total=180, bench=True)
         self.assertFalse(r['ok'])
         self.assertIn('RC arm switch', r['msg'])
 
@@ -260,7 +260,7 @@ class MissionEngineTests(unittest.TestCase):
         self.assertFalse(self.engine.held, self.engine.hold_reason)
         self.run_to(59.5)
         self.assertTrue(self.engine.held)
-        self.assertIn('Wind', self.engine.hold_reason)
+        self.assertIn('Airspace', self.engine.hold_reason)
 
     # ── restart, abort, roles ────────────────────────────────────────────────
     def test_jetson_restart_comes_back_held(self):

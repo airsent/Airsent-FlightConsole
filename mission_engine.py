@@ -43,8 +43,7 @@ ACTIVE = ('countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed
 GATE_STAGE = {'create': 'countdown', 'countdown': 'countdown', 'prearm': 'prearm',
               'gonogo': 'gonogo', 'armed': 'armed', 'takeoff': 'takeoff'}
 
-MANUAL_CHECKS = {
-    'manual_wind':      'Wind and weather within limits',
+MANUAL_CHECKS = {          # (no wind/weather item: there's no wind data to confirm it against)
     'manual_airspace':  'Airspace authorization (LAANC) confirmed',
     'manual_observers': 'Visual observers in position',
     'manual_payload':   'Payload secured',
@@ -93,19 +92,21 @@ def default_config(sim=False):
     }
 
 
-# Bench test (props OFF): runs the whole sequence, arms at T-10, never takes off.
-# These groups are shown but not enforced, because on a bench indoors GPS/RTK, the
-# battery, the parameter set and the sensors usually aren't flight-ready.
-# Still enforced: links, the RC gate + receiver, disarmed-before-arm, storage, obstacles.
+# TEST MODE (mission flag 'bench'): the full sequence with checks bypassed — force-arms at
+# T-10 and TAKES OFF at T-0 (operator's call for early test flights). Shown but not enforced:
+# GPS/RTK, EKF, battery, parameter set, ArduPilot pre-arm, sensors, motors, cameras, network quality.
+# Still enforced (you can't fly safely without them): Pixhawk link, VPS relay, pilot console,
+# the RC kill switch + receiver, disarmed-before-arm / armed-confirmed, storage, obstacles.
 BENCH_WAIVED_GROUPS = {'GPS', 'Estimator', 'Battery', 'Config', 'Sensors', 'Motors', 'Jetson'}
+BENCH_WAIVED_IDS = {'network'}
 BENCH_KEEP = {'disk'}
 
 
 def bench_waive(checks):
     out = []
     for c in checks:
-        if c['raw'] == 'fail' and c['group'] in BENCH_WAIVED_GROUPS and c['id'] not in BENCH_KEEP:
-            c = {**c, 'raw': 'warn', 'note': ('BENCH: not enforced' + (' · ' + c['note'] if c.get('note') else ''))}
+        if c['raw'] == 'fail' and (c['group'] in BENCH_WAIVED_GROUPS or c['id'] in BENCH_WAIVED_IDS) and c['id'] not in BENCH_KEEP:
+            c = {**c, 'raw': 'warn', 'note': ('TEST MODE: bypassed' + (' · ' + c['note'] if c.get('note') else ''))}
         out.append(c)
     return out
 
@@ -646,9 +647,9 @@ class MissionEngine:
         if self.stage != 'standby':
             raise ValueError('A mission is already active')
         bench = bool(cmd.get('bench'))
-        word = 'bench' if bench else 'flight'
+        word = 'test' if bench else 'flight'
         if str(cmd.get('confirm', '')).strip().lower() != word:
-            raise ValueError(f"Type '{word}' to confirm " + ('a props-off bench test' if bench else 'a real flight'))
+            raise ValueError(f"Type '{word}' to confirm " + ('a test flight with checks bypassed' if bench else 'a real flight'))
         name = safe_name(cmd.get('name'))
         if not name:
             raise ValueError('Mission name is required')
@@ -681,7 +682,7 @@ class MissionEngine:
         self.pic_console, self.pic_name = console, who
         self.consoles[console] = {'last': now, 'operator': who, 'page': ''}
         self.recorder.write('mission.json', {**self.mission, 'config': self.config})
-        self._event('create', ("BENCH TEST (props off, no takeoff) " if bench else '') +
+        self._event('create', ("TEST MODE (checks bypassed, will take off) " if bench else '') +
                     f"Mission '{self.mission['name']}' created, countdown T-{fmt_clock(total)} started", who)
         self._save()
         return self._ok(f"Mission started: {folder.name}")
@@ -877,22 +878,12 @@ class MissionEngine:
                 return  # _advance holds with the reason
             if self.vehicle:
                 self.vehicle.set_mode('GUIDED')
-                # Bench: force-arm past ArduPilot's own pre-arm checks (indoor GPS etc.)
+                # Test mode: force-arm past ArduPilot's own pre-arm checks
                 self.vehicle.arm(force=self.bench)
             self.arm_sent_at = now
             self.motor_samples = []
-            self._event('arm', ('BENCH: FORCE ARM' if self.bench else 'ARM') + f" — motors to idle (T-{fmt_clock(cfg['arm_at'])})")
+            self._event('arm', ('TEST MODE: FORCE ARM' if self.bench else 'ARM') + f" — motors to idle (T-{fmt_clock(cfg['arm_at'])})")
             self.recorder.write('params_at_arm.json', {'t': now, 'golden': s.get('_golden')})
-        elif stage == 'takeoff' and self.bench:
-            # Bench test ends here: no takeoff, motors back off.
-            if self.vehicle:
-                self.vehicle.disarm()
-            self.remaining = 0
-            self.deadline = None
-            self.stage = 'landed'
-            self.landed_at = now
-            self.recorder.write('checks_t0.json', {'t': now, 'checks': self.checks})
-            self._event('landed', 'BENCH TEST: T-0 reached — no takeoff, disarmed. Sequence complete.')
         elif stage == 'takeoff':
             if not s.get('armed'):
                 self.stage = 'armed'

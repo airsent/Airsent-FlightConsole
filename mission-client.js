@@ -165,7 +165,7 @@
     const ev = (kind, msg, who = 'Jetson') => st.events.unshift({ t: now(), kind, msg, who, stage: st.stage, clock: '' });
     const remaining = () => pre.includes(st.stage) && !st.held && st.deadline ? Math.max(0, st.deadline - now()) : st.remaining;
     const stageFor = r => r <= 0 ? 'takeoff' : r <= 10 ? 'armed' : r <= 60 ? 'gonogo' : r <= Math.min(180, st.total) ? 'prearm' : 'countdown';
-    const manualLabels = { manual_wind: 'Wind and weather within limits', manual_airspace: 'Airspace authorization (LAANC) confirmed',
+    const manualLabels = { manual_airspace: 'Airspace authorization (LAANC) confirmed',
       manual_observers: 'Visual observers in position', manual_payload: 'Payload secured' };
     function checks() {
       const c = (id, group, label, gate, ok, value, need, warn) => ({ id, group, label, gate, raw: ok ? 'pass' : warn ? 'warn' : 'fail', value, need, note: '' });
@@ -271,7 +271,7 @@
         case 'mission_ping': return { ok: true };
         case 'mission_create':
           if (st.stage !== 'standby') return no('A mission is already active');
-          const word = c.bench ? 'bench' : 'flight';
+          const word = c.bench ? 'test' : 'flight';
           if (String(c.confirm || '').trim().toLowerCase() !== word) return no(`Type '${word}' to confirm`);
           if (!String(c.name || '').trim()) return no('Mission name is required');
           st = { ...st, stage: 'countdown', total: c.total || 180, remaining: c.total || 180, deadline: now() + (c.total || 180), held: false,
