@@ -12,7 +12,7 @@
  * once; until then the speaker button pulses and says so.
  *
  *   AirsentAlarm.update(faultList, { viewer })   // called by mission-ui.js on every render
- *   AirsentAlarm.button()                        // a speaker toggle element (mute / test)
+ *   AirsentAlarm.button()                        // small mute toggle (placed inside the fault panels)
  *   AirsentAlarm.test('warning' | 'caution' | 'cleared')
  */
 (() => {
@@ -181,58 +181,38 @@
     paint();
   }
 
-  // ── speaker button ───────────────────────────────────────────────────────
+  // ── small mute toggle, shown inside the fault panels ────────────────────
   const buttons = new Set();
   function injectCss() {
     if (document.getElementById('aa-css')) return;
-    const s = document.createElement('style'); s.id = 'aa-css';
-    s.textContent = `.aa-btn { background:none; border:1px solid rgba(127,220,255,.25); color:#9be5ff; font:10px 'Share Tech Mono',monospace; letter-spacing:1px;
-  height:24px; padding:0 7px; cursor:pointer; margin-left:6px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; position:relative; }
-.aa-btn:hover { color:#fff; border-color:#9be5ff; } .aa-btn.muted { color:#ff8095; border-color:rgba(255,51,85,.5); }
-.aa-btn.locked { animation:aa-pulse 1s ease-in-out infinite; color:#ffb800; border-color:#ffb800; } @keyframes aa-pulse { 50% { opacity:.4; } }
-.aa-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:10000; background:#060d14; border:1px solid rgba(0,180,255,.3); padding:10px; width:230px;
-  font:10px 'Share Tech Mono',monospace; color:#9fb3c4; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,.6); letter-spacing:.5px; }
-.aa-menu b { color:#e8f4ff; font-weight:400; } .aa-menu .r { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-.aa-menu button { background:#0b1620; border:1px solid rgba(127,220,255,.3); color:#9be5ff; font:9px 'Share Tech Mono',monospace; padding:3px 6px; cursor:pointer; letter-spacing:1px; }
-.aa-menu button:hover { color:#fff; } .aa-menu input { width:100%; accent-color:#00c8ff; margin-top:6px; }`;
-    document.head.appendChild(s);
+    const st = document.createElement('style'); st.id = 'aa-css';
+    st.textContent = `.aa-mute { background:none; border:1px solid rgba(127,220,255,.25); color:#9be5ff; font:9px 'Share Tech Mono',monospace; letter-spacing:1px;
+  padding:2px 6px; cursor:pointer; margin-left:auto; margin-right:6px; white-space:nowrap; line-height:1.4; }
+.aa-mute:hover { color:#fff; border-color:#9be5ff; } .aa-mute.muted { color:#ff8095; border-color:rgba(255,51,85,.5); }
+.aa-mute:disabled { opacity:.45; cursor:not-allowed; }`;
+    document.head.appendChild(st);
   }
   function paint() {
     buttons.forEach(b => {
-      if (!b.isConnected) { buttons.delete(b); return; }
-      const c = ctx;
-      const locked = !prefs.muted && (!c || c.state !== 'running') && (needsUnlock || wantLoop);
+      if (!b.isConnected && b._shown) { buttons.delete(b); return; }     // removed from the page
+      if (b.isConnected) b._shown = true;
       b.classList.toggle('muted', prefs.muted);
-      b.classList.toggle('locked', locked);
-      b.firstChild.textContent = prefs.muted ? '🔇 SOUND OFF' : locked ? '🔈 CLICK FOR SOUND' : '🔊';
-      b.title = prefs.muted ? 'Fault tones are OFF — click to change' : locked ? 'Your browser blocks sound until you click the page once' : 'Fault tones on — click for options';
+      b.textContent = prefs.muted ? '🔇 MUTED' : '🔊 SOUND';
+      b.disabled = armedNow && !prefs.muted;
+      b.title = armedNow ? 'Sound stays on while armed — ACK silences the buzzer'
+        : prefs.muted ? 'Fault tones are off — click to turn them on' : 'Fault tones on — click to mute';
     });
   }
   function button() {
     injectCss();
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'aa-btn';
-    b.appendChild(document.createTextNode('🔊'));
+    b.type = 'button'; b.className = 'aa-mute';
     b.addEventListener('click', e => {
       e.stopPropagation(); unlock();
-      let m = b.querySelector('.aa-menu');
-      if (m) { m.remove(); return; }
-      m = document.createElement('div'); m.className = 'aa-menu';
-      m.innerHTML = `<div><b>FAULT TONES</b> — critical (any time, incl. holds): triple buzz until ACK · new warning: two pulses · countdown start, each phase, take-off, landed and fault cleared: soft tone</div>
-        <div class="r"><button data-a="mute" ${armedNow && !prefs.muted ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button>${armedNow ? '<span style="color:#ffb800;align-self:center">locked on while armed — ACK silences the buzzer</span>' : ''}</div>
-        <label style="display:block;margin-top:8px">VOLUME<input type="range" min="0.1" max="1" step="0.05" value="${prefs.volume}"></label>
-        <div class="r"><button data-a="warning">TEST WARNING</button><button data-a="caution">TEST CAUTION</button><button data-a="cleared">TEST CLEARED</button></div>`;
-      m.addEventListener('click', ev => {
-        ev.stopPropagation();
-        const a = ev.target.closest('[data-a]'); if (!a) return;
-        if (a.dataset.a === 'mute') { if (armedNow && !prefs.muted) return; prefs.muted = !prefs.muted; save(); if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop(); m.remove(); paint(); return; }
-        test(a.dataset.a);
-      });
-      m.querySelector('input').addEventListener('input', ev => { prefs.volume = +ev.target.value; save(); if (master) master.gain.value = prefs.volume; });
-      b.appendChild(m);
-      if (b.getBoundingClientRect().left < window.innerWidth / 2) { m.style.left = '0'; m.style.right = 'auto'; }   // keep it on screen
-      const close = ev => { if (!b.contains(ev.target)) { m.remove(); document.removeEventListener('click', close, true); } };
-      setTimeout(() => document.addEventListener('click', close, true), 0);
+      if (armedNow && !prefs.muted) return;
+      prefs.muted = !prefs.muted; save();
+      if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop();
+      paint();
     });
     buttons.add(b); paint();
     return b;
