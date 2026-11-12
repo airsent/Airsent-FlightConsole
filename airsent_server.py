@@ -1177,7 +1177,8 @@ def mission_files(action, cmd):
             except (OSError, ValueError):
                 pass
             return {'ok': True, 'msg': 'Mission details', 'folder': cmd.get('folder'), 'files': files,
-                    'summary': _summary(path), 'events': events, 'direct': True}
+                    'summary': _summary(path), 'events': events, 'analysis': analysis_info(cmd.get('folder'), path),
+                    'direct': True}
         rel = str(cmd.get('path') or '')
         full = _mission_path(cmd.get('folder'), rel)
         if not os.path.isfile(full):
@@ -1193,6 +1194,94 @@ def mission_files(action, cmd):
         return {'ok': False, 'msg': str(e), 'direct': True}
     except OSError as e:
         return {'ok': False, 'msg': f'Could not read the mission folder: {e}', 'direct': True}
+
+
+# ── flight log analysis (log_analysis.py) ────────────────────────────────────
+ANALYSIS_AUTO = os.environ.get('AIRSENT_ANALYSIS_AUTO', '1') != '0'   # analyse each .bin once it is downloaded
+analysis_jobs = {}            # mission folder name -> {'state', 'pct', 'msg', 'at'}
+analysis_lock = threading.Lock()
+
+
+def _read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def start_analysis(folder_name, why='operator'):
+    """Analyse <mission>/pixhawk.bin in the background -> analysis/report.json."""
+    try:
+        path = _mission_path(folder_name)
+    except ValueError as e:
+        return False, str(e)
+    if not os.path.isfile(os.path.join(path, 'pixhawk.bin')):
+        return False, 'No pixhawk.bin in this mission yet — get it from the Pixhawk first'
+    with analysis_lock:
+        job = analysis_jobs.get(folder_name)
+        if job and job.get('state') == 'running':
+            return True, 'Analysis already running'
+        analysis_jobs[folder_name] = {'state': 'running', 'pct': 0, 'msg': 'Reading the log…', 'at': time.time()}
+
+    def progress(p):
+        with analysis_lock:
+            analysis_jobs[folder_name].update(pct=round(p * 100), msg=f'Reading the log… {p * 100:.0f}%')
+
+    def run():
+        try:
+            import log_analysis
+            rep = log_analysis.analyse_folder(path, progress)
+            msg = f"Analysed in {rep.get('analysed_s')} s — verdict {str(rep.get('verdict')).upper()}"
+            with analysis_lock:
+                analysis_jobs[folder_name] = {'state': 'done', 'pct': 100, 'msg': msg, 'at': time.time()}
+            log_mavlink(f"[ANALYSIS] {folder_name}: {msg} ({why})")
+        except Exception as e:                       # a bad log must never take the server down
+            with analysis_lock:
+                analysis_jobs[folder_name] = {'state': 'error', 'pct': 0, 'msg': f'Analysis failed: {e}', 'at': time.time()}
+            log_mavlink(f"[ANALYSIS] {folder_name}: failed — {e}")
+
+    threading.Thread(target=run, daemon=True, name='log-analysis').start()
+    return True, 'Analysing the flight log on the Jetson…'
+
+
+def analysis_info(folder_name, path):
+    with analysis_lock:
+        job = dict(analysis_jobs.get(folder_name) or {})
+    return {'report': _read_json(os.path.join(path, 'analysis', 'report.json')),
+            'ai': _read_json(os.path.join(path, 'analysis', 'ai.json')), 'job': job or None}
+
+
+def save_ai_review(cmd):
+    """Store the AI review (and what was applied from it) with the mission."""
+    try:
+        path = _mission_path(cmd.get('folder'))
+    except ValueError as e:
+        return {'ok': False, 'msg': str(e)}
+    if not os.path.isdir(path):
+        return {'ok': False, 'msg': 'Mission folder not found'}
+    review = cmd.get('review')
+    applied = cmd.get('applied')
+    out_dir = os.path.join(path, 'analysis')
+    os.makedirs(out_dir, exist_ok=True)
+    cur = _read_json(os.path.join(out_dir, 'ai.json')) or {'reviews': [], 'applied': []}
+    who = cmd.get('operator') or 'Operator'
+    if isinstance(review, dict):
+        cur['reviews'] = (cur.get('reviews') or [])[-9:] + [{**review, 'saved_at': time.time(), 'by': who}]
+    if isinstance(applied, dict):
+        cur['applied'] = (cur.get('applied') or [])[-49:] + [{**applied, 'at': time.time(), 'by': who}]
+    if isinstance(cmd.get('compare'), dict):
+        cur['compares'] = (cur.get('compares') or [])[-4:] + [{**cmd['compare'], 'saved_at': time.time(), 'by': who}]
+    if isinstance(cmd.get('qa'), dict):
+        cur['qa'] = (cur.get('qa') or [])[-19:] + [{**cmd['qa'], 'saved_at': time.time(), 'by': who}]
+    blob = json.dumps(cur, indent=1)
+    if len(blob) > 400_000:
+        return {'ok': False, 'msg': 'Review too large to store'}
+    tmp = os.path.join(out_dir, 'ai.json.tmp')
+    with open(tmp, 'w') as f:
+        f.write(blob)
+    os.replace(tmp, os.path.join(out_dir, 'ai.json'))
+    return {'ok': True, 'msg': 'Saved with the mission', 'ai': cur}
 
 
 def send_rtl(mav):
@@ -1460,6 +1549,29 @@ def recording_tick(now):
                                     window=_rec_state.get('bin_window'))
             log_mavlink(f"[BIN] {msg}")
 
+_analysed_bins = set()
+
+
+def analysis_tick():
+    """Analyse each newly downloaded Pixhawk log once (on the ground only)."""
+    st = bin_log.status or {}
+    if not ANALYSIS_AUTO or st.get('state') != 'done' or telem.get('armed'):
+        return
+    name = st.get('folder')
+    key = (name, st.get('log_id'), st.get('size'))
+    if not name or key in _analysed_bins:
+        return
+    _analysed_bins.add(key)
+    try:
+        if os.path.isfile(os.path.join(_mission_path(name), 'analysis', 'report.json')):
+            rep_t = os.path.getmtime(os.path.join(_mission_path(name), 'analysis', 'report.json'))
+            if rep_t >= os.path.getmtime(os.path.join(_mission_path(name), 'pixhawk.bin')):
+                return
+    except (OSError, ValueError):
+        pass
+    start_analysis(name, why='automatic after the .bin download')
+
+
 def recording_payload():
     return {'bin_log': bin_log.snapshot(), 'video': {'front': front_rec.snapshot(), 'down': down_rec.snapshot(),
                                                       'enabled': RECORD_VIDEO, 'front_encoder': front_enc_ok[0]}}
@@ -1547,6 +1659,7 @@ def asc_loop():
                                       extras={'vps': vps_relay_state['telem'] or SIM_MODE, 'disk': asc_disk[0],
                                               'fence_alt': fence.get('FENCE_ALT_MAX'), 'fence_radius': fence.get('FENCE_RADIUS')})
             recording_tick(t0)
+            analysis_tick()
             for kind, name, reason in actions:
                 with mav_lock:
                     mav = mav_conn
@@ -1608,9 +1721,9 @@ def mission_loop():
 # ── Command WebSocket handler ─────────────────────
 FLY_ACTIONS = {'arm', 'takeoff', 'set_auto', 'motor_test', 'goto', 'set_guided'}
 LINK_ACTIONS = {'param_write', 'param_read', 'wp_upload', 'wp_download'}      # need replies the log stream can crowd out
-SLOW_ACTIONS = {'bin_download', 'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file'}
+SLOW_ACTIONS = {'bin_download', 'wp_upload', 'wp_download', 'param_read', 'param_write', 'log_list', 'log_detail', 'log_file', 'log_ai_save', 'ai_analyze'}
 # Reads and joystick input: kept out of the shared events journal by the relay.
-QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download', 'cam_watch'}
+QUIET_ACTIONS = {'mission_ping', 'velocity', 'param_read', 'log_list', 'log_detail', 'log_file', 'get_log', 'wp_download', 'cam_watch', 'log_ai_save'}
 param_changes = {'rev': 0, 'values': {}, 'by': None}      # last confirmed parameter write, for every console
 
 
@@ -1698,6 +1811,24 @@ def _process_command(raw):
         log_mavlink(f"ASC console-loss action {'ENABLED' if asc_engine.act_enabled else 'DISABLED'} by {who}")
         return {'ok': True, 'msg': f"ASC console-link action {'ON' if asc_engine.act_enabled else 'OFF'} — checks and recording always run",
                 'asc': asc_engine.snapshot()}
+
+    if action in ('log_list', 'log_detail', 'log_file'):
+        return mission_files(action, cmd)
+    if action == 'log_analyze':
+        ok, msg = start_analysis(str(cmd.get('folder') or ''))
+        return {'ok': ok, 'msg': msg}
+    if action == 'log_ai_save':
+        return save_ai_review(cmd)
+    if action == 'ai_analyze':
+        # Normally answered by the VPS relay (the API key lives there). Reaching the Jetson means the
+        # console is connected directly on the LAN; review here only if this Jetson has a key.
+        try:
+            import ai_review
+        except ImportError:
+            return {'ok': False, 'msg': 'AI review runs on the VPS — open the console at console.airsent.tech'}
+        if not os.environ.get('ANTHROPIC_API_KEY'):
+            return {'ok': False, 'msg': 'AI review runs on the VPS — open the console at console.airsent.tech (this Jetson has no API key)'}
+        return ai_review.run(cmd)
 
     with mav_lock:
         mav = mav_conn
@@ -1826,8 +1957,6 @@ def _process_command(raw):
 
         elif action == 'bin_download':
             return bin_download(cmd)
-        elif action in ('log_list', 'log_detail', 'log_file'):
-            return mission_files(action, cmd)
 
         elif action == 'wp_download':
             home = (home_state['lat'], home_state['lon']) if home_state.get('set') else None

@@ -60,6 +60,51 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
 .prog { height:3px; background:var(--bg2); margin-top:3px; } .prog i { display:block; height:100%; background:var(--cyan); width:0; }
 .filters { display:flex; gap:6px; margin-bottom:6px; } .filters .btn { height:22px; font-size:9px; } .filters .btn.on { background:rgba(0,200,255,.15); color:#fff; }
 .note { font:10px var(--mono); color:var(--muted); margin-top:4px; }
+/* flight analysis + AI review */
+.an { border:1px solid var(--line2); background:var(--bg1); padding:12px 14px; margin-top:14px; }
+.an-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.an-title { font:700 11px var(--head); letter-spacing:2.5px; color:var(--cyan); }
+.vd { font:700 12px var(--mono); letter-spacing:2px; padding:3px 10px; border:1px solid currentColor; }
+.vd.go { color:var(--green); } .vd.caution { color:var(--amber); } .vd.no_go { color:#ff5c7a; }
+.an-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin-top:10px; }
+.an-grid .stat .v { font-size:14px; } .an-grid .stat .v.warn { color:var(--amber); } .an-grid .stat .v.bad { color:#ff5c7a; } .an-grid .stat .v.ok { color:var(--green); }
+.fl { list-style:none; margin-top:8px; } .fl li { font:11px var(--mono); padding:4px 0 4px 10px; border-left:2px solid var(--line2); margin-bottom:3px; color:#c7d6e3; }
+.fl li.warning { border-left-color:var(--amber); } .fl li.critical { border-left-color:var(--red); color:#ffb3c0; } .fl li.info { border-left-color:var(--cyan); }
+.fl li b { font-weight:400; color:var(--muted); letter-spacing:1px; margin-right:6px; text-transform:uppercase; font-size:9px; }
+.ai-in { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.ai-in label { font:8px var(--mono); letter-spacing:1.5px; color:var(--muted); display:block; margin-bottom:3px; }
+.ai-in textarea { width:100%; height:52px; background:#050c12; border:1px solid var(--line2); color:var(--white); font:11px var(--mono); padding:6px; resize:vertical; }
+.ai-hl { font-size:17px; font-weight:600; margin-top:10px; } .ai-sum { font:12px/1.5 var(--head); color:#c7d6e3; margin-top:6px; }
+.pp td { font-size:11px; } .pp td.why { color:#9fb3c4; font-size:10px; max-width:420px; } .pp tr.blocked td { opacity:.55; }
+.pp .chg { white-space:nowrap; } .pp .chg i { color:var(--muted); font-style:normal; }
+.pill { font:9px var(--mono); padding:1px 5px; border:1px solid currentColor; margin-left:4px; letter-spacing:1px; }
+.pill.high { color:var(--green); } .pill.medium { color:var(--cyan); } .pill.low { color:var(--muted); } .pill.rb { color:var(--amber); }
+.btn.primary { background:rgba(0,200,255,.14); color:#fff; border-color:var(--cyan); } .btn.go { background:rgba(0,227,131,.12); color:#bfffe0; border-color:var(--green); }
+.spin { display:inline-block; width:10px; height:10px; border:2px solid var(--cyan); border-right-color:transparent; border-radius:50%; animation:sp 0.8s linear infinite; vertical-align:-1px; margin-right:6px; }
+@keyframes sp { to { transform:rotate(360deg); } }
+.adv { font:9px var(--mono); color:var(--muted); margin-top:8px; letter-spacing:.5px; }
+/* tabs, compare, charts */
+.dh { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+.tabs { display:flex; gap:2px; margin-top:12px; border-bottom:1px solid var(--line2); }
+.tabs button { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); font:700 10px var(--head); letter-spacing:2px; padding:8px 14px; cursor:pointer; }
+.tabs button:hover { color:var(--white); } .tabs button.on { color:var(--cyan); border-bottom-color:var(--cyan); }
+.tabs button .cnt { font:9px var(--mono); color:var(--amber); margin-left:5px; }
+.cg { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; } .cg .wide { grid-column:1 / -1; }
+.hint { font:9px var(--mono); color:var(--muted); margin-top:8px; }
+.flight .ck { float:right; display:flex; align-items:center; gap:4px; font:9px var(--mono); color:var(--muted); letter-spacing:1px; cursor:pointer; padding:2px 0 4px 8px; }
+.flight .ck input { accent-color:var(--cyan); cursor:pointer; }
+.flight .ck .sw { width:10px; height:10px; display:inline-block; }
+.cmpbar { padding:8px 14px; border-bottom:1px solid var(--line2); display:flex; align-items:center; gap:8px; background:var(--bg1); }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.chip { border:1px solid var(--line2); background:var(--bg1); padding:6px 10px; min-width:200px; border-top:3px solid; }
+.chip .l { font:700 11px var(--mono); letter-spacing:2px; } .chip .n { font-size:14px; font-weight:600; margin-top:2px; } .chip .f { font:9px var(--mono); color:var(--muted); }
+table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
+.dlt { font:10px var(--mono); white-space:nowrap; } .dlt.better { color:var(--green); } .dlt.worse { color:#ff5c7a; } .dlt.same { color:var(--muted); }
+.qa { margin-top:10px; } .qa .q { font:11px var(--mono); color:var(--cyan); margin-top:10px; } .qa .a { font:12px/1.5 var(--head); color:#c7d6e3; margin-top:3px; white-space:pre-wrap; }
+.ask { display:flex; gap:8px; margin-top:8px; } .ask input { flex:1; height:28px; background:#050c12; border:1px solid var(--line2); color:var(--white); font:11px var(--mono); padding:0 8px; }
+.sugg { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; } .sugg button { background:none; border:1px dashed var(--line2); color:#9fb3c4; font:10px var(--mono); padding:2px 8px; cursor:pointer; }
+.sugg button:hover { color:#fff; border-color:var(--cyan); }
+.ce td.r { font:10px var(--mono); letter-spacing:1px; white-space:nowrap; } .ce td.r.improved { color:var(--green); } .ce td.r.worse { color:#ff5c7a; } .ce td.r.no_clear_change, .ce td.r.unknown { color:var(--muted); }
 </style>
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
 <script src="console-navigation.js" defer></script>
@@ -77,50 +122,51 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
   <div class="seg"><span class="lbl">STORED ON</span><span class="val">JETSON SSD</span></div>
   <div class="seg"><span class="lbl">FLIGHTS</span><span class="val" id="hCount">--</span></div>
   <div class="seg"><span class="lbl">FREE</span><span class="val" id="hFree">--</span></div>
+  <div class="seg"><span class="lbl">AI</span><span class="val" id="hAI">CLAUDE · ADVICE ONLY</span></div>
   <div class="tb-right"><button class="btn" id="btnRefresh">⟳ REFRESH</button><span class="val" style="color:var(--muted);padding:0 8px" id="hClock">--:--:--</span></div>
 </div>
 <div class="main">
   <section class="col">
-    <div class="head"><div><div class="title">MISSIONS</div><div class="sub">newest first · recorded by ASC and the launch sequencer</div></div></div>
+    <div class="head"><div><div class="title">MISSIONS</div><div class="sub">newest first · tick up to 3 to compare</div></div></div>
+    <div class="cmpbar"><span class="sub" id="cmpInfo">Compare: none selected</span><span style="flex:1"></span>
+      <button class="btn" id="btnCmpClear" disabled>CLEAR</button><button class="btn primary" id="btnCompare" disabled>COMPARE</button></div>
     <div class="list" id="list"><div class="empty">Loading from the Jetson…</div></div>
   </section>
-  <section class="col"><div class="detail" id="detail"><div class="empty">Select a mission to see its summary, charts, events and files.</div></div></section>
+  <section class="col"><div class="detail" id="detail"><div class="empty">Select a mission to see its data, charts and AI review — or tick 2–3 missions and press COMPARE.</div></div></section>
 </div>
 <script src="mission-client.js?v=10"></script>
 <script src="mission-ui.js?v=8"></script>
+<script src="flight-charts.js?v=1"></script>
 <script>
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
   const M = () => window.airsentMission;
+  const FC = () => window.FlightCharts;
   const mode = (localStorage.getItem('airsentMode') || 'demo').toLowerCase(), isDemo = mode === 'demo';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m, k) => window.airsentMissionUI ? window.airsentMissionUI.toast(m, k) : alert(m);
   const mmss = s => s == null ? '--' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
   const size = b => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? (b / 1e3).toFixed(0) + ' KB' : b + ' B';
-  const num = (v, d = 1, u = '') => v == null ? '--' : (+v).toFixed(d) + u;
-  let missions = [], selected = null, detail = null, evFilter = 'all';
+  const num = (v, d = 1, u = '') => v == null || !isFinite(v) ? '--' : (+v).toFixed(d) + u;
+  const VLBL = { go: 'GO', caution: 'CAUTION', no_go: 'NO-GO' };
+  const LETTER = ['A', 'B', 'C'];
+  const COLORS = ['#3987e5', '#d95926', '#199e70'];          // validated dark categorical order (flights A, B, C)
+  const TARGET = '#7d8fa0';
+
+  let missions = [], selected = null, detail = null, view = 'flight', tab = 'overview', evFilter = 'all';
+  let cmpSel = [];                                            // folders ticked for comparison
+  const cache = {};                                           // folder -> { detail, series }
   const blobs = {};
 
-  // ── demo data (no Jetson) ─────────────────────────────────────────────────
-  const DEMO = { missions: [{ folder: '2026-11-07_0930_bench_hover', name: 'Bench hover', operator: 'Aarav', mtime: Date.now() / 1000 - 3600, size_mb: 14.2, has_asc: true,
-      duration_s: 412, flying_s: 288, max_alt_m: 5.1, used_mah: 1840, findings: 3, failsafes: 0, actions: 0 },
-    { folder: '2026-11-06_1712_flight', name: '2026-11-06_1712_flight', mtime: Date.now() / 1000 - 90000, size_mb: 6.8, has_asc: true,
-      duration_s: 190, flying_s: 0, max_alt_m: 0, used_mah: 120, findings: 0, failsafes: 0, actions: 0 }], free_gb: 212.4 };
-  const DEMO_DETAIL = { summary: { duration_s: 412, flying_s: 288, max_alt_m: 5.1, max_dist_m: 3.2, distance_flown_m: 41.5, used_mah: 1840, min_voltage: 23.6,
-      max_current_a: 31.2, max_vibration: 34.1, checks_per_s: 862, checks_run: 355000, console_link_losses: 0, battery_pct: [96, 78],
-      checks: { vibration: { label: 'Vibration', raised: 2, warn_s: 6.4, crit_s: 0, worst: 34.1 }, gps_hdop: { label: 'HDOP', raised: 1, warn_s: 12, crit_s: 0, worst: 1.7 } },
-      asc_actions: [], pixhawk_failsafes: [] },
-    files: [{ path: 'asc/summary.json', size: 4100 }, { path: 'asc/samples.csv', size: 1820000 }, { path: 'asc/mavlink.tlog', size: 9400000 }, { path: 'asc/charts/altitude.png', size: 41000 }],
-    events: [{ t_rel: 0, level: 'info', msg: 'ASC recording to 2026-11-07_0930_bench_hover/asc' }, { t_rel: 31.2, level: 'info', msg: 'Aarav: mission_go' },
-      { t_rel: 96.4, level: 'warning', msg: 'Vibration: High vibration 34 m/s²' }, { t_rel: 102.8, level: 'ok', msg: 'Vibration: back to normal' }] };
-
+  // ── data access ─────────────────────────────────────────────────────────
+  let demoReady = null;
+  function demoData() {
+    if (!demoReady) demoReady = new Promise(res => { const s = document.createElement('script'); s.src = 'logs-demo-data.js?v=1'; s.onload = () => res(window.AIRSENT_LOGS_DEMO || []); s.onerror = () => res([]); document.head.appendChild(s); });
+    return demoReady;
+  }
   async function call(action, data = {}, timeout = 20000) {
-    if (isDemo) {
-      if (action === 'log_list') return { ok: true, ...DEMO };
-      if (action === 'log_detail') return { ok: true, ...DEMO_DETAIL };
-      return { ok: false, msg: 'Downloads need the Jetson (demo mode)' };
-    }
+    if (isDemo) return demoCall(action, data);
     if (!M()) return { ok: false, msg: 'Command link not loaded' };
     if (!M().canCommand) return { ok: false, msg: 'Browsing the Jetson\'s logs needs an operator login (viewers are read only).' };
     return M().send(action, data, { timeout });
@@ -132,57 +178,460 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
     $('btnRefresh').disabled = false;
     if (!r.ok) { $('list').innerHTML = `<div class="empty">${esc(r.msg)}</div>`; return; }
     missions = r.missions || [];
+    cmpSel = cmpSel.filter(f => missions.some(m => m.folder === f));
     $('hCount').textContent = missions.length;
     $('hFree').textContent = r.free_gb != null ? r.free_gb + ' GB' : '--';
     renderList();
-    if (!selected && missions[0]) select(missions[0].folder);
+    if (!selected && view === 'flight' && missions[0]) select(missions[0].folder);
   }
 
   function renderList() {
-    $('list').innerHTML = missions.length ? missions.map(m => `<div class="flight${m.folder === selected ? ' sel' : ''}" data-f="${esc(m.folder)}">
+    $('list').innerHTML = missions.length ? missions.map(m => {
+      const ci = cmpSel.indexOf(m.folder);
+      return `<div class="flight${m.folder === selected && view === 'flight' ? ' sel' : ''}" data-f="${esc(m.folder)}">
+      <label class="ck" title="Compare this flight"><input type="checkbox" data-cmp="${esc(m.folder)}" ${ci >= 0 ? 'checked' : ''} ${ci < 0 && cmpSel.length >= 3 ? 'disabled' : ''}>
+        ${ci >= 0 ? `<span class="sw" style="background:${COLORS[cmpOrder().indexOf(m.folder)]}"></span>${LETTER[cmpOrder().indexOf(m.folder)]}` : 'CMP'}</label>
       <div class="n">${esc(m.name)} ${m.recording ? '<span class="tag rec">● RECORDING</span>' : ''}${m.failsafes ? `<span class="tag warn">${m.failsafes} FAILSAFE</span>` : ''}${m.actions ? `<span class="tag warn">ASC ACTED</span>` : ''}</div>
       <div class="f">${esc(m.folder)} · ${new Date(m.mtime * 1000).toLocaleString()}${m.operator ? ' · ' + esc(m.operator) : ''}</div>
       <div class="s"><span>⏱ ${mmss(m.duration_s)}</span><span>✈ ${mmss(m.flying_s)}</span><span>▲ ${num(m.max_alt_m, 1, ' m')}</span><span>⚡ ${m.used_mah != null ? Math.round(m.used_mah) + ' mAh' : '--'}</span>
-        <span style="color:${m.findings ? 'var(--amber)' : 'var(--green)'}">${m.findings ? '⚠ ' + m.findings + ' findings' : '✓ no findings'}</span><span>${num(m.size_mb, 1, ' MB')}</span></div></div>`).join('')
-      : '<div class="empty">No missions recorded yet. ASC starts recording when a mission is created or the drone arms.</div>';
+        <span style="color:${m.findings ? 'var(--amber)' : 'var(--green)'}">${m.findings ? '⚠ ' + m.findings + ' findings' : '✓ no findings'}</span><span>${num(m.size_mb, 1, ' MB')}</span></div></div>`;
+    }).join('') : '<div class="empty">No missions recorded yet. ASC starts recording when a mission is created or the drone arms.</div>';
+    $('cmpInfo').textContent = cmpSel.length ? `Compare: ${cmpOrder().map((f, i) => LETTER[i]).join(' · ')} (${cmpSel.length}/3)` : 'Compare: none selected';
+    $('btnCompare').disabled = cmpSel.length < 2;
+    $('btnCmpClear').disabled = !cmpSel.length;
   }
-  $('list').addEventListener('click', e => { const f = e.target.closest('[data-f]'); if (f) select(f.dataset.f); });
+  // flights in time order (oldest = A)
+  const cmpOrder = () => cmpSel.slice().sort((a, b) => ((missions.find(m => m.folder === a) || {}).mtime || 0) - ((missions.find(m => m.folder === b) || {}).mtime || 0));
+
+  $('list').addEventListener('click', e => {
+    const ck = e.target.closest('[data-cmp]');
+    if (ck) { const f = ck.dataset.cmp; cmpSel = ck.checked ? [...new Set([...cmpSel, f])].slice(0, 3) : cmpSel.filter(x => x !== f); renderList(); if (view === 'compare') { if (cmpSel.length >= 2) openCompare(); else select(selected || cmpSel[0] || missions[0].folder); } return; }
+    if (e.target.closest('.ck')) return;
+    const f = e.target.closest('[data-f]'); if (f) select(f.dataset.f);
+  });
+  $('btnCompare').onclick = () => openCompare();
+  $('btnCmpClear').onclick = () => { cmpSel = []; renderList(); if (view === 'compare') select(selected || missions[0].folder); };
+
+  async function getDetail(folder, fresh) {
+    if (!fresh && cache[folder] && cache[folder].detail) return { ok: true, ...cache[folder].detail };
+    const r = await call('log_detail', { folder });
+    if (r.ok) (cache[folder] = cache[folder] || {}).detail = r;
+    return r;
+  }
+  async function getSeries(folder) {
+    const c = cache[folder] = cache[folder] || {};
+    if (c.series) return c.series;
+    if (isDemo) { const d = (await demoData()).find(x => x.folder === folder); return (c.series = d ? d.series : null); }
+    const det = c.detail;
+    if (!det || !(det.files || []).some(f => f.path === 'analysis/series.json')) return null;
+    try { c.series = JSON.parse(await (await fetchFile('analysis/series.json', null, folder)).text()); } catch (e) { c.series = null; }
+    return c.series;
+  }
 
   async function select(folder) {
-    selected = folder; renderList();
+    view = 'flight'; selected = folder; renderList(); aiRun = null; askRun = null;
     $('detail').innerHTML = '<div class="empty">Loading…</div>';
-    const r = await call('log_detail', { folder });
-    if (selected !== folder) return;
+    const r = await getDetail(folder, true);
+    if (selected !== folder || view !== 'flight') return;
     if (!r.ok) { $('detail').innerHTML = `<div class="empty">${esc(r.msg)}</div>`; return; }
-    detail = r; renderDetail();
+    detail = r; renderFlight();
   }
 
-  function renderDetail() {
-    const m = missions.find(x => x.folder === selected) || {}, s = detail.summary || {};
-    const checks = Object.entries(s.checks || {}).sort((a, b) => (b[1].crit_s + b[1].warn_s) - (a[1].crit_s + a[1].warn_s));
+  // ── single flight ───────────────────────────────────────────────────────
+  function renderFlight() {
+    FC() && FC().clearGroup('flight');
+    const m = missions.find(x => x.folder === selected) || {}, rep = an().report;
+    const findings = (rep && rep.findings || []).filter(f => f.level !== 'info').length;
+    const tabs = [['overview', 'OVERVIEW'], ['charts', 'CHARTS'], ['ai', 'AI REVIEW'], ['events', 'EVENTS'], ['files', 'FILES & VIDEO']];
+    $('detail').innerHTML = `<div class="dh"><div><h2>${esc(m.name || selected)}</h2><div class="note">${esc(selected)}${m.recording ? ' · STILL RECORDING — numbers are final after landing' : ''}</div></div>
+        ${rep ? `<span class="vd ${esc(rep.verdict)}" style="margin-bottom:4px">${VLBL[rep.verdict] || ''}</span>` : ''}</div>
+      <div class="tabs">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${k === 'overview' && findings ? `<span class="cnt">${findings}</span>` : ''}</button>`).join('')}</div>
+      <div id="tabBody"></div>`;
+    renderTab();
+  }
+  function renderTab() {
+    const b = $('tabBody'); if (!b) return;
+    FC() && FC().clearGroup('flight');
+    if (tab === 'overview') b.innerHTML = `<div id="anBox">${analysisHtml()}</div>${ascHtml()}`;
+    else if (tab === 'charts') { b.innerHTML = '<div id="chartBox"><div class="empty">Loading charts…</div></div>'; mountFlightCharts(); }
+    else if (tab === 'ai') b.innerHTML = `<div id="aiBox">${aiHtml()}</div><div id="qaBox">${qaHtml(selected)}</div>`;
+    else if (tab === 'events') { b.innerHTML = `<h3>EVENTS</h3><div class="filters">${['all', 'warning', 'critical', 'commands'].map(k => `<button class="btn${evFilter === k ? ' on' : ''}" data-ev="${k}">${k.toUpperCase()}</button>`).join('')}</div><div class="ev" style="max-height:none"><table id="evTable"></table></div>`; renderEvents(); }
+    else b.innerHTML = filesHtml();
+    if (tab === 'overview') (detail.files || []).filter(f => /^asc\/charts\/.+\.png$/.test(f.path)).forEach(f => loadChart(f.path));
+    pollAnalysis();
+  }
+
+  function ascHtml() {
+    const s = detail.summary;
+    const checks = Object.entries((s && s.checks) || {}).sort((a, b) => (b[1].crit_s + b[1].warn_s) - (a[1].crit_s + a[1].warn_s));
     const charts = (detail.files || []).filter(f => /^asc\/charts\/.+\.png$/.test(f.path));
     const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-    $('detail').innerHTML = `<h2>${esc(m.name || selected)}</h2><div class="note">${esc(selected)}${m.recording ? ' · STILL RECORDING — numbers are final after landing' : ''}</div>
-      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="btnAI" ${detail.summary ? '' : 'disabled'}>COPY SUMMARY FOR AI</button></div>
-      ${detail.summary ? `<div class="stats">${stat('DURATION', mmss(s.duration_s))}${stat('FLYING', mmss(s.flying_s))}${stat('MAX ALTITUDE', num(s.max_alt_m, 1, ' m'))}${stat('DISTANCE FLOWN', num(s.distance_flown_m, 0, ' m'))}
+    return `<h3>ONBOARD MONITORING (ASC)</h3>${s ? `<div class="stats">${stat('DURATION', mmss(s.duration_s))}${stat('FLYING', mmss(s.flying_s))}${stat('MAX ALTITUDE', num(s.max_alt_m, 1, ' m'))}${stat('DISTANCE FLOWN', num(s.distance_flown_m, 0, ' m'))}
         ${stat('BATTERY USED', s.used_mah != null ? Math.round(s.used_mah) + ' mAh' : '--')}${stat('BATTERY %', (s.battery_pct || []).map(x => x == null ? '--' : Math.round(x)).join(' → ') || '--')}${stat('MIN VOLTAGE', num(s.min_voltage, 2, ' V'))}${stat('MAX CURRENT', num(s.max_current_a, 1, ' A'))}
-        ${stat('MAX VIBRATION', num(s.max_vibration, 1))}${stat('CHECKS / S', s.checks_per_s ?? '--')}${stat('CONSOLE LOSSES', s.console_link_losses ?? 0)}${stat('FAILSAFES', (s.pixhawk_failsafes || []).length)}</div>` :
-        '<div class="note" style="margin-top:12px">No ASC summary yet (written when the drone is disarmed on the ground).</div>'}
+        ${stat('MAX VIBRATION', num(s.max_vibration, 1))}${stat('CHECKS / S', s.checks_per_s ?? '--')}${stat('CONSOLE LOSSES', s.console_link_losses ?? 0)}${stat('FAILSAFES', (s.pixhawk_failsafes || []).length)}</div>`
+        : '<div class="note">No ASC summary (written when the drone is disarmed on the ground).</div>'}
       ${checks.length ? `<h3>CHECKS THAT WERE NOT OK</h3><table><tr><th>CHECK</th><th>TIMES</th><th>WARNING</th><th>CRITICAL</th><th>WORST</th></tr>${checks.map(([id, c]) =>
-        `<tr><td>${esc(c.label || id)}</td><td>${c.raised}</td><td style="color:var(--amber)">${num(c.warn_s, 1, ' s')}</td><td style="color:#ff5c7a">${num(c.crit_s, 1, ' s')}</td><td>${c.worst ?? '--'}</td></tr>`).join('')}</table>` : ''}
-      ${(s.asc_actions || []).length ? `<h3>ASC ACTIONS</h3><table>${s.asc_actions.map(a => `<tr><td>T+${num(a.t, 1, ' s')}</td><td>${esc(a.action)}</td><td>console lost ${a.console_age_s} s</td></tr>`).join('')}</table>` : ''}
-      ${charts.length ? `<h3>CHARTS</h3><div class="charts">${charts.map(f => `<div class="ph" data-chart="${esc(f.path)}">loading ${esc(f.path.split('/').pop())}…</div>`).join('')}</div>` : ''}
-      <h3>EVENTS</h3><div class="filters">${['all', 'warning', 'critical', 'commands'].map(k => `<button class="btn${evFilter === k ? ' on' : ''}" data-ev="${k}">${k.toUpperCase()}</button>`).join('')}</div>
-      <div class="ev"><table id="evTable"></table></div>
-      <h3>RECORDINGS</h3><div id="recBox">${recordingsHtml()}</div>
-      <h3>FILES</h3><table><tr><th>FILE</th><th>SIZE</th><th></th></tr>${(detail.files || []).map(f => `<tr><td>${esc(f.path)}<div class="prog"><i data-prog="${esc(f.path)}"></i></div></td><td>${size(f.size)}</td>
-        <td><button class="btn" data-dl="${esc(f.path)}" data-size="${f.size}">⤓ DOWNLOAD</button></td></tr>`).join('')}</table>
-      <div class="note">Downloads come from the Jetson in chunks over the console link. Large files (mavlink.tlog) can take a while on cellular.</div>`;
-    renderEvents();
-    charts.forEach(f => loadChart(f.path));
+        `<tr><td>${esc(c.label || id)}</td><td>${c.raised}</td><td style="color:var(--amber)">${num(c.warn_s, 1, ' s')}</td><td style="color:#ff5c7a">${num(c.crit_s, 1, ' s')}</td><td>${esc(c.worst ?? '--')}</td></tr>`).join('')}</table>` : ''}
+      ${s && (s.asc_actions || []).length ? `<h3>ASC ACTIONS</h3><table>${s.asc_actions.map(a => `<tr><td>T+${num(a.t, 1, ' s')}</td><td>${esc(a.action)}</td><td>console lost ${esc(a.console_age_s)} s</td></tr>`).join('')}</table>` : ''}
+      ${charts.length ? `<h3>ASC CHARTS</h3><div class="charts">${charts.map(f => `<div class="ph" data-chart="${esc(f.path)}">loading ${esc(f.path.split('/').pop())}…</div>`).join('')}</div>` : ''}`;
   }
 
-  // Pixhawk .bin + camera video for the selected mission
+  // ── analysis card ───────────────────────────────────────────────────────
+  let aiRun = null, askRun = null, aiDraft = { notes: '', next: 'Staircase 5 → 10 → 15 → 20 m with hovers, 360° yaw, 5 m box, RTL at 20 m, land' };
+  const lvl = (v, warn, bad) => v == null ? '' : v >= bad ? 'bad' : v >= warn ? 'warn' : 'ok';
+  const an = () => (detail && detail.analysis) || {};
+  const hasBin = () => !!((detail && detail.files) || []).find(f => f.path === 'pixhawk.bin');
+  const latestReview = () => aiRun && aiRun.review || ((an().ai || {}).reviews || []).slice(-1)[0] || null;
+  const vibMax = r => { const v = (r.vibration || {})['0'] || Object.values(r.vibration || {})[0]; return v && v.X ? Math.max(v.X.max || 0, v.Y.max || 0, v.Z.max || 0) : null; };
+  const clips = r => Object.values(r.vibration || {}).reduce((n, x) => n + (x.clip_in_flight || 0), 0);
+
+  function analysisHtml() {
+    const a = an(), r = a.report, job = a.job || {};
+    const head = (badge, btn) => `<div class="an-head"><span class="an-title">FLIGHT ANALYSIS</span>${badge || ''}<span style="flex:1"></span>${btn || ''}</div>`;
+    if (!hasBin()) return `<div class="an">${head('', '')}<div class="note" style="margin-top:6px">Needs the Pixhawk log — it downloads by itself after landing (FILES & VIDEO tab), then the Jetson analyses it automatically.</div></div>`;
+    if (job.state === 'running') return `<div class="an">${head('', '')}<div class="note" style="margin-top:8px"><span class="spin"></span>${esc(job.msg || 'Analysing…')}</div><div class="prog"><i style="width:${job.pct || 0}%"></i></div></div>`;
+    if (!r) return `<div class="an">${head('', `<button class="btn primary" id="btnAnalyse">ANALYSE LOG</button>`)}
+      <div class="note" style="margin-top:6px">${job.state === 'error' ? `<span style="color:#ff5c7a">${esc(job.msg)}</span>` : 'Measures vibration, hover throttle, motor balance, tracking, battery and the vibration spectrum from pixhawk.bin, and builds the charts. Takes a few seconds on the Jetson.'}</div></div>`;
+    const vmax = vibMax(r), clip = clips(r);
+    const th = r.throttle || {}, mo = r.motors || {}, at = r.attitude || {}, al = r.altitude || {}, b = r.battery || {}, sp = r.spectrum || {}, fl = r.flight || {};
+    const hov = th.hover_out_mean ?? th.learned_hover;
+    const st = (k, val, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${val}</div></div>`;
+    const grid = st('FLYING', mmss(fl.flying_s)) + st('HOVER THROTTLE', hov != null ? Math.round(hov * 100) + '%' : '--', lvl(hov, 0.5, 0.65))
+      + st('VIBRATION MAX', vmax != null ? vmax.toFixed(1) + ' m/s²' : '--', lvl(vmax, 30, 60)) + st('CLIPPING', clip, clip ? 'bad' : 'ok')
+      + st('MOTOR SPREAD', mo.spread_pct != null ? mo.spread_pct + '%' : '--', lvl(mo.spread_pct, 15, 25))
+      + st('ROLL / PITCH ERR', at.roll_err_rms_deg != null ? `${at.roll_err_rms_deg}° / ${at.pitch_err_rms_deg}°` : '--', lvl(Math.max(at.roll_err_rms_deg || 0, at.pitch_err_rms_deg || 0), 1.5, 3))
+      + st('ALT ERROR MAX', al.err_max_m != null ? al.err_max_m + ' m' : '--', lvl(al.err_max_m, 1.5, 3))
+      + st('MIN CELL', b.min_cell_v != null ? b.min_cell_v.toFixed(2) + ' V' : '--', b.min_cell_v != null ? (b.min_cell_v < 3.4 ? 'bad' : b.min_cell_v < 3.55 ? 'warn' : 'ok') : '')
+      + st('HOVER CURRENT', b.hover_current_a != null ? b.hover_current_a + ' A' : '--') + st('VIBRATION PEAK', sp.available && sp.peaks && sp.peaks[0] ? sp.peaks[0].hz + ' Hz' : (sp.available ? 'none' : 'no data'));
+    const finds = (r.findings || []).map(f => `<li class="${esc(f.level)}"><b>${esc(f.area)}</b>${esc(f.text)}</li>`).join('') || '<li class="info">No problems found by the rule checks.</li>';
+    return `<div class="an">${head(`<span class="vd ${esc(r.verdict)}">${VLBL[r.verdict] || esc(r.verdict)}</span><span class="note" style="margin:0">rule checks · ${esc(r.file)} ${esc(r.size_mb)} MB${r.firmware ? ' · ' + esc(r.firmware) : ''}</span>`,
+      `<button class="btn" id="btnCopyReport">COPY REPORT</button><button class="btn" id="btnAnalyse">RE-ANALYSE</button><button class="btn primary" data-goto="ai">AI REVIEW →</button>`)}
+      <div class="an-grid">${grid}</div><ul class="fl">${finds}</ul>
+      ${(r.proposals || []).length ? `<div class="note" style="margin-top:8px">RULE SUGGESTIONS (Claude reviews these on the AI REVIEW tab): ${(r.proposals || []).map(p => `${esc(p.param)} = ${esc(p.value)}`).join(' · ')}</div>` : ''}
+      ${b.hover_minutes_to_20pct != null ? `<div class="note">Estimated hover time from a full pack to 20%: ${esc(b.hover_minutes_to_20pct)} min (at ${esc(b.hover_current_a)} A).</div>` : ''}</div>`;
+  }
+
+  // ── charts: one flight ─────────────────────────────────────────────────
+  const xsOf = s => i => +(s.t0_offset_s + i * s.dt).toFixed(2);
+  function pts(s, key, fn) {
+    const v = s.series[key]; if (!v) return [];
+    const x = xsOf(s); return v.map((y, i) => [x(i), y == null ? null : (fn ? fn(y, i) : y)]);
+  }
+  function combine(s, keys, fn) {
+    const arrs = keys.map(k => s.series[k] || []), n = Math.max(0, ...arrs.map(a => a.length)), x = xsOf(s), out = [];
+    for (let i = 0; i < n; i++) { const vals = arrs.map(a => a[i]); out.push([x(i), vals.some(v => v == null) ? null : fn(...vals)]); }
+    return out;
+  }
+  const modeMarks = s => (s.modes || []).map(([t, name]) => ({ x: t, label: name }));
+  const dB = curve => (curve || []).filter(p => p[1] > 0).map(([f, a]) => [f, +(20 * Math.log10(a)).toFixed(1)]);   // amplitude in dB, like ArduPilot's FFT tools
+
+  async function mountFlightCharts() {
+    const folder = selected, box = $('chartBox');
+    if (!an().report) { box.innerHTML = '<div class="empty">Analyse the log first (OVERVIEW tab) — the charts are built from pixhawk.bin.</div>'; return; }
+    const s = await getSeries(folder);
+    if (selected !== folder || tab !== 'charts' || !$('chartBox')) return;
+    if (!s) { box.innerHTML = '<div class="empty">No chart data — press RE-ANALYSE on the OVERVIEW tab (older analyses did not export charts).</div>'; return; }
+    const defs = [
+      { id: 'alt', title: 'Altitude', unit: 'm', series: [{ name: 'Actual', points: pts(s, 'alt') }, { name: 'Target', color: TARGET, dash: true, points: pts(s, 'alt_target') }], marks: modeMarks(s), wide: true },
+      { id: 'thr', title: 'Throttle out', unit: '%', series: [{ name: 'Throttle', points: pts(s, 'throttle') }], yMin: 0 },
+      { id: 'mot', title: 'Motor outputs', unit: '%', series: [1, 2, 3, 4].map(n => ({ name: `M${n} ${['', 'FR', 'RL', 'FL', 'RR'][n]}`, short: 'M' + n, points: pts(s, 'm' + n) })) },
+      { id: 'roll', title: 'Roll', unit: '°', series: [{ name: 'Actual', points: pts(s, 'roll') }, { name: 'Desired', color: TARGET, dash: true, points: pts(s, 'roll_des') }] },
+      { id: 'pitch', title: 'Pitch', unit: '°', series: [{ name: 'Actual', points: pts(s, 'pitch') }, { name: 'Desired', color: TARGET, dash: true, points: pts(s, 'pitch_des') }] },
+      { id: 'vib', title: 'Vibration (IMU 0)', unit: 'm/s²', series: ['x', 'y', 'z'].map(a => ({ name: a.toUpperCase(), points: pts(s, 'vibe_' + a) })), thresholds: [{ y: 30, label: '30 limit' }], yMin: 0 },
+      { id: 'pos', title: 'Position error', unit: 'm', series: [{ name: 'Error', points: pts(s, 'pos_err') }], yMin: 0 },
+      { id: 'volt', title: 'Battery voltage', unit: 'V', series: [{ name: 'Voltage', points: pts(s, 'volt') }] },
+      { id: 'curr', title: 'Battery current', unit: 'A', series: [{ name: 'Current', points: pts(s, 'curr') }], yMin: 0 },
+      { id: 'spd', title: 'Ground speed', unit: 'm/s', series: [{ name: 'Speed', points: pts(s, 'speed') }], yMin: 0 },
+      { id: 'yaw', title: 'Yaw error', unit: '°', series: [{ name: '|Yaw − desired|', points: pts(s, 'yaw_err') }], yMin: 0 },
+    ];
+    box.innerHTML = `<div class="hint">Time is seconds from take-off. Hover any chart for values (all charts follow) · drag across a chart to zoom all of them · double-click to zoom out · TABLE shows the numbers.</div>
+      <div class="cg">${defs.map(d => `<div id="ch_${d.id}" class="${d.wide ? 'wide' : ''}"></div>`).join('')}<div id="ch_spec" class="wide"></div></div>`;
+    defs.forEach(d => FC().create($('ch_' + d.id), { ...d, group: 'flight', xLabel: 's', height: d.wide ? 210 : 170 }));
+    const sp = s.spectrum || [];
+    FC().create($('ch_spec'), { title: 'Gyro vibration spectrum (hover)', unit: 'dB', xLabel: 'Hz', height: 190, directLabels: false,
+      series: [{ name: 'Gyro (roll + pitch)', points: dB(sp) }], marks: (s.peaks || []).map(p => ({ x: p.hz, label: p.hz + ' Hz' })),
+      xFmt: x => x.toFixed(1) + ' Hz', maxGap: 5, empty: 'No high-rate gyro data — set INS_LOG_BAT_MASK = 1 for the next flight' });
+  }
+
+  // ── AI review (one flight) ─────────────────────────────────────────────
+  function proposalsTable(props, key) {
+    const canApply = isDemo || (M() && M().canCommand), armed = !!(M() && M().state && M().state.armed);
+    if (!props.length) return '<div class="note">No parameter changes proposed.</div>';
+    const okN = props.filter(p => p.allowed).length;
+    return `<table class="pp"><tr><th></th><th>PARAMETER</th><th>FLOWN → NEW</th><th>WHY</th></tr>${props.map((p, i) => `<tr class="${p.allowed ? '' : 'blocked'}">
+        <td>${p.allowed ? `<input type="checkbox" data-pp="${key}:${i}" ${p.recommended ? 'checked' : ''} ${canApply && !armed ? '' : 'disabled'}>` : ''}</td>
+        <td>${esc(p.param)}${p.recommended ? '<span class="pill high">RECOMMENDED</span>' : `<span class="pill ${esc(p.confidence)}">${esc(String(p.confidence || '').toUpperCase())}</span>`}${p.reboot ? '<span class="pill rb">REBOOT</span>' : ''}</td>
+        <td class="chg">${p.current != null ? esc(p.current) : '<i>?</i>'} → <b>${esc(p.value)}</b></td>
+        <td class="why">${esc(p.reason)}${p.blocked ? `<div style="color:#ff5c7a;margin-top:2px">BLOCKED — ${esc(p.blocked)}</div>` : ''}</td></tr>`).join('')}</table>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn go" data-apply="${key}">APPLY TICKED</button>
+        <span class="note" style="margin:0">${armed ? 'Disarm first — parameters can only be written on the ground.' : okN ? 'Claude pre-ticked what it recommends for the next flight. Untick anything you disagree with; each value is written to the Pixhawk and read back.' : 'Nothing the console is allowed to apply.'}</span></div>`;
+  }
+  function reviewBody(rv, key) {
+    return `<div class="an-head" style="margin-top:12px"><span class="vd ${esc(rv.verdict)}">${VLBL[rv.verdict] || esc(rv.verdict)}</span>
+        <span class="note" style="margin:0">${rv.by ? 'requested by ' + esc(rv.by) + ' · ' : ''}${rv.saved_at || (rv.meta && rv.meta.at) ? new Date(1000 * (rv.saved_at || rv.meta.at)).toLocaleString() : ''}${rv.meta ? ` · ${esc(rv.meta.model)} · ${esc(rv.meta.seconds)} s` : ''}</span></div>
+      ${rv.verdict_raised_by_rules ? `<div class="note" style="color:var(--amber)">Claude said ${esc(VLBL[rv.verdict_raised_by_rules] || rv.verdict_raised_by_rules)}; the hard rule checks are stricter, so their verdict is shown.</div>` : ''}
+      <div class="ai-hl">${esc(rv.headline)}</div><div class="ai-sum">${esc(rv.summary)}</div>
+      ${(rv.change_effects || []).length ? `<h3>WHAT EACH CHANGE DID</h3><table class="ce">${rv.change_effects.map(c => `<tr><td>${esc(c.change)}</td><td class="r ${esc(c.result)}">${esc(String(c.result).replace(/_/g, ' ').toUpperCase())}</td><td class="why" style="color:#9fb3c4">${esc(c.effect)}</td></tr>`).join('')}</table>` : ''}
+      ${(rv.improved || []).length ? `<ul class="fl">${rv.improved.map(x => `<li class="info"><b>better</b>${esc(x)}</li>`).join('')}</ul>` : ''}
+      ${(rv.worse || []).length ? `<ul class="fl">${rv.worse.map(x => `<li class="warning"><b>worse</b>${esc(x)}</li>`).join('')}</ul>` : ''}
+      ${(rv.findings || []).length ? `<ul class="fl">${rv.findings.map(f => `<li class="${esc(f.level)}"><b>${esc(f.area)}</b>${esc(f.text)}</li>`).join('')}</ul>` : ''}
+      ${(rv.before_next_flight || []).length ? `<h3>BEFORE THE NEXT FLIGHT</h3><ul class="fl">${rv.before_next_flight.map(x => `<li class="warning">${esc(x)}</li>`).join('')}</ul>` : ''}
+      ${rv.next_flight_plan ? `<h3>NEXT FLIGHT</h3><div class="ai-sum">${esc(rv.next_flight_plan)}</div>` : ''}
+      <h3>PARAMETER CHANGES — WHAT TO TICK</h3>${proposalsTable(rv.proposals || [], key)}
+      ${(rv.rejected_rule_proposals || []).length ? `<div class="note" style="margin-top:8px">Rule suggestions Claude disagreed with: ${rv.rejected_rule_proposals.map(x => `${esc(x.param)} — ${esc(x.reason)}`).join(' · ')}</div>` : ''}
+      ${(rv.data_gaps || []).length ? `<div class="note" style="margin-top:6px">Data gaps: ${rv.data_gaps.map(esc).join(' · ')}</div>` : ''}`;
+  }
+  function inputsHtml(prefix) {
+    return `<div class="ai-in"><div><label>NOTES FROM THE FIELD (what you saw / heard)</label><textarea id="${prefix}Notes" placeholder="e.g. slight wobble when climbing, motor 3 warmer than the others">${esc(aiDraft.notes)}</textarea></div>
+        <div><label>PLANNED NEXT FLIGHT</label><textarea id="${prefix}Next">${esc(aiDraft.next)}</textarea></div></div>`;
+  }
+  function appliedHtml(ai) {
+    const applied = (ai || {}).applied || [];
+    return applied.length ? `<h3>APPLIED AFTER THIS FLIGHT</h3><table>${applied.slice().reverse().map(a => `<tr><td style="white-space:nowrap;color:var(--muted)">${new Date(a.at * 1000).toLocaleString()}</td>
+        <td>${esc(a.by)}</td><td>${Object.entries(a.values || {}).map(([k, v]) => `${esc(k)} = ${esc(v)}`).join(' · ')}${a.failed ? `<div style="color:#ff5c7a">${esc(a.failed)}</div>` : ''}</td></tr>`).join('')}</table>` : '';
+  }
+  function aiHtml() {
+    if (!an().report) return `<div class="an"><span class="an-title">AI REVIEW</span><div class="note" style="margin-top:6px">Analyse the log first (OVERVIEW tab). Claude reviews the analysis, not the raw log.</div></div>`;
+    const rv = latestReview(), busy = aiRun && aiRun.busy, canAsk = isDemo || (M() && M().canCommand);
+    let body = '';
+    if (busy) body = `<div class="note" style="margin-top:10px"><span class="spin"></span>Claude is reviewing the flight… (usually 20–60 s)</div>`;
+    else if (aiRun && aiRun.error) body = `<div class="note" style="margin-top:10px;color:#ff5c7a">${esc(aiRun.error)}</div>`;
+    if (rv && !busy) body += reviewBody(rv, 'rv');
+    return `<div class="an"><div class="an-head"><span class="an-title">AI REVIEW</span><span class="note" style="margin:0">Claude reads the flight analysis and tells you what to change · advice only</span><span style="flex:1"></span>
+        <button class="btn primary" id="btnAskAI" ${busy || !canAsk ? 'disabled' : ''}>${rv ? 'REVIEW AGAIN' : 'ANALYSE WITH CLAUDE'}</button></div>
+      ${inputsHtml('ai')}${body}${appliedHtml(an().ai)}
+      <div class="adv">Nothing is changed on the aircraft without your confirmation. Failsafes, fence, arming and battery limits can never be changed from here.</div></div>`;
+  }
+
+  // ── Q&A ─────────────────────────────────────────────────────────────────
+  const SUGG_ONE = ['Is it safe to fly the staircase mission next?', 'Why is the hover throttle this high?', 'Which motor works hardest and why?', 'How much flight time do I have on this pack?'];
+  const SUGG_CMP = ['Did the changes between these flights work?', 'Which flight was the most stable, and why?', 'Is the vibration getting better or worse?', 'What should we change before the next flight?'];
+  function qaHtml(folder, cmp) {
+    const hist = cmp ? (cmpQA || []) : (((cache[folder] || {}).detail || {}).analysis || {}).ai?.qa || [];
+    const pend = askRun && askRun.busy;
+    return `<div class="an"><div class="an-head"><span class="an-title">ASK CLAUDE</span><span class="note" style="margin:0">${cmp ? 'about these flights' : 'about this flight'} · answers use the measured numbers</span></div>
+      <div class="ask"><input id="askQ" placeholder="Ask anything about ${cmp ? 'these flights' : 'this flight'}…" ${pend ? 'disabled' : ''}><button class="btn primary" id="btnAsk" data-cmp="${cmp ? 1 : 0}" ${pend ? 'disabled' : ''}>ASK</button></div>
+      <div class="sugg">${(cmp ? SUGG_CMP : SUGG_ONE).map(q => `<button type="button" data-sugg="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      <div class="qa">${pend ? `<div class="q">› ${esc(askRun.q)}</div><div class="a"><span class="spin"></span>thinking…</div>` : ''}${askRun && askRun.error ? `<div class="a" style="color:#ff5c7a">${esc(askRun.error)}</div>` : ''}
+        ${hist.slice().reverse().map(x => `<div class="q">› ${esc(x.question)}</div><div class="a">${esc(x.answer)}</div>${(x.followups || []).length ? `<div class="sugg">${x.followups.map(q => `<button type="button" data-sugg="${esc(q)}">${esc(q)}</button>`).join('')}</div>` : ''}`).join('')}</div></div>`;
+  }
+
+  // ── compare ─────────────────────────────────────────────────────────────
+  let cmpData = [], cmpRun = null, cmpQA = [];
+  async function openCompare() {
+    const order = cmpOrder(); if (order.length < 2) return;
+    view = 'compare'; cmpRun = null; askRun = null; cmpQA = [];
+    renderList();
+    FC() && FC().clearGroup('cmp');
+    $('detail').innerHTML = '<div class="empty">Loading the flights…</div>';
+    const det = await Promise.all(order.map(f => getDetail(f, true)));
+    const ser = await Promise.all(order.map(f => getSeries(f)));
+    if (view !== 'compare') return;
+    cmpData = order.map((f, i) => ({ folder: f, mission: missions.find(m => m.folder === f) || {}, detail: det[i].ok ? det[i] : null, series: ser[i], color: COLORS[i], letter: LETTER[i] }));
+    renderCompare();
+  }
+
+  const METRICS = [
+    ['Verdict (rule checks)', r => r.verdict, null, null, v => VLBL[v] || v],
+    ['Flying time', r => r.flight && r.flight.flying_s, 's', null, v => mmss(v)],
+    ['Max altitude', r => r.flight && r.flight.max_alt_m, 'm', null, 1],
+    ['Hover throttle', r => r.throttle && (r.throttle.hover_out_mean ?? r.throttle.learned_hover) * 100, '%', 'lower', 1],
+    ['Max vibration', r => vibMax(r), 'm/s²', 'lower', 1],
+    ['Accel clipping', r => clips(r), '', 'lower', 0],
+    ['Gyro peak frequency', r => r.spectrum && r.spectrum.peaks && r.spectrum.peaks[0] && r.spectrum.peaks[0].hz, 'Hz', null, 1],
+    ['Gyro peak strength', r => r.spectrum && r.spectrum.peaks && r.spectrum.peaks[0] && r.spectrum.peaks[0].x_floor, '× floor', 'lower', 1],
+    ['Motor spread at hover', r => r.motors && r.motors.spread_pct, '%', 'lower', 1],
+    ['Roll error RMS', r => r.attitude && r.attitude.roll_err_rms_deg, '°', 'lower', 2],
+    ['Pitch error RMS', r => r.attitude && r.attitude.pitch_err_rms_deg, '°', 'lower', 2],
+    ['Yaw error RMS', r => r.attitude && r.attitude.yaw_err_rms_deg, '°', 'lower', 2],
+    ['Altitude error max', r => r.altitude && r.altitude.err_max_m, 'm', 'lower', 2],
+    ['Position error 95%', r => r.position && r.position.err_p95_m, 'm', 'lower', 2],
+    ['Position error max', r => r.position && r.position.err_max_m, 'm', 'lower', 2],
+    ['Min cell voltage', r => r.battery && r.battery.min_cell_v, 'V', 'higher', 2],
+    ['Voltage sag', r => r.battery && r.battery.sag_v, 'V', 'lower', 2],
+    ['Hover current', r => r.battery && r.battery.hover_current_a, 'A', 'lower', 1],
+    ['Est. hover to 20%', r => r.battery && r.battery.hover_minutes_to_20pct, 'min', 'higher', 1],
+    ['Min satellites', r => r.gps && r.gps.min_sats, '', 'higher', 0],
+  ];
+  function metricTable(reps) {
+    const fmtv = (v, d) => v == null || (typeof v === 'number' && !isFinite(v)) ? '--' : typeof d === 'function' ? esc(d(v)) : typeof v === 'number' ? v.toFixed(d) : esc(v);
+    return `<table class="mt"><tr><th>MEASURE</th>${cmpData.map(c => `<th class="v" style="color:${c.color}">${c.letter}</th>`).join('')}<th class="v">${cmpData[0].letter} → ${cmpData[cmpData.length - 1].letter}</th></tr>
+      ${METRICS.map(([label, get, unit, better, d]) => {
+        const vals = reps.map(r => { try { return r ? get(r) : null; } catch (e) { return null; } });
+        const a = vals[0], z = vals[vals.length - 1];
+        let dl = '';
+        if (better && typeof a === 'number' && typeof z === 'number' && isFinite(a) && isFinite(z)) {
+          const diff = z - a, rel = Math.abs(a) > 1e-9 ? diff / Math.abs(a) * 100 : 0, tiny = Math.abs(rel) < 3 && Math.abs(diff) < 1e-6 + (typeof d === 'number' ? Math.pow(10, -d) : 0.01);
+          const good = better === 'lower' ? diff < 0 : diff > 0;
+          dl = tiny || Math.abs(rel) < 3 ? '<span class="dlt same">≈ same</span>' : `<span class="dlt ${good ? 'better' : 'worse'}">${diff > 0 ? '▲' : '▼'} ${Math.abs(rel).toFixed(0)}% ${good ? 'better' : 'worse'}</span>`;
+        }
+        return `<tr><td>${esc(label)}${unit ? ` <span style="color:var(--muted)">(${esc(unit)})</span>` : ''}</td>${vals.map(v => `<td class="v">${fmtv(v, d)}</td>`).join('')}<td class="v">${dl}</td></tr>`;
+      }).join('')}</table>`;
+  }
+  function paramDiff(reps) {
+    const keys = [...new Set(reps.flatMap(r => Object.keys((r && r.params) || {})))].sort();
+    const rows = keys.filter(k => new Set(reps.map(r => r && r.params && r.params[k] != null ? String(r.params[k]) : '–')).size > 1);
+    return rows.length ? `<table class="mt"><tr><th>PARAMETER</th>${cmpData.map(c => `<th class="v" style="color:${c.color}">${c.letter}</th>`).join('')}</tr>${rows.map(k => `<tr><td>${esc(k)}</td>${reps.map(r => `<td class="v">${esc(r && r.params && r.params[k] != null ? r.params[k] : '–')}</td>`).join('')}</tr>`).join('')}</table>`
+      : '<div class="note">No differences in the tracked parameters.</div>';
+  }
+
+  function renderCompare() {
+    FC().clearGroup('cmp'); FC().clearGroup('cmpspec');
+    const reps = cmpData.map(c => c.detail && c.detail.analysis && c.detail.analysis.report);
+    const missing = cmpData.filter((c, i) => !reps[i]);
+    const rv = cmpRun && cmpRun.compare || null, busy = cmpRun && cmpRun.busy;
+    const applied = cmpData.slice(0, -1).map(c => ({ c, a: ((c.detail || {}).analysis || {}).ai?.applied || [] })).filter(x => x.a.length);
+    $('detail').innerHTML = `<div class="dh"><h2>Compare ${cmpData.length} flights</h2><span class="note">oldest = A · charts aligned at take-off</span></div>
+      <div class="chips">${cmpData.map((c, i) => `<div class="chip" style="border-top-color:${c.color}"><div class="l" style="color:${c.color}">FLIGHT ${c.letter}</div><div class="n">${esc(c.mission.name || c.folder)}</div>
+        <div class="f">${esc(c.folder)} · ${c.mission.mtime ? new Date(c.mission.mtime * 1000).toLocaleString() : ''}</div>
+        <div style="margin-top:4px">${reps[i] ? `<span class="vd ${esc(reps[i].verdict)}" style="font-size:9px;padding:1px 6px">${VLBL[reps[i].verdict]}</span>` : `<button class="btn" data-analyse="${esc(c.folder)}">ANALYSE</button>`}</div></div>`).join('')}</div>
+      ${missing.length ? `<div class="note" style="color:var(--amber);margin-top:8px">${missing.map(c => 'Flight ' + c.letter).join(', ')} not analysed yet — press ANALYSE on it (needs its pixhawk.bin).</div>` : ''}
+      <div class="an"><div class="an-head"><span class="an-title">CLAUDE: WHAT CHANGED AND DID IT WORK?</span><span style="flex:1"></span>
+        <button class="btn primary" id="btnCmpAI" ${busy || missing.length ? 'disabled' : ''}>${rv ? 'COMPARE AGAIN' : 'COMPARE WITH CLAUDE'}</button></div>
+        ${inputsHtml('cmp')}
+        ${busy ? '<div class="note" style="margin-top:10px"><span class="spin"></span>Claude is comparing the flights… (usually 30–90 s)</div>' : ''}${cmpRun && cmpRun.error ? `<div class="note" style="margin-top:10px;color:#ff5c7a">${esc(cmpRun.error)}</div>` : ''}
+        ${rv && !busy ? reviewBody(rv, 'cmp').replace('PARAMETER CHANGES — WHAT TO TICK', `PARAMETER CHANGES FOR THE NEXT FLIGHT (FROM FLIGHT ${cmpData[cmpData.length - 1].letter})`) : ''}
+        <div class="adv">Changes apply to the aircraft now (starting from flight ${cmpData[cmpData.length - 1].letter}'s settings) and are recorded with flight ${cmpData[cmpData.length - 1].letter}.</div></div>
+      <h3>MEASUREMENTS</h3>${metricTable(reps)}
+      <h3>WHAT CHANGED BETWEEN THE FLIGHTS</h3>
+      ${applied.length ? `<ul class="fl">${applied.map(x => x.a.map(a => `<li class="info"><b>after ${x.c.letter}</b>applied from the console by ${esc(a.by)}: ${Object.entries(a.values || {}).map(([k, v]) => `${esc(k)} = ${esc(v)}`).join(' · ')}</li>`).join('')).join('')}</ul>` : ''}
+      ${paramDiff(reps)}
+      <h3>CHARTS</h3><div class="hint">Each colour is one flight (A blue · B orange · C aqua). Hover for values · drag to zoom all charts · double-click to zoom out.</div>
+      <div class="cg" id="cmpCharts"></div>
+      <div id="qaBox">${qaHtml(null, true)}</div>`;
+    mountCompareCharts();
+  }
+
+  function mountCompareCharts() {
+    const box = $('cmpCharts'); if (!box) return;
+    const S = cmpData.map(c => c.series);
+    const by = (fn) => cmpData.map((c, i) => S[i] ? { name: `Flight ${c.letter}`, short: c.letter, color: c.color, points: fn(S[i]) } : null).filter(Boolean);
+    const defs = [
+      { id: 'alt', title: 'Altitude', unit: 'm', series: by(s => pts(s, 'alt')), wide: true },
+      { id: 'thr', title: 'Throttle out', unit: '%', series: by(s => pts(s, 'throttle')), yMin: 0 },
+      { id: 'vib', title: 'Vibration, worst axis', unit: 'm/s²', series: by(s => combine(s, ['vibe_x', 'vibe_y', 'vibe_z'], Math.max)), thresholds: [{ y: 30, label: '30 limit' }], yMin: 0 },
+      { id: 'rerr', title: 'Roll error', unit: '°', series: by(s => combine(s, ['roll', 'roll_des'], (a, b) => Math.abs(a - b))), yMin: 0 },
+      { id: 'perr', title: 'Pitch error', unit: '°', series: by(s => combine(s, ['pitch', 'pitch_des'], (a, b) => Math.abs(a - b))), yMin: 0 },
+      { id: 'pos', title: 'Position error', unit: 'm', series: by(s => pts(s, 'pos_err')), yMin: 0 },
+      { id: 'spd', title: 'Ground speed', unit: 'm/s', series: by(s => pts(s, 'speed')), yMin: 0 },
+      { id: 'volt', title: 'Battery voltage', unit: 'V', series: by(s => pts(s, 'volt')) },
+      { id: 'curr', title: 'Battery current', unit: 'A', series: by(s => pts(s, 'curr')), yMin: 0 },
+    ];
+    box.innerHTML = defs.map(d => `<div id="cc_${d.id}" class="${d.wide ? 'wide' : ''}"></div>`).join('') + '<div id="cc_spec" class="wide"></div>';
+    defs.forEach(d => FC().create($('cc_' + d.id), { ...d, group: 'cmp', xLabel: 's', height: d.wide ? 210 : 170, empty: 'No chart data — analyse these flights' }));
+    FC().create($('cc_spec'), { title: 'Gyro vibration spectrum (hover) — lower is better', unit: 'dB', xLabel: 'Hz', group: 'cmpspec', height: 230, maxGap: 5,
+      xFmt: x => x.toFixed(1) + ' Hz', series: by(s => dB(s.spectrum)), empty: 'No high-rate gyro data in these logs (INS_LOG_BAT_MASK = 1)' });
+  }
+
+  // ── actions ─────────────────────────────────────────────────────────────
+  function readInputs(prefix) {
+    const n = $(prefix + 'Notes'), x = $(prefix + 'Next');
+    if (n) aiDraft.notes = n.value; if (x) aiDraft.next = x.value;
+  }
+  function refreshAI() {
+    if (view === 'flight' && tab === 'ai') { readInputs('ai'); const b = $('aiBox'); if (b) b.innerHTML = aiHtml(); const q = $('qaBox'); if (q) q.innerHTML = qaHtml(selected); }
+    if (view === 'flight' && tab === 'overview') { const a = $('anBox'); if (a) a.innerHTML = analysisHtml(); }
+  }
+
+  let anTimer = null;
+  function pollAnalysis() {
+    clearTimeout(anTimer);
+    if (view !== 'flight' || !detail || (an().job || {}).state !== 'running') return;
+    const folder = selected;
+    anTimer = setTimeout(async () => {
+      const r = await getDetail(folder, true);
+      if (selected !== folder || view !== 'flight' || !r.ok) return;
+      const was = (an().job || {}).state;
+      detail = r; if (cache[folder]) cache[folder].series = null;
+      if (was === 'running' && (an().job || {}).state !== 'running') renderFlight(); else refreshAI();
+      pollAnalysis();
+    }, 1500);
+  }
+  async function runAnalysis(folder) {
+    const r = await call('log_analyze', { folder });
+    if (!r.ok) { toast(r.msg, 'alert'); return; }
+    if (cache[folder]) cache[folder].series = null;
+    if (view === 'compare') { toast('Analysing ' + folder + ' — the comparison refreshes when it is done'); setTimeout(function wait() { getDetail(folder, true).then(d => { if (d.ok && d.analysis && d.analysis.job && d.analysis.job.state === 'running') setTimeout(wait, 1500); else if (view === 'compare') openCompare(); }); }, 1500); return; }
+    detail.analysis = { ...an(), job: { state: 'running', pct: 0, msg: r.msg } };
+    refreshAI(); pollAnalysis();
+  }
+  async function askAI() {
+    readInputs('ai');
+    const folder = selected;
+    aiRun = { busy: true }; refreshAI();
+    const r = await call('ai_analyze', { mode: 'review', folder, report: an().report, notes: aiDraft.notes, next_flight: aiDraft.next }, 180000);
+    if (selected !== folder || view !== 'flight') return;
+    if (!r.ok) { aiRun = { error: r.msg }; refreshAI(); return; }
+    aiRun = { review: r.review }; refreshAI();
+    const s = await call('log_ai_save', { folder, review: r.review });
+    if (s.ok && s.ai) { detail.analysis = { ...an(), ai: s.ai }; aiRun = { review: s.ai.reviews.slice(-1)[0] }; refreshAI(); }
+  }
+  async function compareAI() {
+    readInputs('cmp');
+    const flights = cmpData.map(c => ({ name: c.mission.name, folder: c.folder, report: c.detail.analysis.report, applied: (c.detail.analysis.ai || {}).applied || [] }));
+    cmpRun = { busy: true }; renderCompare();
+    const r = await call('ai_analyze', { mode: 'compare', folder: cmpData[cmpData.length - 1].folder, flights, notes: aiDraft.notes, next_flight: aiDraft.next }, 240000);
+    if (view !== 'compare') return;
+    cmpRun = r.ok ? { compare: r.compare } : { error: r.msg };
+    renderCompare();
+    if (r.ok) call('log_ai_save', { folder: cmpData[cmpData.length - 1].folder, compare: r.compare });
+  }
+  async function ask(q, isCmp) {
+    q = String(q || '').trim(); if (!q) return;
+    const flights = isCmp ? cmpData.map(c => ({ name: c.mission.name, folder: c.folder, report: c.detail && c.detail.analysis && c.detail.analysis.report, applied: ((c.detail || {}).analysis || {}).ai?.applied || [] }))
+      : [{ name: (missions.find(m => m.folder === selected) || {}).name, folder: selected, report: an().report, applied: (an().ai || {}).applied || [] }];
+    if (!flights.every(f => f.report)) { toast('Analyse the flight(s) first', 'alert'); return; }
+    const folder = isCmp ? cmpData[cmpData.length - 1].folder : selected;
+    askRun = { busy: true, q };
+    const box = $('qaBox'); if (box) box.innerHTML = qaHtml(selected, isCmp);
+    const r = await call('ai_analyze', { mode: 'ask', folder, question: q, flights }, 120000);
+    askRun = r.ok ? null : { error: r.msg };
+    if (r.ok) {
+      const item = { question: q, answer: r.answer.answer, followups: r.answer.followups || [], meta: r.answer.meta };
+      if (isCmp) cmpQA.push(item);
+      else { const s = await call('log_ai_save', { folder, qa: item }); if (s.ok && s.ai && cache[folder]) { cache[folder].detail.analysis.ai = s.ai; if (selected === folder) detail.analysis = { ...an(), ai: s.ai }; } }
+    }
+    const b2 = $('qaBox'); if (b2) b2.innerHTML = qaHtml(selected, isCmp);
+  }
+
+  async function applyProposals(key) {
+    const rv = key === 'cmp' ? cmpRun && cmpRun.compare : latestReview();
+    if (!rv) return;
+    const folder = key === 'cmp' ? cmpData[cmpData.length - 1].folder : selected;
+    const picks = [...document.querySelectorAll(`[data-pp^="${key}:"]:checked`)].map(c => rv.proposals[+c.dataset.pp.split(':')[1]]).filter(p => p && p.allowed);
+    if (!picks.length) { toast('Nothing ticked'); return; }
+    if (M() && M().state && M().state.armed) { toast('Disarm first — parameters can only be written on the ground', 'alert'); return; }
+    let live = {};
+    if (!isDemo) { const rr = await call('param_read', { names: picks.map(p => p.param) }, 30000); if (rr.ok) live = rr.values || {}; }
+    const lines = picks.map(p => `${p.param}: ${live[p.param] ?? p.current ?? '?'} → ${p.value}${live[p.param] != null && p.current != null && Math.abs(live[p.param] - p.current) > 1e-6 ? '   (changed since the flight!)' : ''}`);
+    const reboot = picks.some(p => p.reboot);
+    if (!confirm(`Write ${picks.length} parameter(s) to the Pixhawk?\n\n${lines.join('\n')}${reboot ? '\n\nSome of these only take effect after the Pixhawk reboots (power-cycle it on the ground).' : ''}\n\nEach value is read back from the Pixhawk to confirm.`)) return;
+    const btn = document.querySelector(`[data-apply="${key}"]`); if (btn) { btn.disabled = true; btn.textContent = 'WRITING…'; }
+    const all = Object.fromEntries(picks.map(p => [p.param, p.value]));
+    const first = 'INS_HNTCH_ENABLE' in all ? { INS_HNTCH_ENABLE: all.INS_HNTCH_ENABLE } : null;   // notch settings exist once it's enabled
+    const rest = Object.fromEntries(Object.entries(all).filter(([k]) => !first || k !== 'INS_HNTCH_ENABLE'));
+    const done = {}; let failed = '';
+    for (const batch of [first, rest]) {
+      if (!batch || !Object.keys(batch).length || failed) continue;
+      const r = await call('param_write', { params: batch }, 60000);
+      Object.assign(done, r.values || {});
+      if (!r.ok) failed = r.msg;
+      else if (batch === first) await new Promise(res => setTimeout(res, 1500));
+    }
+    const s = await call('log_ai_save', { folder, applied: { values: done, failed: failed || undefined, from: key === 'cmp' ? 'compare' : 'review' } });
+    toast(failed ? `Wrote ${Object.keys(done).length}/${picks.length} — ${failed}` : `✓ Wrote and confirmed ${Object.keys(done).length} parameter(s)${reboot ? ' — reboot the Pixhawk on the ground' : ''}`, failed ? 'alert' : '');
+    if (s.ok && s.ai && cache[folder] && cache[folder].detail) cache[folder].detail.analysis.ai = s.ai;
+    if (key === 'cmp') { const c = cmpData[cmpData.length - 1]; if (c.detail) c.detail.analysis.ai = s.ai || c.detail.analysis.ai; renderCompare(); }
+    else { if (s.ok && s.ai) detail.analysis = { ...an(), ai: s.ai }; refreshAI(); }
+  }
+
+  // ── files / recordings / events ─────────────────────────────────────────
+  function filesHtml() {
+    return `<h3>RECORDINGS</h3><div id="recBox">${recordingsHtml()}</div>
+      <h3>FILES</h3><table><tr><th>FILE</th><th>SIZE</th><th></th></tr>${(detail.files || []).map(f => `<tr><td>${esc(f.path)}<div class="prog"><i data-prog="${esc(f.path)}"></i></div></td><td>${size(f.size)}</td>
+        <td><button class="btn" data-dl="${esc(f.path)}" data-size="${f.size}">⤓ DOWNLOAD</button></td></tr>`).join('')}</table>
+      <div class="note">Downloads come from the Jetson in chunks over the console link. Large files (mavlink.tlog, video) can take a while on cellular.</div>`;
+  }
   function recordingsHtml() {
     const files = detail.files || [], has = p => files.find(f => f.path === p);
     const m = missions.find(x => x.folder === selected) || {};
@@ -197,23 +646,21 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
     const busy = bl.state === 'listing' || bl.state === 'downloading';
     const vid = (name, label) => {
       const f = files.find(x => x.path.startsWith('video/' + name + '.'));
-      return `<tr><td>${label}</td><td>${f ? `<span style="color:var(--green)">✓ ${esc(f.path)} (${size(f.size)})</span>`
-        : `<span style="color:var(--muted)">${m.recording ? 'recording…' : 'no video'}</span>`}</td><td></td></tr>`;
+      return `<tr><td>${label}</td><td>${f ? `<span style="color:var(--green)">✓ ${esc(f.path)} (${size(f.size)})</span>` : `<span style="color:var(--muted)">${m.recording ? 'recording…' : 'no video'}</span>`}</td><td></td></tr>`;
     };
-    return `<table><tr><td>PIXHAWK LOG (.bin)</td><td>${binTxt}</td><td>${bin || m.recording ? '' :
-      `<button class="btn" id="btnBin" ${busy ? 'disabled' : ''}>${part ? 'RETRY' : 'GET FROM PIXHAWK'}</button>`}</td></tr>
+    return `<table><tr><td>PIXHAWK LOG (.bin)</td><td>${binTxt}</td><td>${bin || m.recording ? '' : `<button class="btn" id="btnBin" ${busy ? 'disabled' : ''}>${part ? 'RETRY' : 'GET FROM PIXHAWK'}</button>`}</td></tr>
       ${vid('front', 'FRONT CAMERA')}${vid('down', 'DOWN CAMERA')}</table>
-      <div class="note">The newest Pixhawk log is the flight that just landed — use GET FROM PIXHAWK only for the latest mission. Videos are large; for long flights copying them off the Jetson SSD is faster than downloading here.</div>`;
+      <div class="note">The newest Pixhawk log is the flight that just landed — use GET FROM PIXHAWK only for the latest mission.</div>`;
   }
   let lastBinState = '';
   setInterval(() => {
-    const bl = (M() && M().binLog) || {}, box = $('recBox');
+    const bl = (M() && M().binLog) || {};
     const key = bl.state + ':' + Math.floor(bl.pct || 0) + ':' + bl.folder;
     if (key === lastBinState) return;
     const finished = /listing|downloading/.test(lastBinState.split(':')[0]) && bl.state === 'done';
     lastBinState = key;
-    if (finished && bl.folder === selected) { select(selected); return; }
-    if (box && detail) box.innerHTML = recordingsHtml();
+    if (finished && bl.folder === selected && view === 'flight') { select(selected); return; }
+    const box = $('recBox'); if (box && detail) box.innerHTML = recordingsHtml();
   }, 1000);
 
   function renderEvents() {
@@ -222,10 +669,10 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
     t.innerHTML = ev.length ? ev.slice().reverse().map(e => `<tr class="${esc(e.level)}"><td style="color:var(--muted);white-space:nowrap">T+${num(e.t_rel, 1, ' s')}</td><td class="m">${esc(e.msg)}</td></tr>`).join('') : '<tr><td class="note">No events.</td></tr>';
   }
 
-  async function fetchFile(path, onProgress) {
+  async function fetchFile(path, onProgress, folder = selected) {
     const parts = []; let offset = 0, total = 0;
     for (;;) {
-      const r = await call('log_file', { folder: selected, path, offset }, 30000);
+      const r = await call('log_file', { folder, path, offset }, 30000);
       if (!r.ok) throw new Error(r.msg);
       const bin = atob(r.data), bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -235,7 +682,6 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
     }
     return new Blob(parts);
   }
-
   async function loadChart(path) {
     const ph = document.querySelector(`[data-chart="${CSS.escape(path)}"]`);
     try {
@@ -245,41 +691,94 @@ tr.warning td.m { color:var(--amber); } tr.critical td.m { color:#ff5c7a; } tr.o
     } catch (e) { if (ph) ph.textContent = 'chart unavailable: ' + e.message; }
   }
 
+  // ── one click handler for the right-hand panel ─────────────────────────
   $('detail').addEventListener('click', async e => {
-    const ev = e.target.closest('[data-ev]');
-    if (ev) { evFilter = ev.dataset.ev; document.querySelectorAll('[data-ev]').forEach(b => b.classList.toggle('on', b === ev)); renderEvents(); return; }
-    if (e.target.id === 'btnAI') {
-      const txt = JSON.stringify({ mission: selected, summary: detail.summary, events: (detail.events || []).filter(x => x.level !== 'info').slice(-150) }, null, 1);
-      try { await navigator.clipboard.writeText(txt); toast('✓ Summary copied — paste it into an AI chat to analyse the flight'); }
+    const t = e.target;
+    const tb = t.closest('[data-tab]'); if (tb) { tab = tb.dataset.tab; document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b === tb)); renderTab(); return; }
+    const go = t.closest('[data-goto]'); if (go) { tab = go.dataset.goto; renderFlight(); return; }
+    const ev = t.closest('[data-ev]'); if (ev) { evFilter = ev.dataset.ev; document.querySelectorAll('[data-ev]').forEach(b => b.classList.toggle('on', b === ev)); renderEvents(); return; }
+    const sg = t.closest('[data-sugg]'); if (sg) { const q = $('askQ'); if (q) q.value = sg.dataset.sugg; ask(sg.dataset.sugg, view === 'compare'); return; }
+    const ap = t.closest('[data-apply]'); if (ap) { await applyProposals(ap.dataset.apply); return; }
+    const al = t.closest('[data-analyse]'); if (al) { al.disabled = true; await runAnalysis(al.dataset.analyse); return; }
+    if (t.id === 'btnAnalyse') { t.disabled = true; await runAnalysis(selected); return; }
+    if (t.id === 'btnAskAI') { await askAI(); return; }
+    if (t.id === 'btnCmpAI') { await compareAI(); return; }
+    if (t.id === 'btnAsk') { ask(($('askQ') || {}).value, t.dataset.cmp === '1'); return; }
+    if (t.id === 'btnCopyReport') {
+      try { await navigator.clipboard.writeText(JSON.stringify(an().report, null, 1)); toast('✓ Analysis report copied'); }
       catch { toast('Copy failed — your browser blocked the clipboard', 'err'); }
       return;
     }
-    if (e.target.id === 'btnBin') {
-      e.target.disabled = true;
+    if (t.id === 'btnBin') {
+      t.disabled = true;
       const r = await call('bin_download', { folder: selected });
       toast(r.ok ? '✓ ' + r.msg : r.msg, r.ok ? '' : 'alert');
-      if (!r.ok) e.target.disabled = false;
+      if (!r.ok) t.disabled = false;
       return;
     }
-    const dl = e.target.closest('[data-dl]'); if (!dl) return;
+    const dl = t.closest('[data-dl]'); if (!dl) return;
     const path = dl.dataset.dl, bar = document.querySelector(`[data-prog="${CSS.escape(path)}"]`);
     if (+dl.dataset.size > 50e6 && !confirm(`${path} is ${size(+dl.dataset.size)}. Download it over the console link?`)) return;
     dl.disabled = true;
     try {
-      const blob = await fetchFile(path, (o, t) => { if (bar) bar.style.width = (100 * o / Math.max(1, t)).toFixed(0) + '%'; });
+      const blob = await fetchFile(path, (o, tt) => { if (bar) bar.style.width = (100 * o / Math.max(1, tt)).toFixed(0) + '%'; });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = selected + '__' + path.replace(/\//g, '_'); a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch (err) { toast('Download failed — ' + err.message, 'alert'); }
     finally { dl.disabled = false; }
   });
+  $('detail').addEventListener('keydown', e => { if (e.target.id === 'askQ' && e.key === 'Enter') ask(e.target.value, view === 'compare'); });
+  $('detail').addEventListener('input', e => { if (/Notes$/.test(e.target.id)) aiDraft.notes = e.target.value; if (/Next$/.test(e.target.id)) aiDraft.next = e.target.value; });
+
+  // ── demo (no Jetson, no API): three simulated flights ──────────────────
+  const demoState = {};
+  async function demoCall(action, data) {
+    const D = await demoData();
+    const find = f => D.find(x => x.folder === f);
+    const st = f => (demoState[f] = demoState[f] || { ai: JSON.parse(JSON.stringify(find(f) && find(f).ai || { reviews: [], applied: [] })), analysed: true });
+    if (action === 'log_list') return { ok: true, free_gb: 212.4, missions: D.slice().reverse().map((x, i) => ({ folder: x.folder, name: x.name, operator: 'Demo', mtime: Date.now() / 1000 - (i + 1) * 3600,
+      duration_s: x.report.flight.armed_s, flying_s: x.report.flight.flying_s, max_alt_m: x.report.flight.max_alt_m, used_mah: x.report.battery && x.report.battery.used_mah,
+      findings: (x.report.findings || []).filter(f => f.level !== 'info').length, size_mb: x.report.size_mb })) };
+    if (action === 'log_detail') { const x = find(data.folder); if (!x) return { ok: false, msg: 'not found' };
+      return { ok: true, folder: x.folder, summary: null, events: (x.report.flight.modes || []).map(m => ({ t_rel: m.t, level: 'info', msg: 'Mode ' + m.mode })),
+        files: [{ path: 'pixhawk.bin', size: x.report.size_mb * 1e6 }, { path: 'analysis/report.json', size: 7000 }, { path: 'analysis/series.json', size: 46000 }],
+        analysis: { report: x.report, ai: st(x.folder).ai, job: { state: 'done', pct: 100 } } }; }
+    if (action === 'log_analyze') return { ok: true, msg: 'Analysed (demo)' };
+    if (action === 'log_ai_save') { const s = st(data.folder).ai; const now = Date.now() / 1000;
+      if (data.review) (s.reviews = s.reviews || []).push({ ...data.review, by: 'Demo', saved_at: now });
+      if (data.applied) (s.applied = s.applied || []).push({ ...data.applied, by: 'Demo', at: now });
+      if (data.compare) (s.compares = s.compares || []).push({ ...data.compare, by: 'Demo', saved_at: now });
+      if (data.qa) (s.qa = s.qa || []).push({ ...data.qa, by: 'Demo', saved_at: now });
+      return { ok: true, ai: s }; }
+    if (action === 'param_read') return { ok: true, values: {} };
+    if (action === 'param_write') { await new Promise(r => setTimeout(r, 400)); return { ok: true, values: { ...data.params }, msg: 'demo' }; }
+    if (action === 'ai_analyze') { await new Promise(r => setTimeout(r, 1200)); return demoAI(data); }
+    return { ok: false, msg: 'Not available in demo mode' };
+  }
+  function demoAI(d) {
+    const meta = { model: 'demo (no API call)', seconds: 1.2, at: Date.now() / 1000 };
+    if (d.mode === 'ask') return { ok: true, answer: { answer: 'Demo mode — no API call was made. With the API key installed on the VPS, Claude answers here using the measured numbers from ' + (d.flights || []).length + ' flight report(s).', confidence: 'low', followups: ['Did the notch reduce the vibration peak?'], meta } };
+    if (d.mode === 'compare') {
+      const r = d.flights.map(f => f.report);
+      const pk = r.map(x => x.spectrum && x.spectrum.peaks && x.spectrum.peaks[0] ? x.spectrum.peaks[0].x_floor : null);
+      return { ok: true, compare: { verdict: 'go', headline: '(Demo) The harmonic notch removed most of the motor vibration; extra gain held up in wind.',
+        summary: `Illustrative text written from the demo data, not by Claude. Gyro peak strength went ${pk.map(v => v == null ? '--' : v + '×').join(' → ')} of the noise floor after the notch was enabled. Flight C flew in 6 m/s wind with roll/pitch P raised; position error grew but attitude tracking stayed tight.`,
+        change_effects: [{ change: 'INS_HNTCH_ENABLE 0 → 1 (FREQ 23, BW 12, REF 0.365)', effect: 'Main gyro peak much weaker', result: 'improved' }, { change: 'ATC_RAT_RLL_P / PIT_P 0.135 → 0.16', effect: 'Attitude error stayed low in wind; confounded by the wind itself', result: 'unknown' }],
+        improved: ['Gyro vibration peak'], worse: ['Position error in wind (expected)'],
+        proposals: [{ param: 'INS_LOG_BAT_OPT', value: 4, reason: 'Log pre- and post-filter gyro to confirm the notch directly.', confidence: 'medium', recommended: false, allowed: true, current: 0 }],
+        before_next_flight: ['Charge the pack', 'Check props for chips'], next_flight_plan: 'Staircase to 20 m in calm air.', data_gaps: ['No post-filter gyro data'], meta } };
+    }
+    const rep = d.report || {}, props = (rep.proposals || []).map(p => ({ ...p, reason: p.reason || 'Rule suggestion', confidence: 'high', recommended: true, allowed: true, current: (rep.params || {})[p.param] ?? null, reboot: /ENABLE|LOG_BAT/.test(p.param) }));
+    return { ok: true, review: { verdict: rep.verdict || 'caution', headline: '(Demo) Illustrative review — install the API key for a real one.', summary: 'Demo mode makes no API call. The proposals below are the analyser\'s own rule suggestions, pre-ticked the way Claude marks its recommendations.',
+      findings: rep.findings || [], proposals: props, rejected_rule_proposals: [], before_next_flight: ['Reboot the Pixhawk after enabling the notch'], next_flight_plan: aiDraft.next, data_gaps: [], meta } };
+  }
 
   $('btnRefresh').onclick = load;
   setInterval(() => { $('hClock').textContent = new Date().toLocaleTimeString([], { hour12: false }); }, 1000);
-  // wait for the command link, then load (and refresh the list every 30 s so new flights appear)
   let tries = 0;
   const start = setInterval(() => {
     tries++;
-    if (isDemo || (M() && (!M().canCommand || tries > 2))) { clearInterval(start); load(); setInterval(() => { if (!document.hidden) load(); }, 30000); }
+    if (isDemo || (M() && (!M().canCommand || tries > 2))) { clearInterval(start); load(); setInterval(() => { if (!document.hidden && view === 'flight') load(); }, 30000); }
   }, 1000);
 })();
 </script>

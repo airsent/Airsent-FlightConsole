@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 TARGET="${AIRSENT_SERVER_DIR:-$HOME}"
 FILES="airsent_server.py asc.py mission_engine.py golden_params.py golden_params.json param_store.py
        vehicle_mission.py health_telemetry.py pilot_settings.py datalink_telemetry.py
-       pixhawk_log.py video_record.py"
+       pixhawk_log.py video_record.py log_analysis.py ai_review.py"
 
 if [ "$(hostname)" = "Console-sfo3" ]; then echo "This is the VPS — run deploy/deploy_vps.sh here instead."; exit 1; fi
 if [ -z "${AIRSENT_DEPLOY_PULLED:-}" ]; then
@@ -18,7 +18,8 @@ if [ -z "${AIRSENT_DEPLOY_PULLED:-}" ]; then
 fi
 for f in $FILES; do cp "$f" "$TARGET/"; done
 echo "Copied to $TARGET: $(echo $FILES | tr '\n' ' ')"
-python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py" "$TARGET/pixhawk_log.py" "$TARGET/video_record.py"
+python3 -m py_compile "$TARGET/airsent_server.py" "$TARGET/asc.py" "$TARGET/pixhawk_log.py" "$TARGET/video_record.py" "$TARGET/log_analysis.py"
+python3 -c "import numpy" 2>/dev/null || echo "⚠ numpy missing — the log analyser cannot compute the vibration spectrum. Fix: pip3 install numpy"
 command -v ffmpeg >/dev/null || echo "⚠ ffmpeg is not installed — videos stay as raw .h265/.mjpeg. Fix: sudo apt install -y ffmpeg"
 # Link manager (root service): WiFi first, cellular fallback for everything going to the VPS
 sudo install -m 755 netlink.py /usr/local/bin/airsent-netlink
