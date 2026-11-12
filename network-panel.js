@@ -95,12 +95,15 @@
       ${c.iface ? `<div class="row"><span>Server</span>${yes(c.answering)}</div>
         <div class="row"><span>Round trip</span><b>${ms(c.rtt_ms)}</b></div>
         <div class="row"><span>Signal</span><b>${c.percent != null ? c.percent + '%' : '--'}${c.rsrp != null ? ` · RSRP ${Math.round(c.rsrp)} dBm` : ''}${c.sinr != null ? ` · SINR ${Math.round(c.sinr)} dB` : ''}</b></div>
+        ${c.lte_rsrp != null ? `<div class="row"><span>LTE anchor</span><b>RSRP ${Math.round(c.lte_rsrp)} dBm</b></div>` : ''}
         <div class="row"><span>Network</span><b>${esc([c.operator, tech(c.technology)].filter(Boolean).join(' · ') || '--')}</b></div>`
         : '<div class="row"><span>Status</span><b class="bad">NO MODEM</b></div>'}
       <h4>CELLULAR DATA</h4>
       <div class="row"><span>Today</span><b>${d.today_mb ?? 0} MB</b></div>
-      <div class="row"><span>This month</span><b class="${pct > 90 ? 'bad' : pct > 70 ? 'warn' : ''}">${((d.month_mb || 0) / 1000).toFixed(2)} of ${d.plan_gb ?? '--'} GB</b></div>
+      <div class="row"><span>Left</span><b class="${pct > 90 ? 'bad' : pct > 70 ? 'warn' : 'ok'}">${d.left_gb != null ? d.left_gb.toFixed(2) + ' GB' : '--'}</b></div>
+      <div class="row"><span>Used this cycle</span><b>${((d.cycle_mb ?? d.month_mb ?? 0) / 1000).toFixed(2)} of ${d.plan_gb ?? '--'} GB</b></div>
       <div class="bar"><i style="width:${pct}%;${pct > 90 ? 'background:#ff3355' : pct > 70 ? 'background:#ffb800' : ''}"></i></div>
+      ${d.resets ? `<div class="note">Resets ${esc(d.resets)} · counted by the Jetson. To match T-Mobile: <b>sudo airsent-netlink --plan GB --bill-day D --used GB</b></div>` : ''}
       <h4>VIDEO ${v.on_demand === 'off' ? '' : v.on_demand === 'always' ? '· ON DEMAND' : '· ON DEMAND WHEN ON CELLULAR'}</h4>
       <div class="row"><span>Front camera</span>${vid(v.front, v.front_kbps)}</div>
       <div class="row"><span>Down camera</span>${vid(v.down, v.down_kbps)}</div>

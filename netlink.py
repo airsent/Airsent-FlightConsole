@@ -35,7 +35,9 @@ FLAP_WINDOW = 120.0          # WiFi failing again this soon after we went back t
 BACKOFF_MAX = 300            # longest WiFi must prove itself before we return to it
 CELL_IFACE = os.environ.get('AIRSENT_CELL_IFACE', '')          # override auto-detection
 WIFI_IFACE = os.environ.get('AIRSENT_WIFI_IFACE', '')
-PLAN_GB = float(os.environ.get('AIRSENT_CELL_PLAN_GB', '5'))
+PLAN_GB = float(os.environ.get('AIRSENT_CELL_PLAN_GB', '5'))         # defaults; plan.json (set with --plan) wins
+BILL_DAY = int(os.environ.get('AIRSENT_CELL_BILL_DAY', '1'))
+MODEM_AT = os.environ.get('AIRSENT_MODEM_AT', '')                     # override the modem's AT port
 MODEM_DRIVERS = {'qmi_wwan', 'cdc_mbim', 'cdc_ether', 'cdc_ncm', 'rndis_host', 'option', 'mhi_net', 'mhi_wwan_mbim', 'ipheth'}
 QUECTEL_VENDOR = '2c7c'
 METRIC = 50
@@ -257,14 +259,57 @@ class Usage:
         except OSError:
             pass
 
-    def summary(self, now):
+    def cycle_mb(self, start_day):
+        """MB used since start_day ('YYYY-MM-DD'), from the per-day counters."""
+        total = 0
+        for m in self.d.values():
+            for day, v in m.get('days', {}).items():
+                if day >= start_day:
+                    total += v.get('rx', 0) + v.get('tx', 0)
+        return total / 1e6
+
+    def summary(self, now, plan=None):
+        plan = plan or {}
         month, day = time.strftime('%Y-%m', time.localtime(now)), time.strftime('%Y-%m-%d', time.localtime(now))
         m = self.d.get(month, {'rx': 0, 'tx': 0, 'days': {}})
         d = m['days'].get(day, {'rx': 0, 'tx': 0})
-        used = (m['rx'] + m['tx']) / 1e6
-        return {'month_mb': round(used, 1), 'today_mb': round((d['rx'] + d['tx']) / 1e6, 1),
-                'up_mb_month': round(m['tx'] / 1e6, 1), 'plan_gb': PLAN_GB,
-                'plan_pct': round(100 * used / (PLAN_GB * 1000), 1) if PLAN_GB else None}
+        plan_gb = plan.get('plan_gb', PLAN_GB)
+        start, reset = billing_cycle(now, plan.get('bill_day', BILL_DAY))
+        adj = plan.get('adjust') or {}
+        used = self.cycle_mb(start) + (adj.get('mb', 0) if adj.get('cycle') == start else 0)
+        used = max(0.0, used)
+        return {'month_mb': round((m['rx'] + m['tx']) / 1e6, 1), 'today_mb': round((d['rx'] + d['tx']) / 1e6, 1),
+                'up_mb_month': round(m['tx'] / 1e6, 1), 'plan_gb': plan_gb,
+                'cycle_mb': round(used, 1), 'cycle_start': start, 'resets': reset,
+                'left_gb': round(max(0.0, plan_gb - used / 1000), 2) if plan_gb else None,
+                'plan_pct': round(100 * used / (plan_gb * 1000), 1) if plan_gb else None}
+
+
+def billing_cycle(now, bill_day):
+    """(start 'YYYY-MM-DD', next reset 'YYYY-MM-DD') of the cycle containing `now`.
+    A bill day past the end of a month (e.g. 31) falls on that month's last day."""
+    import calendar
+    t = time.localtime(now)
+
+    def on(y, mo):
+        while mo < 1:
+            y, mo = y - 1, mo + 12
+        while mo > 12:
+            y, mo = y + 1, mo - 12
+        return f'{y:04d}-{mo:02d}-{min(bill_day, calendar.monthrange(y, mo)[1]):02d}'
+    today = time.strftime('%Y-%m-%d', t)
+    this = on(t.tm_year, t.tm_mon)
+    if today >= this:
+        return this, on(t.tm_year, t.tm_mon + 1)
+    return on(t.tm_year, t.tm_mon - 1), this
+
+
+def read_plan():
+    try:
+        p = json.load(open(os.path.join(STATE_DIR, 'plan.json')))
+        return p if isinstance(p, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 _signal_setup = [0.0]
@@ -283,11 +328,132 @@ def rsrp_percent(rsrp):
     return None if rsrp is None else int(max(0, min(100, round((rsrp + 140) / 60 * 100))))
 
 
+# ── modem signal, straight from the modem (Quectel AT) ──────────────────────
+# ModemManager can't help with the RM520N in ECM mode: it reports 0 %, "no extended signal
+# capabilities", doesn't know 5G, and thinks the modem is detached while data flows.
+_RSRP_OK = range(-156, -30)
+
+
+def _ints(fields):
+    out = []
+    for f in fields:
+        try:
+            out.append(int(float(f.strip().strip('"'))))
+        except ValueError:
+            out.append(None)
+    return out
+
+
+def parse_qeng(text):
+    """Parse AT+QENG="servingcell" (LTE, NR5G-NSA, NR5G-SA). Returns {} if nothing usable."""
+    lte = nr = None
+    for line in text.splitlines():
+        if '+QENG:' not in line:
+            continue
+        f = [x.strip().strip('"') for x in line.split(':', 1)[1].split(',')]
+        for i, tok in enumerate(f):
+            n = _ints(f[i + 1:])
+            g = lambda k: n[k - 1] if len(n) >= k else None      # field k after the technology name
+            if tok == 'LTE':
+                lte = {'rsrp': g(11), 'rsrq': g(12)}
+            elif tok == 'NR5G-NSA':
+                nr = {'rsrp': g(4), 'sinr': g(5), 'rsrq': g(6), 'mode': 'NSA'}
+            elif tok == 'NR5G-SA':
+                nr = {'rsrp': g(10), 'rsrq': g(11), 'sinr': g(12), 'mode': 'SA'}
+    for blk, label in ((nr, None), (lte, 'LTE')):
+        if blk and blk.get('rsrp') in _RSRP_OK:
+            tech = label or ('5G SA' if blk['mode'] == 'SA' else '5G NSA')
+            out = {'technology': tech, 'rsrp': float(blk['rsrp']), 'percent': rsrp_percent(blk['rsrp'])}
+            if blk.get('rsrq') is not None and -45 <= blk['rsrq'] <= 0:
+                out['rsrq'] = float(blk['rsrq'])
+            if blk.get('sinr') is not None and -30 <= blk['sinr'] <= 50:
+                out['sinr'] = float(blk['sinr'])
+            if label is None and lte and lte.get('rsrp') in _RSRP_OK:
+                out['lte_rsrp'] = float(lte['rsrp'])          # NSA: the LTE anchor carries the control link
+            return out
+    return {}
+
+
+def parse_cops(text):
+    m = re.search(r'\+COPS:\s*\d+\s*,\s*\d+\s*,\s*"([^"]+)"', text)
+    return m.group(1) if m else None
+
+
+def find_at_port():
+    """The modem's AT port: Quectel (2c7c) USB interface 03, else 02. Never touches other
+    USB serial devices (the ESC Data Link adapter is a ttyUSB too)."""
+    if MODEM_AT:
+        return MODEM_AT if os.path.exists(MODEM_AT) else None
+    found = {}
+    try:
+        names = os.listdir('/sys/class/tty')
+    except OSError:
+        return None
+    for name in names:
+        if not name.startswith('ttyUSB'):
+            continue
+        dev = os.path.realpath(f'/sys/class/tty/{name}/device')
+        try:
+            ifnum = open(os.path.join(os.path.dirname(dev), 'bInterfaceNumber')).read().strip()
+            vendor = open(os.path.join(os.path.dirname(os.path.dirname(dev)), 'idVendor')).read().strip()
+        except OSError:
+            continue
+        if vendor == QUECTEL_VENDOR:
+            found[ifnum] = '/dev/' + name
+    return found.get('03') or found.get('02')
+
+
+def at_query(port, cmd, timeout=2.0):
+    """Send one AT command, return the reply text ('' on any failure)."""
+    import termios
+    try:
+        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except OSError:
+        return ''
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = attrs[1] = attrs[3] = 0                   # raw
+        attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+        attrs[4] = attrs[5] = termios.B115200
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        termios.tcflush(fd, termios.TCIOFLUSH)
+        os.write(fd, (cmd + '\r').encode())
+        buf, end = b'', time.time() + timeout
+        while time.time() < end:
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                chunk = b''
+            if chunk:
+                buf += chunk
+                if re.search(rb'\r\n(OK|ERROR|\+CME ERROR[^\r]*)\r\n', buf):
+                    break
+            else:
+                time.sleep(0.05)
+        return buf.decode(errors='replace')
+    except OSError:
+        return ''
+    finally:
+        os.close(fd)
+
+
 def cell_signal():
-    """Radio signal from the modem. With the RM520N doing its own data connection (ECM),
-    ModemManager's 'signal quality' stays 0 %, so read the real RSRP/RSRQ/SINR instead."""
+    """Signal from the modem itself; ModemManager only as a last resort."""
+    port = find_at_port()
+    if port:
+        out = parse_qeng(at_query(port, 'AT+QENG="servingcell"'))
+        op = parse_cops(at_query(port, 'AT+COPS?'))
+        if op:
+            out['operator'] = op
+        if out.get('percent') is not None:
+            out['source'] = 'at'
+            return out
+    return mm_signal()
+
+
+def mm_signal():
     now = time.time()
-    if now - _signal_setup[0] > 600:                       # extended signal polling (root)
+    if now - _signal_setup[0] > 600:
         sh(['mmcli', '-m', 'any', '--signal-setup=5'], timeout=5)
         _signal_setup[0] = now
     out = {}
@@ -305,22 +471,6 @@ def cell_signal():
                        'sinr': _num(blk.get('snr') if blk.get('snr') is not None else blk.get('sinr')),
                        'percent': rsrp_percent(rsrp)}
                 break
-    code, raw = sh(['mmcli', '-m', 'any', '--output-json'], timeout=4)
-    if code == 0:
-        try:
-            m = json.loads(raw).get('modem', {})
-            op = (m.get('3gpp') or {}).get('operator-name')
-            if op and op != '--':
-                out['operator'] = op
-            if 'percent' not in out:
-                q = (m.get('generic') or {}).get('signal-quality', {}).get('value')
-                if str(q).isdigit() and int(q) > 0:            # 0 = "don't know" with an ECM modem
-                    out['percent'] = int(q)
-                tech = (m.get('generic') or {}).get('access-technologies') or []
-                if tech:
-                    out['technology'] = ','.join(tech) if isinstance(tech, list) else tech
-        except (ValueError, AttributeError):
-            pass
     return out
 
 
@@ -341,6 +491,7 @@ def main():
     active, switches, last_switch = None, 0, None
     back_needed, to_wifi_at = BACK_TO_WIFI, 0.0
     links, links_at, sig, sig_at = {}, 0, {}, 0
+    plan, plan_at = read_plan(), time.time()
     print(f'[NETLINK] steering traffic to {VPS}: WiFi first, cellular fallback', flush=True)
     while True:
         t0 = time.time()
@@ -366,12 +517,14 @@ def main():
         if active == 'wifi' and back_needed > BACK_TO_WIFI and t0 - to_wifi_at > 600:
             back_needed = BACK_TO_WIFI                                        # stable for 10 min: forgive
         usage.add(cell.iface, t0)
+        if t0 - plan_at > 30:
+            plan, plan_at = read_plan(), t0
         if cell.iface and t0 - sig_at > 10:
             sig, sig_at = cell_signal(), t0
         status = {'at': t0, 'active': active, 'iface': iface, 'prefer': prefer, 'switches': switches, 'last_switch': last_switch,
                   'back_to_wifi_s': back_needed,
                   'wifi': wifi.summary(), 'cellular': {**cell.summary(), **(sig if cell.iface else {})},
-                  'data': usage.summary(t0)}
+                  'data': usage.summary(t0, plan)}
         tmp = os.path.join(RUN_DIR, 'status.json.tmp')
         try:
             with open(tmp, 'w') as f:
@@ -383,7 +536,39 @@ def main():
         time.sleep(max(0.05, 1.0 - (time.time() - t0)))
 
 
+def set_plan(argv):
+    """sudo airsent-netlink --plan 10 --bill-day 15 [--used 3.2]
+    Plan size (GB) and the day of the month it resets. --used = GB used so far this cycle,
+    from the T-Mobile app; the Jetson counts on from there."""
+    import argparse
+    ap = argparse.ArgumentParser(prog='airsent-netlink')
+    ap.add_argument('--plan', type=float, required=True, help='plan size in GB')
+    ap.add_argument('--bill-day', type=int, default=None, help='day of the month the data resets (1-31)')
+    ap.add_argument('--used', type=float, default=None, help='GB already used this cycle (from the T-Mobile app)')
+    a = ap.parse_args(argv)
+    plan = read_plan()
+    plan['plan_gb'] = a.plan
+    if a.bill_day is not None:
+        if not 1 <= a.bill_day <= 31:
+            sys.exit('--bill-day must be 1-31')
+        plan['bill_day'] = a.bill_day
+    now = time.time()
+    start, reset = billing_cycle(now, plan.get('bill_day', BILL_DAY))
+    if a.used is not None:
+        counted = Usage(os.path.join(STATE_DIR, 'usage.json')).cycle_mb(start)
+        plan['adjust'] = {'cycle': start, 'mb': a.used * 1000 - counted}
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(os.path.join(STATE_DIR, 'plan.json'), 'w') as f:
+        json.dump(plan, f)
+    u = Usage(os.path.join(STATE_DIR, 'usage.json')).summary(now, plan)
+    print(f"Plan {u['plan_gb']} GB, cycle {u['cycle_start']} → resets {u['resets']}: "
+          f"{u['cycle_mb'] / 1000:.2f} GB used, {u['left_gb']} GB left")
+
+
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        set_plan(sys.argv[1:])
+        sys.exit(0)
     try:
         main()
     except KeyboardInterrupt:
