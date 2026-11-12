@@ -200,6 +200,7 @@
       panelEl = document.createElement('aside');
       panelEl.className = 'msn-fault-panel';
       panelEl.innerHTML = `<div class="msn-fp-head"><h3>FAULTS</h3><button class="msn-btn" data-ack="all">ACK ALL</button><button class="msn-btn" data-close>✕</button></div><div class="msn-fp-body"></div>`;
+      setTimeout(placeMute, 0);
       panelEl.addEventListener('click', e => {
         const a = e.target.closest('[data-ack]'); if (a) ack(a.dataset.ack);
         if (e.target.closest('[data-close]')) panelEl.classList.remove('open');
@@ -419,20 +420,23 @@
     loadAlarm();
   }
 
-  // Fault tones (fault-audio.js): a speaker button beside every fault badge.
+  // Fault tones (fault-audio.js): a small mute toggle inside the fault panels.
   function loadAlarm() {
-    const add = () => {
-      const A = window.AirsentAlarm; if (!A) return;
-      [pilotBadge, overlayBadge, slotBadge, $('faultCounter')].forEach(el => {
-        if (!el || !el.parentNode || (el.nextSibling && el.nextSibling.classList && el.nextSibling.classList.contains('aa-btn'))) return;
-        el.parentNode.insertBefore(A.button(), el.nextSibling);
-      });
-      render();
-    };
+    const add = () => { placeMute(); render(); };
     if (window.AirsentAlarm) return add();
     const sc = document.createElement('script');
-    sc.src = 'fault-audio.js?v=4'; sc.onload = add;
+    sc.src = 'fault-audio.js?v=6'; sc.onload = add;
     document.head.appendChild(sc);
+  }
+  function placeMute() {
+    const A = window.AirsentAlarm; if (!A) return;
+    const heads = [panelEl && panelEl.querySelector('.msn-fp-head'), document.querySelector('#faultPanel .fault-panel-header')];
+    heads.forEach(h => {
+      if (!h || h.querySelector('.aa-mute')) return;
+      if (h.classList.contains('fault-panel-header')) { h.style.display = 'flex'; h.style.alignItems = 'center'; }
+      const first = h.querySelector('[data-ack="all"]');
+      h.insertBefore(A.button(), first || null);
+    });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
