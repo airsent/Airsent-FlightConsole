@@ -5,7 +5,7 @@
 <script src="viewer-access.js?v=shared-2"></script>
 <script src="shared-state.js?v=1"></script>
 <script src="console-local.js"></script>
-<script src="console-config.js?v=simulation-map-2"></script>
+<script src="console-config.js?v=simulation-map-3"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Airsent — Sensor Status</title>
@@ -725,10 +725,17 @@ const GO_ITEMS = [
   });
 })();
 
+// Camera card health = connected to the Jetson (telemetry); stream is shown separately.
+// On cellular the video only streams while someone watches, so "not streaming" isn't a fault.
+const camDevice = {camfront: null, camdown: null}, camLive = {camfront: false, camdown: false}, camMeta = {};
+function setCameraDevice(id, on) { if (camDevice[id] === on) return; camDevice[id] = on; setCameraCard(id, camLive[id], camMeta[id] || {}); }
 function setCameraCard(id, live, meta) {
-  setCard(id, live ? 'ok' : 'offline');
+  camLive[id] = !!live; camMeta[id] = meta || {};
+  const dev = camDevice[id] === true, ok = live || dev;
+  const streamTxt = live ? 'LIVE' : dev ? 'PAUSED · ON DEMAND' : 'OFFLINE';
+  setCard(id, ok ? 'ok' : 'offline');
   if (id === 'camfront') {
-    setVal('cf-stream', live ? 'LIVE' : 'OFFLINE', live ? 'green' : 'red');
+    setVal('cf-stream', streamTxt, live ? 'green' : dev ? 'muted' : 'red');
     setVal('cf-fps',    live && meta?.fps != null ? `${Math.round(meta.fps)} fps` : '--');
     const atOn = live && meta?.apriltag_active !== false;
     setVal('cf-apriltag', live ? (atOn ? 'Active' : 'Inactive') : '--', atOn ? 'green' : 'muted');
@@ -740,9 +747,9 @@ function setCameraCard(id, live, meta) {
     setVal('cf-obst',  live ? (obOn ? 'Active' : 'Inactive') : '--', obOn ? 'green' : 'muted');
     const conf = meta?.confidence ?? 0;
     setVal('cf-conf',  live ? `${Math.round(conf)}%` : '--', conf > 80 ? 'green' : conf > 60 ? 'amber' : 'red');
-    setGo('go-camfront', live ? 'go' : 'hold');
+    setGo('go-camfront', ok ? 'go' : 'hold');
   } else {
-    setVal('cd-stream',   live ? 'LIVE' : 'OFFLINE', live ? 'green' : 'red');
+    setVal('cd-stream',   streamTxt, live ? 'green' : dev ? 'muted' : 'red');
     setVal('cd-fps',      live && meta?.fps != null ? `${Math.round(meta.fps)} fps` : '--');
     const lz = live && meta?.landing_zone;
     setVal('cd-lz',       live ? (lz ? 'Detected' : 'Searching') : '--', lz ? 'green' : live ? 'amber' : '');
@@ -751,7 +758,7 @@ function setCameraCard(id, live, meta) {
     const vo = live && meta?.visual_odom;
     setVal('cd-vodom',    live ? (vo ? 'Active' : 'Inactive') : '--', vo ? 'green' : 'muted');
     setVal('cd-alt',      live && meta?.vision_alt != null ? `${meta.vision_alt.toFixed(2)} m` : '--');
-    setGo('go-camdown', live ? 'go' : 'hold');
+    setGo('go-camdown', ok ? 'go' : 'hold');
   }
 }
 
@@ -799,6 +806,7 @@ function applyData(d) {
   const ago = x => x == null ? "" : x < 60 ? `${Math.round(x)} s` : `${Math.round(x/60)} min`;
   setVal("gps-rtkbase", !pxOk ? "--" : rl.online ? `ONLINE · ${rl.fix}` : rl.ever ? `NO CORRECTIONS · ${ago(rl.age)}` : "NOT SEEN",
          !pxOk ? "" : rl.online ? "green" : rl.ever ? "red" : "amber");
+  if (isActual) { setCameraDevice('camfront', d.front_cam_active === true); setCameraDevice('camdown', d.down_cam_active === true); }
   setVal("gps-lat",  pxOk&&d.lat!=null?d.lat.toFixed(5)+"°":"--");
   setVal("gps-lon",  pxOk&&d.lon!=null?d.lon.toFixed(5)+"°":"--");
   setBar("gps-bar", pxOk?(d.sats||0)/25*100:0, "blue", "gps-barpct");
@@ -1051,7 +1059,7 @@ window.addEventListener("DOMContentLoaded", () => {
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=8"></script>
-<script src="mission-ui.js?v=6"></script>
+<script src="mission-client.js?v=10"></script>
+<script src="mission-ui.js?v=8"></script>
 </body>
 </html>

@@ -43,10 +43,8 @@ ACTIVE = ('countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'flight', 'landed
 GATE_STAGE = {'create': 'countdown', 'countdown': 'countdown', 'prearm': 'prearm',
               'gonogo': 'gonogo', 'armed': 'armed', 'takeoff': 'takeoff'}
 
-MANUAL_CHECKS = {          # (no wind/weather item: there's no wind data to confirm it against)
-    'manual_airspace':  'Airspace authorization (LAANC) confirmed',
+MANUAL_CHECKS = {          # removed (operator's call): wind/weather (no wind data), airspace, payload
     'manual_observers': 'Visual observers in position',
-    'manual_payload':   'Payload secured',
 }
 
 
@@ -73,8 +71,10 @@ def default_config(sim=False):
         'takeoff_alt': env_float('AIRSENT_TAKEOFF_ALT', 5.0),
         'recycle_after': 120,        # hold longer than this -> back to T-3:00
         'min_total': 60, 'max_total': 900,
-        'require_rtk': env_flag('AIRSENT_REQUIRE_RTK', True),
-        'require_esc_telemetry': env_flag('AIRSENT_REQUIRE_ESC_TELEMETRY', True),
+        'require_rtk': env_flag('AIRSENT_REQUIRE_RTK', False),   # 3D fix is enough to lift off; RTK is for precision landing
+        # Missing ESC telemetry = warning (Datalink decoding not fully verified yet). When it IS
+        # reporting and shows a motor not spinning / uneven / ESC fault, that still holds.
+        'require_esc_telemetry': env_flag('AIRSENT_REQUIRE_ESC_TELEMETRY', False),
         'rc_gate_channel': int(channel) if channel and channel.isdigit() else None,
         # ArduPilot "Motor Emergency Stop" (RCx_OPTION=31): HIGH = stopped.
         'rc_gate_arm_max_pwm': int(env_float('AIRSENT_RC_GATE_ARM_MAX_PWM', 1300)),
@@ -220,7 +220,7 @@ def evaluate_checks(s, engine):
     if cfg['require_rtk']:
         out.append(check('gps_fix', 'GPS', 'GPS fix: RTK fixed', 'prearm', rtk, fix, 'RTK FIX'))
     else:
-        out.append(check('gps_fix', 'GPS', 'GPS fix (RTK not required by config)', 'prearm',
+        out.append(check('gps_fix', 'GPS', 'GPS fix (3D or better)', 'prearm',
                          fix in ('3D FIX', 'DGPS', 'RTK FLOAT', 'RTK FIX'), fix, '3D FIX or better'))
     sats = s.get('sats') or 0
     out.append(check('gps_sats', 'GPS', 'Satellites', 'prearm', sats >= cfg['min_sats'], str(sats), f">= {cfg['min_sats']}"))
@@ -239,9 +239,13 @@ def evaluate_checks(s, engine):
                      isinstance(volt, (int, float)) and volt >= cfg['min_arm_voltage'],
                      f"{volt:.1f} V" if isinstance(volt, (int, float)) and volt > 1 else '--', f">= {cfg['min_arm_voltage']} V"))
     batt = s.get('battery')
-    out.append(check('battery_pct', 'Battery', 'Battery remaining', 'prearm',
+    # % is the Pixhawk's estimate from mAh counted since power-on (wrong after a reboot or with a
+    # part-used pack), so it's a warning; voltage above is the hard check.
+    out.append(check('battery_pct', 'Battery', 'Battery remaining (estimate)', 'prearm',
                      isinstance(batt, (int, float)) and batt >= cfg['min_battery_pct'],
-                     f"{batt:.0f}%" if isinstance(batt, (int, float)) else '--', f">= {cfg['min_battery_pct']:.0f}%"))
+                     f"{batt:.0f}%" if isinstance(batt, (int, float)) else '--', f">= {cfg['min_battery_pct']:.0f}%",
+                     warn=True, note='' if isinstance(batt, (int, float)) and batt >= cfg['min_battery_pct'] else
+                     'estimate only — battery voltage is the hard check'))
 
     for key, label in (('imu', 'IMU'), ('baro', 'Barometer')):
         st = sh.get(key)
@@ -252,9 +256,11 @@ def evaluate_checks(s, engine):
                      note='' if mag == 'ok' else 'compass health not reported by the Pixhawk; ArduPilot pre-arm still covers it'))
     ages = s.get('sensor_ages') or {}
     rng_age = ages.get('rangefinder')
-    out.append(check('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm',
-                     rng_age is not None and rng_age < 3 and (s.get('rangefinder') or 0) > 0,
-                     f"{s.get('rangefinder'):.2f} m" if (s.get('rangefinder') or 0) > 0 else 'OFFLINE', 'live'))
+    # Live = still reporting. On the ground the H-Flow can be inside its minimum range and read 0 m.
+    rng_live = rng_age is not None and rng_age < 3
+    rng = s.get('rangefinder') or 0
+    out.append(check('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm', rng_live,
+                     (f"{rng:.2f} m" if rng > 0 else 'LIVE (below min range)') if rng_live else 'OFFLINE', 'reporting'))
     of_age = ages.get('of')
     out.append(check('flow', 'Sensors', 'Optical flow (H-Flow)', 'prearm',
                      of_age is not None and of_age < 3,
@@ -275,10 +281,12 @@ def evaluate_checks(s, engine):
         out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm', True, 'SIM (no camera)', 'streaming'))
         out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', True, 'SIM (no camera)', 'streaming'))
     else:
-        out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm',
-                         bool(s.get('front_cam_active')), 'STREAMING' if s.get('front_cam_active') else 'OFFLINE', 'streaming'))
+        # Warning only: with no obstacle check at T-0 it's for recording / the pilot's view.
+        out.append(check('front_cam', 'Jetson', 'Front camera', 'prearm',
+                         bool(s.get('front_cam_active')), 'CONNECTED' if s.get('front_cam_active') else 'OFFLINE', 'connected',
+                         warn=True))
         out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', bool(s.get('down_cam_active')),
-                         'STREAMING' if s.get('down_cam_active') else 'OFFLINE', 'streaming', warn=True))
+                         'CONNECTED' if s.get('down_cam_active') else 'OFFLINE', 'connected', warn=True))
     temp = s.get('jetson_temp')
     out.append(check('jetson_temp', 'Jetson', 'Jetson temperature', 'prearm',
                      isinstance(temp, (int, float)) and temp < cfg['max_jetson_temp'],
@@ -293,10 +301,7 @@ def evaluate_checks(s, engine):
     out.append(check('go_poll', 'GO/NO-GO', 'Pilot in command GO (area and props clear)', 'armed',
                      bool(engine.go), f"GO · {engine.go['by']}" if engine.go else 'WAITING', 'GO by T-10'))
 
-    prox = s.get('proximity') or {}
-    obstacle = bool(prox.get('obstacle'))
-    out.append(check('obstacles', 'Safety', 'No obstacle close to the aircraft', 'takeoff', not obstacle,
-                     f"OBSTACLE {prox.get('dist', -1):.1f} m" if obstacle else 'CLEAR', 'clear'))
+    # (No obstacle check at T-0 — removed on the operator's call; obstacles are still shown on the pilot view.)
 
     if engine.stage in ('armed', 'takeoff'):
         armed = bool(s.get('armed'))
@@ -308,9 +313,13 @@ def evaluate_checks(s, engine):
 
 class FaultBook:
     """Active and recent faults. Acknowledging silences a fault; it never clears it."""
-    def __init__(self, clock=time.time, clear_after=2.0, history=200):
+    SEV_RANK = {'info': 0, 'warning': 1, 'critical': 2}
+
+    def __init__(self, clock=time.time, clear_after=2.0, history=200, ack_memory=60.0):
         self.clock = clock
         self.clear_after = clear_after
+        self.ack_memory = ack_memory      # a fault that flickers back within this long keeps its ack
+        self._cleared_acks = {}           # key -> (acked_by, acked_at, severity, cleared_at)
         self.active = {}
         self.recent = deque(maxlen=history)
         self.revision = 0
@@ -327,6 +336,10 @@ class FaultBook:
                 fault = {'id': f"F{self._seq:05d}", 'key': key, 'severity': severity, 'source': source,
                          'message': message, 'since': now, 'acked_by': None, 'acked_at': None,
                          'cleared_at': None, 'last_true': now}
+                prev = self._cleared_acks.pop(key, None)
+                if (prev and now - prev[3] <= self.ack_memory
+                        and self.SEV_RANK.get(severity, 3) <= self.SEV_RANK.get(prev[2], 3)):
+                    fault['acked_by'], fault['acked_at'] = prev[0], prev[1]   # same problem flickering, not a new one
                 self.active[key] = fault
                 self.revision += 1
                 if self.on_change:
@@ -334,12 +347,16 @@ class FaultBook:
             else:
                 fault['last_true'] = now
                 if fault['message'] != message or fault['severity'] != severity:
+                    if self.SEV_RANK.get(severity, 3) > self.SEV_RANK.get(fault['severity'], 3):
+                        fault['acked_by'] = fault['acked_at'] = None      # got worse: needs a fresh ack
                     fault['message'], fault['severity'] = message, severity
                     self.revision += 1
         for key in list(self.active):
             if key not in conditions and now - self.active[key]['last_true'] >= self.clear_after:
                 fault = self.active.pop(key)
                 fault['cleared_at'] = now
+                if fault['acked_by']:
+                    self._cleared_acks[key] = (fault['acked_by'], fault['acked_at'], fault['severity'], now)
                 self.recent.appendleft(fault)
                 self.revision += 1
                 if self.on_change:

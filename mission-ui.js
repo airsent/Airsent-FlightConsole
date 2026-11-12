@@ -26,7 +26,7 @@
   function addStyles() {
     if (document.querySelector('link[href^="mission-ui.css"]')) return;
     const link = document.createElement('link');
-    link.rel = 'stylesheet'; link.href = 'mission-ui.css?v=1';
+    link.rel = 'stylesheet'; link.href = 'mission-ui.css?v=5';
     document.head.append(link);
   }
 
@@ -143,29 +143,54 @@
   window.airsentFaultsLocal = map => { localFaults = new Map(map); render(); };   // from telemetry.js
   const seenCritical = new Set();
 
+  // Acks are shown at once (greyed) while the Jetson confirms; it re-sends fault state every 0.5–2 s.
+  const pendingAcks = new Map();          // fault id -> time clicked
+  const SEV_ORDER = { critical: 0, warning: 1, info: 2 };
+  function sortFaults(list) {             // unacknowledged first, then by severity, then oldest first
+    return list.sort((a, b) => (!!a.acked_by - !!b.acked_by) || ((SEV_ORDER[a.severity] ?? 3) - (SEV_ORDER[b.severity] ?? 3)) || ((a.since || 0) - (b.since || 0)));
+  }
+
   function faultList() {
     const live = M.mode !== 'demo';
     const fresh = M.faults && M.stateFresh();
-    const list = fresh ? M.faults.active.map(f => ({ ...f, local: false })) : [];
+    const now = Date.now();
+    pendingAcks.forEach((t, id) => { if (now - t > 10000) pendingAcks.delete(id); });
+    const list = fresh ? M.faults.active.map(f => {
+      if (f.acked_by) { pendingAcks.delete(f.id); return { ...f, local: false }; }
+      return { ...f, acked_by: pendingAcks.has(f.id) || pendingAcks.has('all') ? M.operatorName || 'you' : null, local: false };
+    }) : [];
     if (live && !M.linkOk()) list.unshift({ id: 'local:link', key: 'local:link', severity: 'critical', source: 'Console',
       message: 'No telemetry from the Jetson — fault list may be out of date', since: Date.now() / 1000, acked_by: localAcks.has('local:link') ? M.operatorName : null, local: true });
     if (!live || !fresh) localFaults.forEach((f, key) => list.push({ id: 'local:' + key, key, severity: f.level === 'fault' ? 'critical' : 'warning',
       source: 'Console', message: f.message, since: null, acked_by: localAcks.has('local:' + key) ? M.operatorName : null, local: true }));
-    return list;
+    return sortFaults(list);
   }
 
-  function ack(id) {
-    if (id === 'all') { faultList().forEach(f => { if (f.local) localAcks.add(f.id); }); if (M.faults) act('fault_ack', { fault_id: 'all' }, 'All faults acknowledged'); render(); return; }
+  async function ack(id) {
+    if (viewer()) { toast('Viewer mode — read only', 'err'); return; }
+    if (id === 'all') {
+      faultList().forEach(f => { if (f.local) localAcks.add(f.id); else if (!f.acked_by) pendingAcks.set(f.id, Date.now()); });
+      render();
+      if (M.faults && M.faults.active.length) {
+        const r = await act('fault_ack', { fault_id: 'all' }, 'All faults acknowledged');
+        if (!r.ok) { pendingAcks.clear(); render(); }
+      }
+      return;
+    }
     if (id.startsWith('local:')) { localAcks.add(id); render(); return; }
-    act('fault_ack', { fault_id: id }, 'Fault acknowledged (it stays until the problem is fixed)');
+    pendingAcks.set(id, Date.now()); render();
+    const r = await act('fault_ack', { fault_id: id }, 'Fault acknowledged — it stays (greyed) until the problem is fixed');
+    if (!r.ok) { pendingAcks.delete(id); render(); }
   }
 
   function faultHtml(f, cleared) {
     const sev = cleared ? 'cleared' : f.severity;
-    const meta = [esc(f.source), f.since ? 'since ' + ago(f.since) : '', f.acked_by ? 'ack ' + esc(f.acked_by) : '',
+    const acked = !cleared && f.acked_by;
+    const meta = [esc(f.source), f.since ? 'since ' + ago(f.since) : '', f.acked_by ? 'ACK ' + esc(f.acked_by) + (f.acked_at ? ' ' + ago(f.acked_at) + ' ago' : '') : '',
       cleared && f.cleared_at ? 'cleared ' + ago(f.cleared_at) + ' ago' : ''].filter(Boolean).join(' · ');
-    const btn = !cleared && !f.acked_by && !viewer() ? `<button class="msn-btn msn-ack" data-ack="${esc(f.id)}">ACK</button>` : '<span></span>';
-    return `<div class="msn-fault ${sev}"><span class="msn-sev ${sev}">${cleared ? 'CLEARED' : esc(f.severity).toUpperCase()}</span>
+    const btn = acked ? '<span class="msn-acked-tag">ACK’D</span>'
+      : !cleared && !viewer() ? `<button class="msn-btn msn-ack" data-ack="${esc(f.id)}">ACK</button>` : '<span></span>';
+    return `<div class="msn-fault ${sev}${acked ? ' acked' : ''}"><span class="msn-sev ${sev}">${cleared ? 'CLEARED' : esc(f.severity).toUpperCase()}</span>
       <span class="msn-fault-msg">${esc(f.message)}</span>${btn}<span class="msn-fault-meta">${meta}</span></div>`;
   }
 
@@ -184,8 +209,10 @@
     if (open !== undefined) panelEl.classList.toggle('open', open);
     if (!panelEl.classList.contains('open')) return;
     const active = faultList(), recent = (M.faults && M.faults.recent) || [];
+    const unacked = active.filter(f => !f.acked_by).length;
+    panelEl.querySelector('[data-ack="all"]').style.display = unacked && !viewer() ? '' : 'none';
     panelEl.querySelector('.msn-fp-body').innerHTML =
-      `<div class="msn-fp-section">ACTIVE (${active.length})</div>` + (active.length ? active.map(f => faultHtml(f)).join('') : '<div class="msn-empty">No active faults</div>') +
+      `<div class="msn-fp-section">ACTIVE (${active.length}${active.length > unacked ? ` · ${active.length - unacked} ACKNOWLEDGED` : ''})</div>` + (active.length ? active.map(f => faultHtml(f)).join('') : '<div class="msn-empty">No active faults</div>') +
       (recent.length ? `<div class="msn-fp-section">RECENTLY CLEARED</div>` + recent.slice(0, 15).map(f => faultHtml(f, true)).join('') : '');
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && panelEl) panelEl.classList.remove('open'); });
@@ -200,25 +227,29 @@
   }
   function renderBadge(b, list) {
     if (!b) return;
-    const crit = list.filter(f => f.severity === 'critical');
+    const open = list.filter(f => !f.acked_by), crit = open.filter(f => f.severity === 'critical');
     b.querySelector('b').textContent = list.length;
     b.classList.toggle('has-critical', crit.length > 0);
-    b.classList.toggle('has-warn', !crit.length && list.length > 0);
-    b.classList.toggle('unacked', crit.some(f => !f.acked_by));
+    b.classList.toggle('has-warn', !crit.length && open.length > 0);
+    b.classList.toggle('all-acked', list.length > 0 && !open.length);
+    b.classList.toggle('unacked', crit.length > 0);
+    b.title = list.length ? `${list.length} active fault(s), ${list.length - open.length} acknowledged` : 'Faults reported by the Jetson';
   }
 
   // Dashboard header fault counter (existing markup).
   function renderDashboardFaults(list) {
     const counter = $('faultCounter'); if (!counter) return;
     $('faultCountNum').textContent = list.length;
-    counter.classList.remove('has-warn', 'has-fault');
-    if (list.length) counter.classList.add(list.some(f => f.severity === 'critical') ? 'has-fault' : 'has-warn');
+    const open = list.filter(f => !f.acked_by);
+    counter.classList.remove('has-warn', 'has-fault', 'msn-all-acked');
+    if (open.length) counter.classList.add(open.some(f => f.severity === 'critical') ? 'has-fault' : 'has-warn');
+    else if (list.length) counter.classList.add('msn-all-acked');
     counter.classList.toggle('msn-unacked', list.some(f => f.severity === 'critical' && !f.acked_by));
     const box = $('faultPanelList');
     if (box) box.innerHTML = list.map(f => `<div class="fault-panel-item ${f.severity === 'critical' ? 'fault' : 'warn'}${f.acked_by ? ' acked' : ''}">
       <span class="fault-panel-item-badge">${f.severity === 'critical' ? 'FAULT' : 'WARN'}</span>
       <span class="fault-panel-item-msg"><span class="msn-fault-src">${esc(f.source)}</span>${esc(f.message)}</span>
-      ${f.acked_by ? `<span class="fault-acked-by">ACK ${esc(f.acked_by)}</span>` : viewer() ? '' : `<button class="fault-ack-btn" data-ack="${esc(f.id)}">ACK</button>`}</div>`).join('');
+      ${f.acked_by ? `<span class="fault-acked-by">ACK’D · ${esc(f.acked_by)}</span>` : viewer() ? '' : `<button class="fault-ack-btn" data-ack="${esc(f.id)}">ACK</button>`}</div>`).join('');
     const empty = $('faultPanelEmpty'); if (empty) empty.style.display = list.length ? 'none' : 'block';
     const all = $('faultDismissAll');
     if (all) { all.textContent = 'Acknowledge all'; all.style.display = list.some(f => !f.acked_by) && !viewer() ? 'block' : 'none'; }

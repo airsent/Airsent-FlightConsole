@@ -165,8 +165,7 @@
     const ev = (kind, msg, who = 'Jetson') => st.events.unshift({ t: now(), kind, msg, who, stage: st.stage, clock: '' });
     const remaining = () => pre.includes(st.stage) && !st.held && st.deadline ? Math.max(0, st.deadline - now()) : st.remaining;
     const stageFor = r => r <= 0 ? 'takeoff' : r <= 10 ? 'armed' : r <= 60 ? 'gonogo' : r <= Math.min(180, st.total) ? 'prearm' : 'countdown';
-    const manualLabels = { manual_airspace: 'Airspace authorization (LAANC) confirmed',
-      manual_observers: 'Visual observers in position', manual_payload: 'Payload secured' };
+    const manualLabels = { manual_observers: 'Visual observers in position' };
     function checks() {
       const c = (id, group, label, gate, ok, value, need, warn) => ({ id, group, label, gate, raw: ok ? 'pass' : warn ? 'warn' : 'fail', value, need, note: '' });
       const list = [
@@ -181,28 +180,27 @@
         c('rc_link', 'RC', 'RC receiver signal present', 'prearm', true, 'PRESENT', 'present'),
         c('golden_params', 'Config', 'Pixhawk parameters match the approved set', 'prearm', true, 'MATCH', '21 params'),
         c('ardupilot_prearm', 'Config', 'ArduPilot pre-arm checks', 'prearm', true, 'PASS', 'all pass'),
-        c('gps_fix', 'GPS', 'GPS fix: RTK fixed', 'prearm', true, 'RTK FIX', 'RTK FIX'),
+        c('gps_fix', 'GPS', 'GPS fix (3D or better)', 'prearm', true, 'RTK FIX', '3D FIX or better'),
         c('gps_sats', 'GPS', 'Satellites', 'prearm', true, '21', '>= 10'),
         c('gps_hdop', 'GPS', 'Horizontal dilution (HDOP)', 'prearm', true, '0.62', '<= 1.2'),
         c('home', 'GPS', 'Home position set', 'prearm', true, 'SET', 'set'),
         c('ekf', 'Estimator', 'EKF healthy', 'prearm', true, 'HEALTHY', 'healthy'),
         c('battery_volt', 'Battery', 'Battery voltage', 'prearm', true, '25.0 V', '>= 22.8 V'),
-        c('battery_pct', 'Battery', 'Battery remaining', 'prearm', true, '97%', '>= 60%'),
+        c('battery_pct', 'Battery', 'Battery remaining (estimate)', 'prearm', true, '97%', '>= 60%', true),
         c('imu', 'Sensors', 'IMU', 'prearm', true, 'OK', 'OK'),
         c('baro', 'Sensors', 'Barometer', 'prearm', true, 'OK', 'OK'),
         c('mag', 'Sensors', 'Compass', 'prearm', true, 'OK', 'OK'),
-        c('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm', true, (0.3 + st.alt).toFixed(2) + ' m', 'live'),
+        c('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm', true, (0.3 + st.alt).toFixed(2) + ' m', 'reporting'),
         c('flow', 'Sensors', 'Optical flow (H-Flow)', 'prearm', true, 'Q 188', 'live'),
         c('vibration', 'Sensors', 'Vibration', 'prearm', true, '6.1 m/s²', '< 30'),
         c('fence', 'Safety', 'Geofence and max altitude active on Pixhawk', 'prearm', true, 'ENABLED', 'enabled'),
-        c('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm', true, 'STREAMING', 'streaming'),
-        c('down_cam', 'Jetson', 'Down camera', 'prearm', true, 'STREAMING', 'streaming', true),
+        c('front_cam', 'Jetson', 'Front camera', 'prearm', true, 'CONNECTED', 'connected', true),
+        c('down_cam', 'Jetson', 'Down camera', 'prearm', true, 'CONNECTED', 'connected', true),
         c('jetson_temp', 'Jetson', 'Jetson temperature', 'prearm', true, '54 °C', '< 80 °C'),
       ];
       Object.entries(manualLabels).forEach(([k, label]) => list.push(c(k, 'Manual', label, 'gonogo', !!st.manual[k],
         st.manual[k] ? '✓ ' + st.manual[k].by : 'NOT CONFIRMED', 'confirm by T-60')));
       list.push(c('go_poll', 'GO/NO-GO', 'Pilot in command GO (area and props clear)', 'armed', !!st.go, st.go ? 'GO · ' + st.go.by : 'WAITING', 'GO by T-10'));
-      list.push(c('obstacles', 'Safety', 'No obstacle close to the aircraft', 'takeoff', true, 'CLEAR', 'clear'));
       const spun = (st.stage === 'armed' && st.armed_at && now() - st.armed_at > 3) || ['takeoff', 'flight', 'landed', 'safed'].includes(st.stage);
       list.push(c('motor_health', 'Motors', 'Motor health at idle (ESC telemetry)', 'takeoff', spun, spun ? '1488 / 1502 / 1495 / 1510 rpm' : 'WAITING FOR SPIN-UP', 'all spinning, spread <= 25%'));
       return list;
@@ -255,7 +253,7 @@
         checks: checks().map(c => ({ ...c, status: (st.stage !== 'standby' && lvl >= order.indexOf(gateStage[c.gate])) || c.raw === 'pass' ? c.raw : 'pending' })),
         motors: [1, 2, 3, 4].map(i => ({ ch: i, rpm: st.armed ? 1480 + i * 8 + (st.alt > 0 ? 2600 : 0) : 0, current: st.armed ? (st.alt > 0 ? 9.5 : 0.8) : 0, connected: true, status: 0 })),
         events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt,
-        config: { takeoff_alt: 5, require_rtk: true, require_esc_telemetry: true, rc_gate_channel: 7, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
+        config: { takeoff_alt: 5, require_rtk: false, require_esc_telemetry: false, rc_gate_channel: 5, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
       };
     }
     function publish() {

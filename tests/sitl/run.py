@@ -500,7 +500,7 @@ class Run:
         r = self.c.send('mission_create', name='sitl run', total=60, confirm='flight', timeout=10)
         self.ok(r, 'mission_create')
         self.note(r['msg'])
-        for k in ('manual_airspace', 'manual_observers', 'manual_payload'):
+        for k in ('manual_observers',):
             self.c.send('mission_manual', key=k, value=True)
         t0 = time.time()
         stage = None

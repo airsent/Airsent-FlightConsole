@@ -770,7 +770,15 @@ function applyTelemetry(data) {
     data.of_quality > 0 ? "NOMINAL" : "OFFLINE",
     data.of_quality > 0);
 
-  // Camera status driven by WebRTC — do not overwrite here.
+  // Cameras: the Jetson reports whether each camera is connected and producing frames.
+  // That's the sensor status — independent of video streaming, which on cellular only
+  // runs while someone is watching (on demand).
+  const vid = data.netlink?.video || {};
+  setSensorStatus("sensorFrontCam", data.front_cam_active ? "NOMINAL" : "OFFLINE", !!data.front_cam_active);
+  setSensorStatus("sensorDownCam",  data.down_cam_active  ? "NOMINAL" : "OFFLINE", !!data.down_cam_active);
+  const cf = getEl("sensorFrontCam"), cd = getEl("sensorDownCam");
+  if (cf) cf.title = data.front_cam_active ? (vid.front === false ? "Camera connected — video paused until someone opens it (cellular, on demand)" : "Camera connected") : "Camera not detected on the Jetson";
+  if (cd) cd.title = data.down_cam_active ? (vid.down === false ? "Camera connected — video paused until someone opens it (cellular, on demand)" : "Camera connected") : "Camera not detected on the Jetson";
 
   updateAttitude(data);
 

@@ -39,17 +39,15 @@ window.airsentMapLayer = function(map) {
   const layer = L.tileLayer(cfg.mapTileUrl, {
     maxZoom: cfg.mapMaxZoom, subdomains: "abcd", attribution: cfg.mapAttribution,
   }).addTo(map);
-  const notice = L.control({position: "bottomleft"});
-  notice.onAdd = function() {
-    const el = L.DomUtil.create("div");
-    el.textContent = "Map tiles unavailable — check network or map provider configuration";
-    el.style.cssText = "display:none;background:#18202b;color:#fff;padding:8px;max-width:260px;font:12px sans-serif";
-    this.message = el;
-    return el;
-  };
-  notice.addTo(map);
-  layer.on("tileerror", () => { notice.message.style.display = "block"; });
-  layer.on("tileload", () => { notice.message.style.display = "none"; });
+  // Centred banner at the top of the map: the bottom-left corner holds each page's own LAT/LON bar.
+  const msg = document.createElement("div");
+  msg.textContent = "Map tiles unavailable — check network or map provider configuration";
+  msg.style.cssText = "display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;" +
+    "pointer-events:none;background:rgba(24,32,43,.92);color:#fff;padding:6px 12px;border:1px solid rgba(255,184,0,.5);" +
+    "font:11px 'DM Mono',monospace;letter-spacing:.5px;white-space:nowrap";
+  map.getContainer().append(msg);
+  layer.on("tileerror", () => { msg.style.display = "block"; });
+  layer.on("tileload", () => { msg.style.display = "none"; });
   return layer;
 };
 
