@@ -313,9 +313,13 @@ def evaluate_checks(s, engine):
 
 class FaultBook:
     """Active and recent faults. Acknowledging silences a fault; it never clears it."""
-    def __init__(self, clock=time.time, clear_after=2.0, history=200):
+    SEV_RANK = {'info': 0, 'warning': 1, 'critical': 2}
+
+    def __init__(self, clock=time.time, clear_after=2.0, history=200, ack_memory=60.0):
         self.clock = clock
         self.clear_after = clear_after
+        self.ack_memory = ack_memory      # a fault that flickers back within this long keeps its ack
+        self._cleared_acks = {}           # key -> (acked_by, acked_at, severity, cleared_at)
         self.active = {}
         self.recent = deque(maxlen=history)
         self.revision = 0
@@ -332,6 +336,10 @@ class FaultBook:
                 fault = {'id': f"F{self._seq:05d}", 'key': key, 'severity': severity, 'source': source,
                          'message': message, 'since': now, 'acked_by': None, 'acked_at': None,
                          'cleared_at': None, 'last_true': now}
+                prev = self._cleared_acks.pop(key, None)
+                if (prev and now - prev[3] <= self.ack_memory
+                        and self.SEV_RANK.get(severity, 3) <= self.SEV_RANK.get(prev[2], 3)):
+                    fault['acked_by'], fault['acked_at'] = prev[0], prev[1]   # same problem flickering, not a new one
                 self.active[key] = fault
                 self.revision += 1
                 if self.on_change:
@@ -339,12 +347,16 @@ class FaultBook:
             else:
                 fault['last_true'] = now
                 if fault['message'] != message or fault['severity'] != severity:
+                    if self.SEV_RANK.get(severity, 3) > self.SEV_RANK.get(fault['severity'], 3):
+                        fault['acked_by'] = fault['acked_at'] = None      # got worse: needs a fresh ack
                     fault['message'], fault['severity'] = message, severity
                     self.revision += 1
         for key in list(self.active):
             if key not in conditions and now - self.active[key]['last_true'] >= self.clear_after:
                 fault = self.active.pop(key)
                 fault['cleared_at'] = now
+                if fault['acked_by']:
+                    self._cleared_acks[key] = (fault['acked_by'], fault['acked_at'], fault['severity'], now)
                 self.recent.appendleft(fault)
                 self.revision += 1
                 if self.on_change:

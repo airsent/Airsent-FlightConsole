@@ -423,3 +423,55 @@ class MissionEngineTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FaultAckTests(unittest.TestCase):
+    def setUp(self):
+        from mission_engine import FaultBook
+        self.t = [1000.0]
+        self.book = FaultBook(clock=lambda: self.t[0])
+
+    def tick(self, conds, dt=0.5):
+        self.t[0] += dt
+        self.book.update(conds)
+
+    def active(self):
+        return self.book.snapshot()['active']
+
+    def test_ack_keeps_fault_listed_but_marked(self):
+        self.tick({'esc': ('warning', 'ESC', 'not connected')})
+        fid = self.active()[0]['id']
+        self.book.ack(fid, 'Aarav')
+        self.tick({'esc': ('warning', 'ESC', 'not connected')})
+        self.assertEqual(len(self.active()), 1)
+        self.assertEqual(self.active()[0]['acked_by'], 'Aarav')
+
+    def test_ack_all(self):
+        self.tick({'a': ('warning', 'X', 'a'), 'b': ('critical', 'Y', 'b')})
+        self.book.ack('all', 'Aarav')
+        self.assertTrue(all(f['acked_by'] == 'Aarav' for f in self.active()))
+
+    def test_flickering_fault_keeps_its_ack(self):
+        c = {'link': ('warning', 'Network', 'cellular weak')}
+        self.tick(c); self.book.ack(self.active()[0]['id'], 'Aarav')
+        self.tick({}, dt=3)            # clears
+        self.assertEqual(self.active(), [])
+        self.tick(c, dt=5)             # back 5 s later
+        self.assertEqual(self.active()[0]['acked_by'], 'Aarav')
+
+    def test_ack_forgotten_after_a_while(self):
+        c = {'link': ('warning', 'Network', 'cellular weak')}
+        self.tick(c); self.book.ack(self.active()[0]['id'], 'Aarav')
+        self.tick({}, dt=3)
+        self.tick(c, dt=120)
+        self.assertIsNone(self.active()[0]['acked_by'])
+
+    def test_escalation_needs_a_new_ack(self):
+        self.tick({'batt': ('warning', 'Battery', 'low')})
+        self.book.ack(self.active()[0]['id'], 'Aarav')
+        self.tick({'batt': ('critical', 'Battery', 'critical')})
+        self.assertIsNone(self.active()[0]['acked_by'])
+        self.book.ack(self.active()[0]['id'], 'Aarav')
+        self.tick({}, dt=3)
+        self.tick({'batt': ('critical', 'Battery', 'critical')}, dt=1)
+        self.assertEqual(self.active()[0]['acked_by'], 'Aarav')

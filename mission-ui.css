@@ -82,6 +82,11 @@
 .msn-fault.warning { border-left-color: var(--msn-amber); }
 .msn-fault.info { border-left-color: var(--msn-cyan); }
 .msn-fault.cleared { opacity: .5; border-left-color: var(--msn-grey); }
+.msn-fault.acked { opacity: .55; border-left-color: var(--msn-grey); background: transparent; }
+.msn-fault.acked .msn-sev { background: transparent; color: var(--msn-dim); border: 1px dashed var(--msn-grey); }
+.msn-fault.acked .msn-fault-msg { color: var(--msn-dim); }
+.msn-acked-tag { font-size: 9px; letter-spacing: 1px; color: var(--msn-dim); align-self: center; }
+.msn-fault-badge.all-acked { border-color: var(--msn-grey); color: var(--msn-dim); }
 .msn-sev { font-size: 9px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; }
 .msn-sev.critical { background: var(--msn-red); color: #fff; }
 .msn-sev.warning { background: var(--msn-amber); color: #000; }
@@ -94,7 +99,10 @@
 
 /* ── dashboard fault panel additions ──────────────────────────── */
 .fault-panel-item .msn-fault-src { font-size: 9px; opacity: .6; margin-right: 4px; }
-.fault-panel-item.acked { opacity: .65; }
+/* acknowledged: still active, but greyed so it no longer looks like a fresh alarm */
+.fault-panel-item.acked { color: var(--msn-grey, #7b8794) !important; opacity: .6; }
+.fault-panel-item.acked .fault-panel-item-badge { border-style: dashed; }
+.fault-panel-item.acked .fault-panel-item-msg { text-decoration: none; }
 .fault-panel-item .fault-ack-btn {
   margin-left: auto; font: 9px var(--msn-mono); letter-spacing: .5px; padding: 1px 6px; cursor: pointer;
   background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 2px;
@@ -132,3 +140,4 @@
 .msn-toast.alert { border-color: var(--msn-red); background: #2a0710; color: #fff; top: 40px; bottom: auto; }
 
 #faultCounter.msn-unacked { animation: msn-flash 1s ease-in-out infinite; }
+#faultCounter.msn-all-acked { color: var(--msn-dim); border-color: rgba(255,255,255,.18); }
