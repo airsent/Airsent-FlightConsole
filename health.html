@@ -698,14 +698,21 @@ function setCellMetric(id,val,suffix,warnAt,errAt){
 }
 
 const cameraLive={camfront:false,camdown:false};
-function setCameraStatus(id,live){
-  cameraLive[id]=!!live;
-  setState(id,live?'ok':'warn');
-  setBadge(id,live?'ok':'warn',live?'STREAMING':'OFFLINE');
-  txt('nd-'+id,live?'STREAMING':'OFFLINE');
-  cls('nd-'+id,live?'ok':'warn');
+// Camera health = the camera is connected to the Jetson (telemetry). Streaming is extra:
+// on cellular, video only runs while someone watches, so "not streaming" isn't a fault.
+const cameraDevice={camfront:null,camdown:null};
+function renderCamera(id){
+  const live=!!cameraLive[id],dev=cameraDevice[id];
+  const ok=live||dev===true;
+  const label=live?'STREAMING':dev===true?'CONNECTED':'OFFLINE';
+  setState(id,ok?'ok':'warn');
+  setBadge(id,ok?'ok':'warn',label);
+  txt('nd-'+id,live?'STREAMING':dev===true?'CONNECTED · VIDEO ON DEMAND':'OFFLINE');
+  cls('nd-'+id,ok?'ok':'warn');
   drawWires();
 }
+function setCameraStatus(id,live){cameraLive[id]=!!live;renderCamera(id);}
+function setCameraDevice(id,on){if(cameraDevice[id]===on)return;cameraDevice[id]=on;renderCamera(id);}
 
 /* ── Apply telemetry ──
    Jetson sends roll/pitch/yaw already in DEGREES, groundspeed as 'spd',
@@ -813,11 +820,13 @@ function applyData(d){
     }
   }
 
-  /* Cameras are updated by the WebRTC stream probe below. In demo mode only,
-     telemetry can still light them up. */
+  /* Camera hardware from telemetry; the WebRTC probe below adds STREAMING. */
   if(!isActual){
     setCameraStatus('camdown',!!d.down_cam_active);
     setCameraStatus('camfront',!!d.front_cam_active);
+  }else{
+    setCameraDevice('camdown',d.down_cam_active===true);
+    setCameraDevice('camfront',d.front_cam_active===true);
   }
 
   /* Jetson */
@@ -860,8 +869,9 @@ function setDisconnected(){
   ['hHealth','hEkf','hMode','hArmed'].forEach(id=>txt(id,'OFFLINE'));txt('hUpd','--:--:--');txt('hStatus','OFFLINE');
   ['rtkgps','mag','baro','rc','esc','power','lidar','fc','jetson','pi','rtkbase','cellular'].forEach(id=>setNode(id,'off','','NO TELEMETRY'));
   ['fc-imu','fc-ekf','fc-io','fc-baro','fc-mag-c','fc-rc'].forEach(id=>{const e=el(id);if(e){e.textContent='--';e.className='nd-cell-v';}});
-  if(!cameraLive.camfront)setCameraStatus('camfront',false);
-  if(!cameraLive.camdown)setCameraStatus('camdown',false);
+  cameraDevice.camfront=cameraDevice.camdown=null;      // no telemetry = can't vouch for the cameras
+  if(!cameraLive.camfront)setCameraStatus('camfront',false);else renderCamera('camfront');
+  if(!cameraLive.camdown)setCameraStatus('camdown',false);else renderCamera('camdown');
   drawWires();
 }
 

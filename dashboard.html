@@ -697,7 +697,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
 .signal-visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 @media (max-width:720px) { .signal-half {padding:7px 6px;} .signal-half-heading {font-size:9px;letter-spacing:0;} .signal-state {font-size:11px;} .signal-reading {font-size:9px;} }
 </style>
-<script src="telemetry.js?v=motorpct-1"></script>
+<script src="telemetry.js?v=cams-1"></script>
 <script>
 (function(){
   const REF_W = 2048;
@@ -789,7 +789,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
       D('frontCamDot').classList.add('live');
       D('frontCamLabel').textContent = 'FRONT · OAK-D LITE · LIVE';
       D('frontCamOffline').classList.add('hidden');
-      setSensor('sensorFrontCam', true);
+      /* sensor status comes from telemetry (camera hardware), not the stream */
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -798,7 +798,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
         D('frontCamDot').classList.remove('live');
         D('frontCamLabel').textContent = 'FRONT · OAK-D LITE · OFFLINE';
         D('frontCamOffline').classList.remove('hidden');
-        setSensor('sensorFrontCam', false);
+        /* sensor status comes from telemetry (camera hardware), not the stream */
         try{pc.close();}catch(_){}
         if(frontPc===pc) frontPc=null;
         setTimeout(connectFrontCam, 3000);
@@ -849,7 +849,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
       D('downCamDot').classList.add('live');
       D('downCamLabel').textContent = 'DOWN · IMX219 · LIVE';
       D('downCamOffline').classList.add('hidden');
-      setSensor('sensorDownCam', true);
+      /* sensor status comes from telemetry (camera hardware), not the stream */
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -858,7 +858,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
         D('downCamDot').classList.remove('live');
         D('downCamLabel').textContent = 'DOWN · IMX219 · OFFLINE';
         D('downCamOffline').classList.remove('hidden');
-        setSensor('sensorDownCam', false);
+        /* sensor status comes from telemetry (camera hardware), not the stream */
         try{pc.close();}catch(_){}
         if(downPc===pc) downPc=null;
         setTimeout(connectDownCam, 3000);
@@ -894,7 +894,7 @@ body.dashboard-fixed .motor-panel .motor-row > span:nth-child(3) { text-align:ri
         D('downCamDot').classList.remove('live');
         D('downCamLabel').textContent = 'DOWN · IMX219 · OFFLINE';
         D('downCamOffline').classList.remove('hidden');
-        setSensor('sensorDownCam', false);
+        /* sensor status comes from telemetry (camera hardware), not the stream */
         try{pc.close();}catch(_){}
         if(downPc===pc) downPc=null;
         setTimeout(connectDownCam, 3000);
