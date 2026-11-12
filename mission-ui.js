@@ -400,6 +400,7 @@
     renderBadge(slotBadge, list);
     if (panelEl && panelEl.classList.contains('open')) panel();
     alertNewCritical(list);
+    if (window.AirsentAlarm) window.AirsentAlarm.update(list, { viewer: viewer() });
     if (dashboardCard) renderDashboardCard(s);
     renderPilot(s);
     renderOverlay(s);
@@ -415,6 +416,23 @@
     buildSlot();
     M.on(render);
     render();
+    loadAlarm();
+  }
+
+  // Fault tones (fault-audio.js): a speaker button beside every fault badge.
+  function loadAlarm() {
+    const add = () => {
+      const A = window.AirsentAlarm; if (!A) return;
+      [pilotBadge, overlayBadge, slotBadge, $('faultCounter')].forEach(el => {
+        if (!el || !el.parentNode || (el.nextSibling && el.nextSibling.classList && el.nextSibling.classList.contains('aa-btn'))) return;
+        el.parentNode.insertBefore(A.button(), el.nextSibling);
+      });
+      render();
+    };
+    if (window.AirsentAlarm) return add();
+    const sc = document.createElement('script');
+    sc.src = 'fault-audio.js?v=1'; sc.onload = add;
+    document.head.appendChild(sc);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
