@@ -269,7 +269,7 @@ def _meta(resp, t0, **extra):
             'output_tokens': usage.get('output_tokens'), 'at': time.time(), **extra}
 
 
-ORDER = {'go': 0, 'caution': 1, 'no_go': 2}
+ORDER = {'go': 0, 'no_flight': 1, 'caution': 1, 'no_go': 2}
 
 
 def _floor_verdict(data, rule_verdict):
@@ -278,7 +278,7 @@ def _floor_verdict(data, rule_verdict):
         data['verdict'] = 'caution'
     if ORDER.get(rule_verdict, 0) > ORDER[data['verdict']]:
         data['verdict_raised_by_rules'] = data['verdict']
-        data['verdict'] = rule_verdict
+        data['verdict'] = 'caution' if rule_verdict == 'no_flight' else rule_verdict
 
 
 def compare(flights, notes='', next_flight='', api_key=None, opener=urllib.request.urlopen):
@@ -361,10 +361,7 @@ def review(report, notes='', next_flight='', api_key=None, opener=urllib.request
     if data['verdict'] not in ('go', 'caution', 'no_go'):
         data['verdict'] = 'caution'
     # never let the review be more optimistic than the hard rules
-    order = {'go': 0, 'caution': 1, 'no_go': 2}
-    if order.get(report.get('verdict'), 0) > order[data['verdict']]:
-        data['verdict_raised_by_rules'] = data['verdict']
-        data['verdict'] = report['verdict']
+    _floor_verdict(data, report.get('verdict'))
     data['proposals'] = check_proposals(data.get('proposals'), flown)
     usage = resp.get('usage') or {}
     data['meta'] = {'model': resp.get('model', MODEL), 'seconds': round(time.time() - t0, 1),

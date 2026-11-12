@@ -104,6 +104,13 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
 .ask { display:flex; gap:8px; margin-top:8px; } .ask input { flex:1; height:28px; background:#050c12; border:1px solid var(--line2); color:var(--white); font:11px var(--mono); padding:0 8px; }
 .sugg { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; } .sugg button { background:none; border:1px dashed var(--line2); color:#9fb3c4; font:10px var(--mono); padding:2px 8px; cursor:pointer; }
 .sugg button:hover { color:#fff; border-color:var(--cyan); }
+.kf { display:flex; gap:4px; padding:8px 14px 0; } .kf button { flex:1; background:none; border:1px solid var(--line2); color:var(--muted); font:700 9px var(--mono); letter-spacing:1.5px; padding:6px 4px; cursor:pointer; }
+.kf button:hover { color:var(--white); } .kf button.on { color:#fff; background:rgba(0,200,255,.12); border-color:var(--cyan); } .kf button i { font-style:normal; color:var(--cyan); margin-left:4px; }
+.kind { font:9px var(--mono); padding:1px 6px; white-space:nowrap; border:1px solid currentColor; letter-spacing:1px; } .kind.test { color:var(--amber); } .kind.real { color:var(--green); }
+.kind.manual::after { content:' ✎'; }
+.btn.danger { color:#ff8095; border-color:rgba(255,51,85,.45); } .btn.danger:hover { color:#fff; border-color:#ff3355; background:rgba(255,51,85,.12); }
+.vd.no_flight { color:var(--muted); }
+.kindsw { display:flex; gap:4px; align-items:center; margin-bottom:4px; }
 .ce td.r { font:10px var(--mono); letter-spacing:1px; white-space:nowrap; } .ce td.r.improved { color:var(--green); } .ce td.r.worse { color:#ff5c7a; } .ce td.r.no_clear_change, .ce td.r.unknown { color:var(--muted); }
 </style>
 <link rel="stylesheet" href="console-navigation.css?v=uniform-2">
@@ -127,9 +134,9 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
 </div>
 <div class="main">
   <section class="col">
-    <div class="head"><div><div class="title">MISSIONS</div><div class="sub">newest first · tick up to 3 to compare</div></div></div>
-    <div class="cmpbar"><span class="sub" id="cmpInfo">Compare: none selected</span><span style="flex:1"></span>
-      <button class="btn" id="btnCmpClear" disabled>CLEAR</button><button class="btn primary" id="btnCompare" disabled>COMPARE</button></div>
+    <div class="head"><div><div class="title">MISSIONS</div><div class="sub">newest first · tick to compare (2–3) or delete</div></div></div>
+    <div class="kf" id="kindFilter"></div>
+    <div class="cmpbar" id="cmpBar"></div>
     <div class="list" id="list"><div class="empty">Loading from the Jetson…</div></div>
   </section>
   <section class="col"><div class="detail" id="detail"><div class="empty">Select a mission to see its data, charts and AI review — or tick 2–3 missions and press COMPARE.</div></div></section>
@@ -149,13 +156,15 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
   const mmss = s => s == null ? '--' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
   const size = b => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? (b / 1e3).toFixed(0) + ' KB' : b + ' B';
   const num = (v, d = 1, u = '') => v == null || !isFinite(v) ? '--' : (+v).toFixed(d) + u;
-  const VLBL = { go: 'GO', caution: 'CAUTION', no_go: 'NO-GO' };
+  const VLBL = { go: 'GO', caution: 'CAUTION', no_go: 'NO-GO', no_flight: 'NO FLIGHT' };
   const LETTER = ['A', 'B', 'C'];
   const COLORS = ['#3987e5', '#d95926', '#199e70'];          // validated dark categorical order (flights A, B, C)
   const TARGET = '#7d8fa0';
 
   let missions = [], selected = null, detail = null, view = 'flight', tab = 'overview', evFilter = 'all';
-  let cmpSel = [];                                            // folders ticked for comparison
+  let cmpSel = [];                                            // folders ticked (compare / delete)
+  let trash = [], trashSel = [];
+  let kindFilter = (() => { try { return localStorage.getItem('airsentLogsFilter') || 'all'; } catch (e) { return 'all'; } })();
   const cache = {};                                           // folder -> { detail, series }
   const blobs = {};
 
@@ -178,39 +187,92 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
     $('btnRefresh').disabled = false;
     if (!r.ok) { $('list').innerHTML = `<div class="empty">${esc(r.msg)}</div>`; return; }
     missions = r.missions || [];
+    trash = r.trash || [];
     cmpSel = cmpSel.filter(f => missions.some(m => m.folder === f));
+    trashSel = trashSel.filter(n => trash.some(t => t.name === n));
     $('hCount').textContent = missions.length;
     $('hFree').textContent = r.free_gb != null ? r.free_gb + ' GB' : '--';
     renderList();
     if (!selected && view === 'flight' && missions[0]) select(missions[0].folder);
   }
 
+  const shown = () => kindFilter === 'all' ? missions : missions.filter(m => m.kind === kindFilter);
   function renderList() {
-    $('list').innerHTML = missions.length ? missions.map(m => {
-      const ci = cmpSel.indexOf(m.folder);
+    const cnt = k => k === 'all' ? missions.length : k === 'trash' ? trash.length : missions.filter(m => m.kind === k).length;
+    $('kindFilter').innerHTML = [['all', 'ALL'], ['real', 'REAL'], ['test', 'TESTS'], ['trash', 'TRASH']].map(([k, l]) =>
+      `<button type="button" data-kf="${k}" class="${kindFilter === k ? 'on' : ''}">${l}<i>${cnt(k)}</i></button>`).join('');
+    if (kindFilter === 'trash') {
+      $('list').innerHTML = trash.length ? trash.map(t => `<div class="flight" data-trash="${esc(t.name)}">
+        <label class="ck"><input type="checkbox" data-tsel="${esc(t.name)}" ${trashSel.includes(t.name) ? 'checked' : ''}> SEL</label>
+        <div class="n" style="opacity:.75">${esc(t.folder)}</div>
+        <div class="f">deleted ${new Date(t.deleted_at * 1000).toLocaleString()}${t.by ? ' by ' + esc(t.by) : ''} · ${num(t.size_mb, 1, ' MB')}</div></div>`).join('')
+        : '<div class="empty">Trash is empty. Deleted logs stay here for 7 days, then they are removed for good.</div>';
+      $('cmpBar').innerHTML = `<span class="sub">${trashSel.length ? trashSel.length + ' selected' : 'Kept 7 days, then deleted'}</span><span style="flex:1"></span>
+        <button class="btn" id="btnRestore" ${trashSel.length ? '' : 'disabled'}>RESTORE</button>
+        <button class="btn danger" id="btnPurge" ${trashSel.length ? '' : 'disabled'}>DELETE FOREVER</button>
+        <button class="btn danger" id="btnEmpty" ${trash.length ? '' : 'disabled'}>EMPTY TRASH</button>`;
+      return;
+    }
+    const list = shown();
+    $('list').innerHTML = list.length ? list.map(m => {
+      const ci = cmpOrder().indexOf(m.folder), ticked = cmpSel.includes(m.folder), lettered = ticked && cmpSel.length <= 3;
       return `<div class="flight${m.folder === selected && view === 'flight' ? ' sel' : ''}" data-f="${esc(m.folder)}">
-      <label class="ck" title="Compare this flight"><input type="checkbox" data-cmp="${esc(m.folder)}" ${ci >= 0 ? 'checked' : ''} ${ci < 0 && cmpSel.length >= 3 ? 'disabled' : ''}>
-        ${ci >= 0 ? `<span class="sw" style="background:${COLORS[cmpOrder().indexOf(m.folder)]}"></span>${LETTER[cmpOrder().indexOf(m.folder)]}` : 'CMP'}</label>
-      <div class="n">${esc(m.name)} ${m.recording ? '<span class="tag rec">● RECORDING</span>' : ''}${m.failsafes ? `<span class="tag warn">${m.failsafes} FAILSAFE</span>` : ''}${m.actions ? `<span class="tag warn">ASC ACTED</span>` : ''}</div>
+      <label class="ck" title="Tick to compare (2–3) or delete"><input type="checkbox" data-cmp="${esc(m.folder)}" ${ticked ? 'checked' : ''}>
+        ${lettered ? `<span class="sw" style="background:${COLORS[ci]}"></span>${LETTER[ci]}` : ticked ? '✓' : 'SEL'}</label>
+      <div class="n">${esc(m.name)} <span class="kind ${esc(m.kind)}${m.kind_by === 'operator' ? ' manual' : ''}" title="${m.kind_by === 'operator' ? 'Marked by ' + esc(m.kind_who || 'operator') : m.kind_by === 'mission' ? 'From the countdown mode' : 'No countdown — decided by whether it flew'}">${m.kind === 'real' ? 'REAL' : 'TEST'}</span>
+        ${m.recording ? '<span class="tag rec">● RECORDING</span>' : ''}${m.failsafes ? `<span class="tag warn">${m.failsafes} FAILSAFE</span>` : ''}${m.actions ? `<span class="tag warn">ASC ACTED</span>` : ''}</div>
       <div class="f">${esc(m.folder)} · ${new Date(m.mtime * 1000).toLocaleString()}${m.operator ? ' · ' + esc(m.operator) : ''}</div>
       <div class="s"><span>⏱ ${mmss(m.duration_s)}</span><span>✈ ${mmss(m.flying_s)}</span><span>▲ ${num(m.max_alt_m, 1, ' m')}</span><span>⚡ ${m.used_mah != null ? Math.round(m.used_mah) + ' mAh' : '--'}</span>
         <span style="color:${m.findings ? 'var(--amber)' : 'var(--green)'}">${m.findings ? '⚠ ' + m.findings + ' findings' : '✓ no findings'}</span><span>${num(m.size_mb, 1, ' MB')}</span></div></div>`;
-    }).join('') : '<div class="empty">No missions recorded yet. ASC starts recording when a mission is created or the drone arms.</div>';
-    $('cmpInfo').textContent = cmpSel.length ? `Compare: ${cmpOrder().map((f, i) => LETTER[i]).join(' · ')} (${cmpSel.length}/3)` : 'Compare: none selected';
-    $('btnCompare').disabled = cmpSel.length < 2;
-    $('btnCmpClear').disabled = !cmpSel.length;
+    }).join('') : `<div class="empty">${missions.length ? 'No ' + (kindFilter === 'real' ? 'real flights' : 'tests') + ' yet.' : 'No missions recorded yet. ASC starts recording when a mission is created or the drone arms.'}</div>`;
+    const n = cmpSel.length;
+    $('cmpBar').innerHTML = `<span class="sub">${n ? n + ' ticked' + (n <= 3 ? ' · ' + cmpOrder().map((f, i) => LETTER[i]).join(' · ') : '') : 'Nothing ticked'}</span><span style="flex:1"></span>
+      ${list.length ? `<button class="btn" id="btnTickAll">${list.every(m => cmpSel.includes(m.folder)) ? 'UNTICK ALL' : 'TICK ALL'}</button>` : ''}
+      <button class="btn danger" id="btnDelete" ${n ? '' : 'disabled'}>DELETE${n ? ' (' + n + ')' : ''}</button>
+      <button class="btn primary" id="btnCompare" ${n >= 2 && n <= 3 ? '' : 'disabled'} title="Compare takes 2 or 3 flights">COMPARE</button>`;
   }
   // flights in time order (oldest = A)
   const cmpOrder = () => cmpSel.slice().sort((a, b) => ((missions.find(m => m.folder === a) || {}).mtime || 0) - ((missions.find(m => m.folder === b) || {}).mtime || 0));
 
+  $('kindFilter').addEventListener('click', e => {
+    const b = e.target.closest('[data-kf]'); if (!b) return;
+    kindFilter = b.dataset.kf; try { localStorage.setItem('airsentLogsFilter', kindFilter); } catch (er) {}
+    renderList();
+  });
   $('list').addEventListener('click', e => {
+    const ts = e.target.closest('[data-tsel]');
+    if (ts) { const n = ts.dataset.tsel; trashSel = ts.checked ? [...new Set([...trashSel, n])] : trashSel.filter(x => x !== n); renderList(); return; }
     const ck = e.target.closest('[data-cmp]');
-    if (ck) { const f = ck.dataset.cmp; cmpSel = ck.checked ? [...new Set([...cmpSel, f])].slice(0, 3) : cmpSel.filter(x => x !== f); renderList(); if (view === 'compare') { if (cmpSel.length >= 2) openCompare(); else select(selected || cmpSel[0] || missions[0].folder); } return; }
-    if (e.target.closest('.ck')) return;
+    if (ck) { const f = ck.dataset.cmp; cmpSel = ck.checked ? [...new Set([...cmpSel, f])] : cmpSel.filter(x => x !== f); renderList(); if (view === 'compare') { if (cmpSel.length >= 2 && cmpSel.length <= 3) openCompare(); else select(selected || cmpSel[0] || missions[0].folder); } return; }
+    if (e.target.closest('.ck') || e.target.closest('[data-trash]')) return;
     const f = e.target.closest('[data-f]'); if (f) select(f.dataset.f);
   });
-  $('btnCompare').onclick = () => openCompare();
-  $('btnCmpClear').onclick = () => { cmpSel = []; renderList(); if (view === 'compare') select(selected || missions[0].folder); };
+  $('cmpBar').addEventListener('click', async e => {
+    const id = e.target.id;
+    if (id === 'btnCompare') return openCompare();
+    if (id === 'btnTickAll') { const list = shown(); const all = list.every(m => cmpSel.includes(m.folder)); cmpSel = all ? cmpSel.filter(f => !list.some(m => m.folder === f)) : [...new Set([...cmpSel, ...list.map(m => m.folder)])]; renderList(); return; }
+    if (id === 'btnDelete') return deleteLogs(cmpSel.slice());
+    if (id === 'btnRestore') { const r = await call('log_restore', { names: trashSel }); toast(r.msg, r.ok ? '' : 'alert'); trashSel = []; await load(); return; }
+    if (id === 'btnPurge' || id === 'btnEmpty') {
+      const all = id === 'btnEmpty', n = all ? trash.length : trashSel.length;
+      if (!confirm(`Permanently delete ${n} log(s)? This cannot be undone — the files are removed from the Jetson SSD.`)) return;
+      const r = await call('log_purge', all ? { all: true } : { names: trashSel });
+      toast(r.msg, r.ok ? '' : 'alert'); trashSel = []; await load();
+    }
+  });
+  async function deleteLogs(folders) {
+    if (!folders.length) return;
+    const names = folders.map(f => (missions.find(m => m.folder === f) || {}).name || f);
+    const real = folders.filter(f => (missions.find(m => m.folder === f) || {}).kind === 'real').length;
+    if (!confirm(`Delete ${folders.length} log(s)?\n\n${names.slice(0, 12).join('\n')}${names.length > 12 ? `\n…and ${names.length - 12} more` : ''}${real ? `\n\n⚠ ${real} of these are REAL flights.` : ''}\n\nThey go to the TRASH for 7 days (restore from there), then are deleted for good.`)) return;
+    const r = await call('log_delete', { folders });
+    toast(r.msg, r.ok ? '' : 'alert');
+    (r.moved || []).forEach(f => { delete cache[f]; });
+    cmpSel = cmpSel.filter(f => !(r.moved || []).includes(f));
+    if ((r.moved || []).includes(selected)) { selected = null; detail = null; $('detail').innerHTML = '<div class="empty">Log moved to the trash.</div>'; }
+    if (view === 'compare' && (r.moved || []).some(f => cmpData.some(c => c.folder === f))) { view = 'flight'; $('detail').innerHTML = '<div class="empty">Select a mission.</div>'; }
+    await load();
+  }
 
   async function getDetail(folder, fresh) {
     if (!fresh && cache[folder] && cache[folder].detail) return { ok: true, ...cache[folder].detail };
@@ -244,7 +306,11 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
     const findings = (rep && rep.findings || []).filter(f => f.level !== 'info').length;
     const tabs = [['overview', 'OVERVIEW'], ['charts', 'CHARTS'], ['ai', 'AI REVIEW'], ['events', 'EVENTS'], ['files', 'FILES & VIDEO']];
     $('detail').innerHTML = `<div class="dh"><div><h2>${esc(m.name || selected)}</h2><div class="note">${esc(selected)}${m.recording ? ' · STILL RECORDING — numbers are final after landing' : ''}</div></div>
-        ${rep ? `<span class="vd ${esc(rep.verdict)}" style="margin-bottom:4px">${VLBL[rep.verdict] || ''}</span>` : ''}</div>
+        ${rep ? `<span class="vd ${esc(rep.verdict)}" style="margin-bottom:4px">${VLBL[rep.verdict] || ''}</span>` : ''}<span style="flex:1"></span>
+        <div class="kindsw"><span class="kind ${esc(m.kind)}">${m.kind === 'real' ? 'REAL FLIGHT' : 'TEST'}</span>
+          <button class="btn" data-kind="${m.kind === 'real' ? 'test' : 'real'}">MARK AS ${m.kind === 'real' ? 'TEST' : 'REAL'}</button>
+          ${m.kind_by === 'operator' ? '<button class="btn" data-kind="auto" title="Go back to the automatic label">AUTO</button>' : ''}
+          <button class="btn danger" id="btnDelOne" ${m.recording ? 'disabled title="Still recording"' : ''}>DELETE</button></div></div>
       <div class="tabs">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${k === 'overview' && findings ? `<span class="cnt">${findings}</span>` : ''}</button>`).join('')}</div>
       <div id="tabBody"></div>`;
     renderTab();
@@ -419,7 +485,7 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
   // ── compare ─────────────────────────────────────────────────────────────
   let cmpData = [], cmpRun = null, cmpQA = [];
   async function openCompare() {
-    const order = cmpOrder(); if (order.length < 2) return;
+    const order = cmpOrder(); if (order.length < 2 || order.length > 3) { toast('Compare takes 2 or 3 flights'); return; }
     view = 'compare'; cmpRun = null; askRun = null; cmpQA = [];
     renderList();
     FC() && FC().clearGroup('cmp');
@@ -695,6 +761,9 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
   $('detail').addEventListener('click', async e => {
     const t = e.target;
     const tb = t.closest('[data-tab]'); if (tb) { tab = tb.dataset.tab; document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b === tb)); renderTab(); return; }
+    const kd = t.closest('[data-kind]');
+    if (kd) { const r = await call('log_tag', { folder: selected, kind: kd.dataset.kind }); toast(r.msg, r.ok ? '' : 'alert'); if (r.ok) { const m = missions.find(x => x.folder === selected); if (m) Object.assign(m, { kind: r.kind, kind_by: r.kind_by }); renderList(); renderFlight(); } return; }
+    if (t.id === 'btnDelOne') { await deleteLogs([selected]); return; }
     const go = t.closest('[data-goto]'); if (go) { tab = go.dataset.goto; renderFlight(); return; }
     const ev = t.closest('[data-ev]'); if (ev) { evFilter = ev.dataset.ev; document.querySelectorAll('[data-ev]').forEach(b => b.classList.toggle('on', b === ev)); renderEvents(); return; }
     const sg = t.closest('[data-sugg]'); if (sg) { const q = $('askQ'); if (q) q.value = sg.dataset.sugg; ask(sg.dataset.sugg, view === 'compare'); return; }
@@ -731,12 +800,18 @@ table.mt td.v { text-align:right; } table.mt th.v { text-align:right; }
   $('detail').addEventListener('input', e => { if (/Notes$/.test(e.target.id)) aiDraft.notes = e.target.value; if (/Next$/.test(e.target.id)) aiDraft.next = e.target.value; });
 
   // ── demo (no Jetson, no API): three simulated flights ──────────────────
-  const demoState = {};
+  const demoState = {}, demoKinds = {}, demoDeleted = new Set(), demoGone = new Set();
   async function demoCall(action, data) {
     const D = await demoData();
     const find = f => D.find(x => x.folder === f);
     const st = f => (demoState[f] = demoState[f] || { ai: JSON.parse(JSON.stringify(find(f) && find(f).ai || { reviews: [], applied: [] })), analysed: true });
-    if (action === 'log_list') return { ok: true, free_gb: 212.4, missions: D.slice().reverse().map((x, i) => ({ folder: x.folder, name: x.name, operator: 'Demo', mtime: Date.now() / 1000 - (i + 1) * 3600,
+    if (action === 'log_tag') { const k = data.kind === 'auto' ? null : data.kind; demoKinds[data.folder] = k; return { ok: true, msg: 'Marked as ' + String(data.kind).toUpperCase(), kind: k || 'real', kind_by: k ? 'operator' : 'auto' }; }
+    if (action === 'log_delete') { const moved = data.folders.filter(f => !demoDeleted.has(f)); moved.forEach(f => demoDeleted.add(f)); return { ok: true, msg: `Moved ${moved.length} log(s) to the trash (demo)`, moved }; }
+    if (action === 'log_restore') { (data.names || []).forEach(n => demoDeleted.delete(n)); return { ok: true, msg: 'Restored (demo)' }; }
+    if (action === 'log_purge') { const ns = data.all ? [...demoDeleted] : data.names || []; ns.forEach(n => { demoDeleted.delete(n); demoGone.add(n); }); return { ok: true, msg: `Permanently deleted ${ns.length} (demo)` }; }
+    if (action === 'log_list') return { ok: true, free_gb: 212.4, trash: [...demoDeleted].map(f => ({ name: f, folder: f, deleted_at: Date.now() / 1000, by: 'Demo', size_mb: 16 })),
+      missions: D.slice().reverse().filter(x => !demoDeleted.has(x.folder) && !demoGone.has(x.folder)).map((x, i) => ({ folder: x.folder, name: x.name, operator: 'Demo', mtime: Date.now() / 1000 - (i + 1) * 3600,
+      kind: demoKinds[x.folder] || (x.folder.endsWith('3') ? 'real' : 'test'), kind_by: demoKinds[x.folder] ? 'operator' : 'mission',
       duration_s: x.report.flight.armed_s, flying_s: x.report.flight.flying_s, max_alt_m: x.report.flight.max_alt_m, used_mah: x.report.battery && x.report.battery.used_mah,
       findings: (x.report.findings || []).filter(f => f.level !== 'info').length, size_mb: x.report.size_mb })) };
     if (action === 'log_detail') { const x = find(data.folder); if (!x) return { ok: false, msg: 'not found' };

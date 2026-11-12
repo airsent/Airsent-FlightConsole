@@ -1141,7 +1141,8 @@ def mission_files(action, cmd):
         if action == 'log_list':
             root = _mission_path('')
             out = []
-            names = sorted((d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))), reverse=True)[:200] if os.path.isdir(root) else []
+            purge_trash()
+            names = sorted((d for d in os.listdir(root) if not d.startswith('.') and os.path.isdir(os.path.join(root, d))), reverse=True)[:300] if os.path.isdir(root) else []
             for name in names:
                 path = os.path.join(root, name)
                 size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(path) for f in fs)
@@ -1157,8 +1158,9 @@ def mission_files(action, cmd):
                             'duration_s': sm.get('duration_s'), 'flying_s': sm.get('flying_s'), 'max_alt_m': sm.get('max_alt_m'),
                             'used_mah': sm.get('used_mah'), 'findings': sum((c.get('raised') or 0) for c in (sm.get('checks') or {}).values()),
                             'failsafes': len(sm.get('pixhawk_failsafes') or []), 'actions': len(sm.get('asc_actions') or []),
-                            'recording': bool(asc_engine.session and os.path.realpath(asc_engine.session['folder']) == os.path.realpath(path))})
-            return {'ok': True, 'msg': f'{len(out)} mission folder(s) on the Jetson', 'missions': out,
+                            'recording': bool(asc_engine.session and os.path.realpath(asc_engine.session['folder']) == os.path.realpath(path)),
+                            **log_kind(path, info, sm)})
+            return {'ok': True, 'msg': f'{len(out)} mission folder(s) on the Jetson', 'missions': out, 'trash': trash_list(),
                     'free_gb': round(shutil.disk_usage(root).free / 1e9, 1) if os.path.isdir(root) else None}
         path = _mission_path(cmd.get('folder'))
         if not os.path.isdir(path):
@@ -1282,6 +1284,140 @@ def save_ai_review(cmd):
         f.write(blob)
     os.replace(tmp, os.path.join(out_dir, 'ai.json'))
     return {'ok': True, 'msg': 'Saved with the mission', 'ai': cur}
+
+
+# ── test vs real flights, and deleting logs ──────────────────────────────────
+TRASH_DAYS = float(os.environ.get('AIRSENT_LOG_TRASH_DAYS', '7'))
+
+
+def log_kind(path, info=None, sm=None):
+    """'test' or 'real'. The operator's own label wins; otherwise a countdown in TEST MODE is a
+    test, any other countdown is real; with no countdown it is real only if it actually flew."""
+    tag = _read_json(os.path.join(path, 'log_tag.json')) or {}
+    if tag.get('kind') in ('test', 'real'):
+        return {'kind': tag['kind'], 'kind_by': 'operator', 'kind_who': tag.get('by')}
+    if info is None:
+        info = _read_json(os.path.join(path, 'mission.json')) or {}
+    if info:
+        return {'kind': 'test' if info.get('bench') else 'real', 'kind_by': 'mission'}
+    sm = sm if sm is not None else (_summary(path) or {})
+    flew = (sm.get('flying_s') or 0) > 5
+    return {'kind': 'real' if flew else 'test', 'kind_by': 'auto'}
+
+
+def _trash_root():
+    return os.path.join(os.path.realpath(MISSION_ROOT), '.trash')
+
+
+def trash_list():
+    root = _trash_root()
+    out = []
+    if os.path.isdir(root):
+        for name in sorted(os.listdir(root), reverse=True):
+            p = os.path.join(root, name)
+            if os.path.isdir(p):
+                meta = _read_json(os.path.join(p, '.deleted.json')) or {}
+                out.append({'name': name, 'folder': meta.get('folder', name), 'deleted_at': meta.get('at', os.path.getmtime(p)),
+                            'by': meta.get('by'), 'size_mb': round(sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(p) for f in fs) / 1e6, 2)})
+    return out
+
+
+def purge_trash(names=None):
+    """Permanently delete trashed logs: the given ones, or all older than TRASH_DAYS."""
+    root = _trash_root()
+    if not os.path.isdir(root):
+        return 0
+    n = 0
+    for name in os.listdir(root):
+        p = os.path.join(root, name)
+        if not os.path.isdir(p) or (names is not None and name not in names):
+            continue
+        meta = _read_json(os.path.join(p, '.deleted.json')) or {}
+        if names is None and time.time() - meta.get('at', os.path.getmtime(p)) < TRASH_DAYS * 86400:
+            continue
+        shutil.rmtree(p, ignore_errors=True)
+        n += 1
+    return n
+
+
+def log_manage(action, cmd):
+    who = cmd.get('operator') or 'Operator'
+    try:
+        if action == 'log_tag':
+            kind = cmd.get('kind')
+            path = _mission_path(cmd.get('folder'))
+            if not os.path.isdir(path) or path == os.path.realpath(MISSION_ROOT):
+                return {'ok': False, 'msg': 'Mission folder not found'}
+            tag_file = os.path.join(path, 'log_tag.json')
+            if kind in ('test', 'real'):
+                with open(tag_file, 'w') as f:
+                    json.dump({'kind': kind, 'by': who, 'at': time.time()}, f)
+            elif kind == 'auto':
+                if os.path.exists(tag_file):
+                    os.remove(tag_file)
+            else:
+                return {'ok': False, 'msg': 'kind must be test, real or auto'}
+            return {'ok': True, 'msg': f"Marked as {kind.upper()}", **log_kind(path)}
+        if action == 'log_delete':
+            folders = cmd.get('folders') or ([cmd['folder']] if cmd.get('folder') else [])
+            if not folders or len(folders) > 300:
+                return {'ok': False, 'msg': 'Pick the logs to delete'}
+            rec = os.path.realpath(asc_engine.session['folder']) if asc_engine.session else None
+            if telem.get('armed'):
+                return {'ok': False, 'msg': 'Not while armed — delete logs on the ground'}
+            os.makedirs(_trash_root(), exist_ok=True)
+            moved, skipped = [], []
+            for f in folders:
+                path = _mission_path(f)
+                if path == os.path.realpath(MISSION_ROOT) or not os.path.isdir(path) or os.path.basename(path).startswith('.'):
+                    skipped.append(f'{f} (not found)'); continue
+                if rec and path == rec:
+                    skipped.append(f'{f} (still recording)'); continue
+                if (bin_log.status or {}).get('state') in ('listing', 'downloading') and (bin_log.status or {}).get('folder') == os.path.basename(path):
+                    skipped.append(f'{f} (Pixhawk log downloading)'); continue
+                dest = os.path.join(_trash_root(), os.path.basename(path) + time.strftime('__%Y%m%d%H%M%S'))
+                os.replace(path, dest)
+                with open(os.path.join(dest, '.deleted.json'), 'w') as fh:
+                    json.dump({'folder': os.path.basename(path), 'at': time.time(), 'by': who}, fh)
+                moved.append(os.path.basename(path))
+            if moved:
+                log_mavlink(f"[LOGS] {len(moved)} log(s) moved to trash by {who}: {', '.join(moved[:5])}{'…' if len(moved) > 5 else ''}")
+            msg = f"Moved {len(moved)} log(s) to the trash — kept {TRASH_DAYS:g} days, restore from TRASH"
+            return {'ok': bool(moved), 'msg': msg + (f"; skipped {', '.join(skipped)}" if skipped else '') if moved else 'Nothing deleted: ' + ', '.join(skipped),
+                    'moved': moved, 'skipped': skipped}
+        if action == 'log_restore':
+            names = cmd.get('names') or []
+            done = []
+            for name in names:
+                src = os.path.realpath(os.path.join(_trash_root(), str(name)))
+                if not src.startswith(_trash_root() + os.sep) or not os.path.isdir(src):
+                    continue
+                meta = _read_json(os.path.join(src, '.deleted.json')) or {}
+                base = meta.get('folder') or str(name).split('__')[0]
+                dest = _mission_path(base)
+                if os.path.exists(dest):
+                    dest = _mission_path(base + '_restored' + time.strftime('%H%M%S'))
+                try:
+                    os.remove(os.path.join(src, '.deleted.json'))
+                except OSError:
+                    pass
+                os.replace(src, dest)
+                done.append(os.path.basename(dest))
+            return {'ok': bool(done), 'msg': f'Restored {len(done)} log(s)' if done else 'Nothing restored', 'restored': done}
+        if action == 'log_purge':
+            names = cmd.get('names')
+            if cmd.get('all'):
+                names = [t['name'] for t in trash_list()]
+            if not names:
+                return {'ok': False, 'msg': 'Nothing to delete'}
+            n = purge_trash(set(str(x) for x in names))
+            log_mavlink(f"[LOGS] {n} log(s) permanently deleted by {who}")
+            return {'ok': True, 'msg': f'Permanently deleted {n} log(s)'}
+    except ValueError as e:
+        return {'ok': False, 'msg': str(e)}
+    except OSError as e:
+        return {'ok': False, 'msg': f'Could not change the mission folder: {e}'}
+    return {'ok': False, 'msg': 'Unknown log action'}
 
 
 def send_rtl(mav):
@@ -1814,6 +1950,8 @@ def _process_command(raw):
 
     if action in ('log_list', 'log_detail', 'log_file'):
         return mission_files(action, cmd)
+    if action in ('log_tag', 'log_delete', 'log_restore', 'log_purge'):
+        return log_manage(action, cmd)
     if action == 'log_analyze':
         ok, msg = start_analysis(str(cmd.get('folder') or ''))
         return {'ok': ok, 'msg': msg}

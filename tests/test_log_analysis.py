@@ -164,3 +164,61 @@ class ServerActions(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LogKindsAndTrash(ServerActions):
+    def make(self, name, mission=None, flying=None):
+        p = os.path.join(self.tmp, name)
+        os.makedirs(os.path.join(p, 'asc'), exist_ok=True)
+        if mission is not None:
+            json.dump(mission, open(os.path.join(p, 'mission.json'), 'w'))
+        if flying is not None:
+            json.dump({'flying_s': flying}, open(os.path.join(p, 'asc', 'summary.json'), 'w'))
+        return p
+
+    def kinds(self):
+        return {m['folder']: (m['kind'], m['kind_by']) for m in self.run_cmd(action='log_list')['missions']}
+
+    def test_kind_from_mission_flight_and_operator(self):
+        self.make('t1', {'bench': True}); self.make('r1', {'bench': False}); self.make('flew', flying=60); self.make('bench', flying=0)
+        k = self.kinds()
+        self.assertEqual(k['t1'], ('test', 'mission')); self.assertEqual(k['r1'], ('real', 'mission'))
+        self.assertEqual(k['flew'], ('real', 'auto')); self.assertEqual(k['bench'][0], 'test'); self.assertEqual(k['m1'][0], 'test')
+        self.assertTrue(self.run_cmd(action='log_tag', folder='t1', kind='real', operator='Aarav')['ok'])
+        self.assertEqual(self.kinds()['t1'], ('real', 'operator'))
+        self.run_cmd(action='log_tag', folder='t1', kind='auto')
+        self.assertEqual(self.kinds()['t1'], ('test', 'mission'))
+        self.assertFalse(self.run_cmd(action='log_tag', folder='t1', kind='banana')['ok'])
+
+    def test_delete_restore_purge(self):
+        self.make('a'); self.make('b')
+        r = self.run_cmd(action='log_delete', folders=['a', 'b', 'nope'], operator='Aarav')
+        self.assertEqual(sorted(r['moved']), ['a', 'b'])
+        lst = self.run_cmd(action='log_list')
+        self.assertEqual([m['folder'] for m in lst['missions']], ['m1'])            # .trash is hidden
+        names = {t['folder']: t['name'] for t in lst['trash']}
+        self.assertEqual(sorted(names), ['a', 'b'])
+        self.assertTrue(self.run_cmd(action='log_restore', names=[names['a']])['ok'])
+        self.assertIn('a', [m['folder'] for m in self.run_cmd(action='log_list')['missions']])
+        self.assertTrue(self.run_cmd(action='log_purge', names=[names['b']])['ok'])
+        self.assertEqual(self.run_cmd(action='log_list')['trash'], [])
+
+    def test_delete_refuses_while_armed_and_outside_root(self):
+        self.make('a')
+        with mock.patch.dict(srv.telem, {'armed': True}):
+            self.assertFalse(self.run_cmd(action='log_delete', folders=['a'])['ok'])
+        self.assertFalse(self.run_cmd(action='log_delete', folders=['../..'])['ok'])
+        self.assertFalse(self.run_cmd(action='log_delete', folders=[''])['ok'])
+        self.assertTrue(os.path.isdir(self.tmp))
+
+    def test_old_trash_is_purged(self):
+        self.make('a')
+        self.run_cmd(action='log_delete', folders=['a'])
+        t = self.run_cmd(action='log_list')['trash'][0]
+        meta = os.path.join(self.tmp, '.trash', t['name'], '.deleted.json')
+        json.dump({'folder': 'a', 'at': time.time() - 8 * 86400}, open(meta, 'w'))
+        self.assertEqual(self.run_cmd(action='log_list')['trash'], [])
+
+    def test_no_flight_verdict(self):
+        v, f, _ = verdict(base_report(flight={'flying_s': 0}))
+        self.assertTrue(any('No flight' in x['text'] for x in f))
