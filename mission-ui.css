@@ -100,7 +100,7 @@
 /* ── dashboard fault panel additions ──────────────────────────── */
 .fault-panel-item .msn-fault-src { font-size: 9px; opacity: .6; margin-right: 4px; }
 /* acknowledged: still active, but greyed so it no longer looks like a fresh alarm */
-.fault-panel-item.acked { color: var(--msn-grey, #7b8794) !important; opacity: .6; }
+.fault-panel-item.acked { color: #8199ad !important; opacity: .85; }
 .fault-panel-item.acked .fault-panel-item-badge { border-style: dashed; }
 .fault-panel-item.acked .fault-panel-item-msg { text-decoration: none; }
 .fault-panel-item .fault-ack-btn {
@@ -141,3 +141,8 @@
 
 #faultCounter.msn-unacked { animation: msn-flash 1s ease-in-out infinite; }
 #faultCounter.msn-all-acked { color: var(--msn-dim); border-color: rgba(255,255,255,.18); }
+
+/* The fault panel sits inside .top-item, whose `span { color: green }` made every alert look OK. */
+#faultPanel span { color: inherit; font-size: inherit; font-weight: inherit; }
+#faultPanel .fault-panel-item-badge { font-size: 8px; }
+#faultPanel .msn-fault-src, #faultPanel .fault-acked-by { font-size: 9px; }

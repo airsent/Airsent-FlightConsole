@@ -791,7 +791,7 @@ function applyData(d){
   txt('nd-lidar',rngOk?`${rng.toFixed(2)} m`:'-- m');cls('nd-lidar',rngOk?'info':'');
   txt('nd-flow',h.flow!==null?`${h.flow}%`:'--%');cls('nd-flow',h.flow===null?'':h.flow>50?'ok':'warn');
   setState('cellular',h.network?'ok':'off');setBadge('cellular',h.network?'ok':'off',h.type);
-  txt('nd-network-type',h.network?d.network_link.type==='wifi'?d.network_link.ssid||'Wi-Fi':d.network_link.technology||h.type:'No fresh connection report');
+  const nl=d.network_link||{};txt('nd-network-type',h.network?nl.type==='wifi'?nl.ssid||'Wi-Fi':nl.technology||h.type:'No fresh connection report');
   txt('nd-cellular',h.strength);cls('nd-cellular',h.strength==='STRONG'?'ok':h.strength==='MODERATE'?'warn':h.strength==='WEAK'?'err':'');
   if(isActual){
     for(const id of ['pi','rtkbase']){setState(id,'warn');setBadge(id,'warn','NOT REPORTED');}
@@ -1026,7 +1026,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 </script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
-<script src="mission-client.js?v=9"></script>
+<script src="mission-client.js?v=10"></script>
 <script src="mission-ui.js?v=8"></script>
 </body>
 </html>

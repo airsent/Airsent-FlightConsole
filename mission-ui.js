@@ -26,7 +26,7 @@
   function addStyles() {
     if (document.querySelector('link[href^="mission-ui.css"]')) return;
     const link = document.createElement('link');
-    link.rel = 'stylesheet'; link.href = 'mission-ui.css?v=4';
+    link.rel = 'stylesheet'; link.href = 'mission-ui.css?v=5';
     document.head.append(link);
   }
 

@@ -220,7 +220,7 @@ def evaluate_checks(s, engine):
     if cfg['require_rtk']:
         out.append(check('gps_fix', 'GPS', 'GPS fix: RTK fixed', 'prearm', rtk, fix, 'RTK FIX'))
     else:
-        out.append(check('gps_fix', 'GPS', 'GPS fix (RTK not required by config)', 'prearm',
+        out.append(check('gps_fix', 'GPS', 'GPS fix (3D or better)', 'prearm',
                          fix in ('3D FIX', 'DGPS', 'RTK FLOAT', 'RTK FIX'), fix, '3D FIX or better'))
     sats = s.get('sats') or 0
     out.append(check('gps_sats', 'GPS', 'Satellites', 'prearm', sats >= cfg['min_sats'], str(sats), f">= {cfg['min_sats']}"))
