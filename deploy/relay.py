@@ -7,6 +7,11 @@ from presence_auth import token_role
 SECRET = os.environ.get("AIRSENT_PRESENCE_SECRET", "")
 import websockets
 from event_journal import EventJournal
+try:
+    import ai_review                                 # AI flight review (Claude API, key only on the VPS)
+except ImportError:
+    ai_review = None
+AI_BUSY = {'on': False, 'last': 0.0}
 JOURNAL = EventJournal(os.environ.get("AIRSENT_EVENT_DB", "/var/lib/airsent-events/events.sqlite3"))
 
 # ── Shared connection state ───────────────────────────────────────────────────
@@ -129,6 +134,9 @@ async def cmd_browser(ws):
             except (ValueError, AttributeError):
                 await ws.send('{"ok":false,"msg":"Invalid command JSON"}')
                 continue
+            if action == 'ai_analyze':
+                asyncio.ensure_future(handle_ai(ws, command))
+                continue
             quiet = action in QUIET_ACTIONS
             remember(command.get('request_id'), ws)
             if not quiet:
@@ -155,6 +163,38 @@ async def cmd_browser(ws):
     finally:
         browsers["cmd"].discard(ws)
         print(f"[RELAY] Browser cmd disconnected ({len(browsers['cmd'])} remaining)")
+
+async def handle_ai(ws, command):
+    """Answered here on the VPS — the Jetson never sees this request or the API key."""
+    rid = command.get('request_id')
+    loop = asyncio.get_running_loop()
+
+    async def reply(d):
+        try:
+            await ws.send(json.dumps({**d, 'request_id': rid, 'action': 'ai_analyze'}))
+        except Exception:
+            pass
+    if ai_review is None:
+        return await reply({'ok': False, 'msg': 'ai_review.py is not installed on the VPS (run deploy/deploy_vps.sh)'})
+    if AI_BUSY['on']:
+        return await reply({'ok': False, 'msg': 'Another AI review is running — try again in a minute'})
+    if loop.time() - AI_BUSY['last'] < 10:
+        return await reply({'ok': False, 'msg': 'Wait a few seconds between reviews'})
+    AI_BUSY['on'] = True
+    folder = str(command.get('folder', ''))[:120]
+    who = str(command.get('operator', 'Operator'))[:60]
+    JOURNAL.append(f'AI REVIEW REQUESTED: {folder}', who)
+    try:
+        res = await asyncio.to_thread(ai_review.review, command.get('report'), command.get('notes', ''),
+                                      command.get('next_flight', ''))
+    except Exception as e:                           # never take the relay down
+        res = {'ok': False, 'msg': f'AI review failed: {e}'}
+    finally:
+        AI_BUSY['on'], AI_BUSY['last'] = False, loop.time()
+    JOURNAL.append(f"AI REVIEW {'DONE: ' + res['review']['verdict'].upper() if res.get('ok') else 'FAILED: ' + res.get('msg', '')}: {folder}",
+                   'relay (advice only — nothing written to the aircraft)')
+    await reply(res)
+
 
 async def events_browser(ws):
     """Authenticated readers share one journal; viewer sessions cannot append."""

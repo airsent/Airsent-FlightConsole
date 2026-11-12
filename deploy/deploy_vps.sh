@@ -24,11 +24,12 @@ cp ./*.png "$WEB/" 2>/dev/null || true
 mkdir -p "$WEB/vendor" && cp -r ./vendor/. "$WEB/vendor/"     # Leaflet etc. served from our own site, no CDN
 [ -f "$WEB/console-local.js" ] && echo "✓ console-local.js (map key) kept" || echo "⚠ $WEB/console-local.js is missing — the map will have no key (see console-local.example.js)"
 
-cp event_journal.py presence_auth.py shared_state_server.py "$OPT/"
+cp event_journal.py presence_auth.py shared_state_server.py ai_review.py "$OPT/"
 cp "$RELAY" "$RELAY.bak" 2>/dev/null || true
 cp deploy/relay.py "$RELAY"
-python3 -m py_compile "$RELAY" "$OPT/event_journal.py"
+python3 -m py_compile "$RELAY" "$OPT/event_journal.py" "$OPT/ai_review.py"
 systemctl restart airsent-relay
+[ -s /etc/airsent/ai.env ] && echo "✓ AI flight review: API key installed" || echo "ℹ AI flight review not set up yet — run: bash deploy/set_ai_key.sh"
 echo "Web → $WEB · relay → $RELAY · modules → $OPT"
 sleep 2
 for s in airsent-relay airsent-shared-state airsent-presence nginx; do
