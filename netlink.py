@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Airsent link manager: WiFi when it works, cellular when it doesn't.
 
 Runs as root (systemd airsent-netlink). Every second it checks, separately on each link,
