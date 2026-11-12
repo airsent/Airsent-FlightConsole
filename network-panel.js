@@ -85,6 +85,7 @@
       <div class="sub">${n.prefer === 'auto' ? 'AUTO — WiFi first, cellular when WiFi stops reaching the server' : `FORCED ${String(n.prefer).toUpperCase()} — ground testing only`}
         · ${n.switches || 0} switch${n.switches === 1 ? '' : 'es'}</div>
       <div class="modes">${['auto', 'wifi', 'cellular'].map(m => `<button type="button" data-prefer="${m}" class="${n.prefer === m ? 'on' : ''}">${m.toUpperCase()}</button>`).join('')}</div>
+      ${act === 'cellular' && n.back_to_wifi_s > 10 ? `<div class="note" style="color:#ffb800">WiFi has been unstable — it must stay good for ${n.back_to_wifi_s} s before the drone goes back to it.</div>` : ''}
       <h4>WIFI${w.iface ? ' · ' + esc(w.iface) : ''}</h4>
       ${w.iface ? `<div class="row"><span>Server</span>${yes(w.answering)}</div>
         <div class="row"><span>Round trip</span><b>${ms(w.rtt_ms)}</b></div>
@@ -93,7 +94,7 @@
       <h4>CELLULAR${c.iface ? ' · ' + esc(c.iface) : ''}</h4>
       ${c.iface ? `<div class="row"><span>Server</span>${yes(c.answering)}</div>
         <div class="row"><span>Round trip</span><b>${ms(c.rtt_ms)}</b></div>
-        <div class="row"><span>Signal</span><b>${c.percent != null ? c.percent + '%' : '--'}</b></div>
+        <div class="row"><span>Signal</span><b>${c.percent != null ? c.percent + '%' : '--'}${c.rsrp != null ? ` · RSRP ${Math.round(c.rsrp)} dBm` : ''}${c.sinr != null ? ` · SINR ${Math.round(c.sinr)} dB` : ''}</b></div>
         <div class="row"><span>Network</span><b>${esc([c.operator, tech(c.technology)].filter(Boolean).join(' · ') || '--')}</b></div>`
         : '<div class="row"><span>Status</span><b class="bad">NO MODEM</b></div>'}
       <h4>CELLULAR DATA</h4>
