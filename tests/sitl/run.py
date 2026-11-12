@@ -543,6 +543,44 @@ class Run:
         self.expect(os.path.exists(os.path.join(folder, 'pixhawk.bin')), 'no pixhawk.bin in the launch mission folder')
         self.expect(os.path.exists(os.path.join(folder, 'asc', 'summary.json')), 'no ASC summary in the launch mission folder')
 
+    def s_flight1_profile(self):
+        """FLIGHT 1 countdown: 2 m → automatic check → climb to 5 m → 30 s hover → land → safed."""
+        r = self.c.send('mission_create', name='sitl flight 1', total=60, confirm='flight', profile='flight1', timeout=10)
+        self.ok(r, 'mission_create flight1')
+        self.c.send('mission_manual', key='manual_observers', value=True)
+        t0, went, trace, stage = time.time(), False, [], None
+        while time.time() - t0 < 260:
+            self.c.ping()
+            m = self.c.mission_block.get('mission') or {}
+            stage = m.get('stage')
+            if stage in ('gonogo', 'prearm') and not went and not m.get('held'):
+                went = self.c.send('mission_go').get('ok')
+            if m.get('held') and stage not in (None, 'countdown'):
+                raise Failed(f"countdown held: {m.get('hold_reason')} (stage {stage})")
+            trace.append((time.time() - t0, self.v.get('alt') or 0, (m.get('step') or {}).get('name')))
+            if stage in ('landed', 'safed') or (stage == 'standby' and trace and max(a for _, a, _ in trace) > 1):
+                break
+            time.sleep(0.5)
+        steps = [n for _, _, n in trace if n]
+        seen = list(dict.fromkeys(steps))
+        low = [a for _, a, n in trace if n == 'hold_low']
+        high = [a for _, a, n in trace if n == 'hold_high']
+        self.note(f"profile steps seen: {seen}; low hover {min(low or [0]):.1f}–{max(low or [0]):.1f} m, "
+                  f"high hover {min(high or [0]):.1f}–{max(high or [0]):.1f} m, max {max(a for _, a, _ in trace):.1f} m")
+        self.expect(seen[:4] == ['hold_low', 'climb', 'hold_high', 'landing'], f'unexpected step order {seen}')
+        self.expect(low and 1.5 < sum(low) / len(low) < 2.5, 'did not hover at ~2 m')
+        self.expect(high and max(high) > 4.5, 'did not reach 5 m')
+        end = time.time() + 60
+        while time.time() < end and (self.c.mission_block.get('mission') or {}).get('stage') not in ('landed', 'safed'):
+            self.c.ping(); time.sleep(1)
+        st = (self.c.mission_block.get('mission') or {}).get('stage')
+        self.expect(st in ('landed', 'safed'), f'did not land (stage {st})')
+        ev = ' | '.join(e.get('msg', '') for e in (self.c.mission_block.get('mission') or {}).get('events', []))
+        self.expect('CHECK PASSED' in ev, 'no step-check event')
+        folder = self.latest_mission()
+        self.expect(os.path.exists(os.path.join(folder, 'flight1_step_check.json')), 'no flight1_step_check.json')
+        self.c.send('mission_close')
+
     def s_pixhawk_reboot_reconnect(self):
         """Pixhawk power-cycles on the ground: the server notices, reconnects and streams again."""
         n0 = self.rig.server_log().count('Pixhawk connected')
@@ -569,7 +607,7 @@ class Run:
         self.note(f"E-STOP answered in {time.time() - t0:.2f} s during a param read: {r.get('msg')}")
         self.v.wait(lambda s: s['alt'] < 0.5, 20)
 
-    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_params_roundtrip', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
+    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_params_roundtrip', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
                  's_normal_disarm_refused_in_air', 's_writes_blocked_when_armed', 's_joystick_and_stale_stop', 's_goto_and_rtl',
                  's_console_loss_hold_then_rtl', 's_console_back_cancels', 's_jetson_heartbeat_failsafe',
                  's_geofence', 's_estop_while_uploading', 's_battery_failsafe', 's_pixhawk_reboot_reconnect']

@@ -75,7 +75,12 @@
       </div>
       <label>MISSION NAME</label><input id="msnName" maxlength="48" placeholder="mission 1" autocomplete="off">
       <label>TYPE OF RUN</label><select id="msnKind"><option value="flight">REAL FLIGHT — all checks enforced, takes off at T-0</option>
+        <option value="flight1">FLIGHT 1 — real checks · take off to 2 m · automatic check · climb to 5 m · hover 30 s · land</option>
         <option value="bench">TEST MODE — checks bypassed (GPS / battery / parameters / sensors) · force-arms at T-10 · TAKES OFF at T-0</option></select>
+      <div class="msn-note" id="msnKindNote" style="display:none;font:10px var(--msn-mono, monospace);color:#9fb3c4;margin:4px 0 2px;line-height:1.5">
+        FLIGHT 1: hovers 20 s at 2 m while the Jetson checks height hold (±0.6 m), tilt (&lt;12°), vibration (&lt;30), drift (&lt;1.5 m),
+        battery sag and EKF. All good → climbs to 5 m and hovers 30 s, then lands. Anything wrong → lands from 2 m.
+        The RC pilot can take over at any time (mode switch) — the Jetson then stops sending commands.</div>
       <label>AFTER TAKEOFF</label><select id="msnRoute"><option value="">HOVER — the pilot flies from the console</option>${routeOption()}</select>
       <label>BATTERY PACK ID (OPTIONAL)</label><input id="msnPack" maxlength="40" placeholder="e.g. TATTU-03" autocomplete="off">
       <label>TYPE <b style="color:#ffb800" id="msnWord">flight</b> TO CONFIRM</label><input id="msnConfirm" autocomplete="off" spellcheck="false">
@@ -85,10 +90,11 @@
     ($('msnOp').value ? $('msnName') : $('msnOp')).focus();
     $('msnCancel').onclick = () => d.remove();
     $('msnKind').onchange = () => {
-      const bench = $('msnKind').value === 'bench';
+      const kind = $('msnKind').value, bench = kind === 'bench';
       $('msnWord').textContent = bench ? 'test' : 'flight';
-      $('msnRoute').disabled = bench;
-      d.querySelector('h3').textContent = bench ? 'START A TEST FLIGHT (CHECKS BYPASSED)' : 'START A REAL MISSION';
+      $('msnRoute').disabled = bench || kind === 'flight1';
+      $('msnKindNote').style.display = kind === 'flight1' ? '' : 'none';
+      d.querySelector('h3').textContent = bench ? 'START A TEST FLIGHT (CHECKS BYPASSED)' : kind === 'flight1' ? 'START FLIGHT 1 (2 m → 5 m → LAND)' : 'START A REAL MISSION';
     };
     const submit = async () => {
       const op = $('msnOp').value.trim(), name = $('msnName').value.trim();
@@ -96,7 +102,8 @@
       M.operatorName = op;
       $('msnStart').disabled = true;
       const r = await M.send('mission_create', { name, total: Number($('msnTotal').value), pack_id: $('msnPack').value.trim(), confirm: $('msnConfirm').value,
-        route: $('msnRoute').value === 'route', bench: $('msnKind').value === 'bench' });
+        route: $('msnKind').value === 'flight' && $('msnRoute').value === 'route', bench: $('msnKind').value === 'bench',
+        profile: $('msnKind').value === 'flight1' ? 'flight1' : undefined });
       $('msnStart').disabled = false;
       if (!r.ok) { $('msnErr').textContent = r.msg || 'Could not start'; return; }
       d.remove(); toast(r.msg);
@@ -392,9 +399,39 @@
     if (!on && benchEl) { benchEl.remove(); benchEl = null; }
   }
 
+  // FLIGHT 1: live progress strip on every page while the profile runs.
+  let f1El = null;
+  const F1_STEPS = [['hold_low', 'CHECK AT 2 m'], ['climb', 'CLIMB'], ['hold_high', 'HOVER 5 m'], ['landing', 'LAND']];
+  function renderFlight1(s) {
+    const st = s && s.step, on = !!(s && s.profile === 'flight1' && s.stage && !['standby', 'safed', 'aborted'].includes(s.stage));
+    if (!on) { if (f1El) { f1El.remove(); f1El = null; } return; }
+    if (!f1El) {
+      f1El = document.createElement('div');
+      f1El.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:34px;z-index:10049;background:rgba(6,13,20,.94);border:1px solid rgba(0,200,255,.5);' +
+        'padding:6px 12px;font:11px "Share Tech Mono",monospace;letter-spacing:1px;color:#c7d6e3;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.6);max-width:92vw';
+      document.body.append(f1El);
+    }
+    const plan = (st && st.plan) || { low_alt: 2, low_hold: 20, high_alt: 5, high_hold: 30 };
+    const cur = st ? st.name : (s.stage === 'takeoff' ? 'takeoff' : null);
+    const idx = F1_STEPS.findIndex(x => x[0] === cur);
+    const steps = F1_STEPS.map(([k, label], i) => {
+      const done = idx > i || cur === 'done', now = k === cur;
+      const col = now ? (st && st.failed && k === 'landing' ? '#ffb800' : '#00c8ff') : done ? '#00e383' : '#4d6478';
+      return `<span style="color:${col}">${done ? '✓' : now ? '▶' : '·'} ${label}${now && st && st.remaining != null ? ' ' + Math.ceil(st.remaining) + 's' : ''}</span>`;
+    }).join('<span style="color:#4d6478"> → </span>');
+    let msg = '';
+    if (!st) msg = s.stage === 'takeoff' ? `taking off to ${plan.low_alt} m` : `staged first flight · ${plan.low_alt} m check → ${plan.high_alt} m hover ${plan.high_hold}s → land`;
+    else if (st.name === 'released') msg = `<span style="color:#ffb800">HANDED TO THE PILOT — ${esc(st.why || '')}</span>`;
+    else if (st.failed) msg = `<span style="color:#ffb800">${esc(st.why || '')}</span>`;
+    else if (st.checks && st.checks.ok && st.name !== 'hold_low') { const c = st.checks.summary || {}; msg = `<span style="color:#00e383">2 m check passed</span> · height ±${c.alt_err_max} m · tilt ${c.tilt_max}° · vib ${c.vib_max}`; }
+    else if (st.name === 'done') msg = 'FLIGHT 1 complete';
+    f1El.innerHTML = `<span style="color:#00c8ff;font-weight:700">FLIGHT 1</span> &nbsp; ${steps}${msg ? `<div style="margin-top:3px;font-size:10px;color:#9fb3c4">${msg}</div>` : ''}`;
+  }
+
   function render() {
     const s = M.state, list = faultList();
     renderBench(s);
+    renderFlight1(s);
     renderDashboardFaults(list);
     renderBadge(pilotBadge, list);
     renderBadge(overlayBadge, list);
