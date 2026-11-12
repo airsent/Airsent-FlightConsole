@@ -75,7 +75,7 @@
       </div>
       <label>MISSION NAME</label><input id="msnName" maxlength="48" placeholder="mission 1" autocomplete="off">
       <label>TYPE OF RUN</label><select id="msnKind"><option value="flight">REAL FLIGHT — all checks enforced, takes off at T-0</option>
-        <option value="bench">BENCH TEST — PROPS OFF · arms at T-10, never takes off · GPS / battery / parameter / sensor checks not enforced</option></select>
+        <option value="bench">TEST MODE — checks bypassed (GPS / battery / parameters / sensors) · force-arms at T-10 · TAKES OFF at T-0</option></select>
       <label>AFTER TAKEOFF</label><select id="msnRoute"><option value="">HOVER — the pilot flies from the console</option>${routeOption()}</select>
       <label>BATTERY PACK ID (OPTIONAL)</label><input id="msnPack" maxlength="40" placeholder="e.g. TATTU-03" autocomplete="off">
       <label>TYPE <b style="color:#ffb800" id="msnWord">flight</b> TO CONFIRM</label><input id="msnConfirm" autocomplete="off" spellcheck="false">
@@ -86,9 +86,9 @@
     $('msnCancel').onclick = () => d.remove();
     $('msnKind').onchange = () => {
       const bench = $('msnKind').value === 'bench';
-      $('msnWord').textContent = bench ? 'bench' : 'flight';
+      $('msnWord').textContent = bench ? 'test' : 'flight';
       $('msnRoute').disabled = bench;
-      d.querySelector('h3').textContent = bench ? 'START A BENCH TEST (PROPS OFF)' : 'START A REAL MISSION';
+      d.querySelector('h3').textContent = bench ? 'START A TEST FLIGHT (CHECKS BYPASSED)' : 'START A REAL MISSION';
     };
     const submit = async () => {
       const op = $('msnOp').value.trim(), name = $('msnName').value.trim();
@@ -354,7 +354,7 @@
       benchEl = document.createElement('div');
       benchEl.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:10050;background:repeating-linear-gradient(45deg,#ffb800 0 18px,#1a1300 18px 36px);' +
         'color:#000;font:700 12px "Share Tech Mono",monospace;letter-spacing:2px;text-align:center;padding:4px;pointer-events:none';
-      benchEl.innerHTML = '<span style="background:#ffb800;padding:2px 10px">BENCH TEST — PROPS OFF · FORCE-ARMS AT T-10 · NO TAKEOFF · GPS / BATTERY / PARAMETER CHECKS NOT ENFORCED</span>';
+      benchEl.innerHTML = '<span style="background:#ffb800;padding:2px 10px">TEST MODE — CHECKS BYPASSED · FORCE-ARMS AT T-10 · TAKES OFF AT T-0 · RC KILL SWITCH STILL ACTIVE</span>';
       document.body.append(benchEl);
     }
     if (!on && benchEl) { benchEl.remove(); benchEl = null; }
