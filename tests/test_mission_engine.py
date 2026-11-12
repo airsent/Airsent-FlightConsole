@@ -100,14 +100,12 @@ class MissionEngineTests(unittest.TestCase):
         self.assertIn("'test'", r['msg'])                         # own confirm word
         r = self.send('mission_create', name='test', confirm='test', total=180, bench=True)
         self.assertTrue(r['ok'], r)
-        for key in ('manual_airspace', 'manual_observers', 'manual_payload'):
-            self.send('mission_manual', key=key, value=True)
+        # no manual confirmations, no GO press: nothing holds in test mode
         self.run_to(59.5)
         self.assertFalse(self.engine.held, self.engine.hold_reason)
         gps = next(c for c in self.engine.checks if c['id'] == 'gps_fix')
         self.assertEqual(gps['raw'], 'warn')
         self.assertIn('TEST MODE', gps['note'])
-        self.assertTrue(self.send('mission_go')['ok'])
         self.gate_pwm = 1000
         self.run_to(9.5)
         self.assertEqual(self.engine.stage, 'armed')
@@ -121,13 +119,14 @@ class MissionEngineTests(unittest.TestCase):
         self.assertFalse(any('wind' in k for k in __import__('mission_engine').MANUAL_CHECKS))
         self.assertFalse(self.send('mission_manual', key='manual_wind', value=True)['ok'])
 
-    def test_bench_still_enforces_the_rc_gate(self):
-        self.gate_pwm = 1500                                       # switch not in SAFE
+    def test_test_mode_still_needs_the_kill_switch_released_to_arm(self):
         self.send('mission_ping')
         self.tick()
-        r = self.send('mission_create', name='bench', confirm='test', total=180, bench=True)
-        self.assertFalse(r['ok'])
-        self.assertIn('RC arm switch', r['msg'])
+        self.assertTrue(self.send('mission_create', name='t', confirm='test', total=180, bench=True)['ok'])
+        self.run_to(9.5)                                           # switch still in SAFE (motor stop active)
+        self.assertTrue(self.engine.held)
+        self.assertIn('RC arm switch', self.engine.hold_reason)
+        self.assertNotIn(('arm', True), self.vehicle.calls)
 
     def test_real_flight_is_not_waived(self):
         self.overrides = {'fix_type': '3D FIX'}

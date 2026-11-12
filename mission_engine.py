@@ -92,20 +92,19 @@ def default_config(sim=False):
     }
 
 
-# TEST MODE (mission flag 'bench'): the full sequence with checks bypassed — force-arms at
-# T-10 and TAKES OFF at T-0 (operator's call for early test flights). Shown but not enforced:
-# GPS/RTK, EKF, battery, parameter set, ArduPilot pre-arm, sensors, motors, cameras, network quality.
-# Still enforced (you can't fly safely without them): Pixhawk link, VPS relay, pilot console,
-# the RC kill switch + receiver, disarmed-before-arm / armed-confirmed, storage, obstacles.
-BENCH_WAIVED_GROUPS = {'GPS', 'Estimator', 'Battery', 'Config', 'Sensors', 'Motors', 'Jetson'}
-BENCH_WAIVED_IDS = {'network'}
-BENCH_KEEP = {'disk'}
+# TEST MODE (mission flag 'bench'), operator's call for early test flights: NO holds from the
+# checks — every check is shown but bypassed, including the manual confirmations and the GO poll.
+# Force-arms at T-10 and takes off at T-0. Only what physically decides whether it can fly stays:
+#   pixhawk        — no link, no commands at all
+#   rc_gate_arm    — the RC kill switch (Motor Emergency Stop): in SAFE the Pixhawk won't spin the motors
+#   armed_confirmed — it can't take off unless the Pixhawk actually armed
+TEST_KEEP = {'pixhawk', 'rc_gate_arm', 'armed_confirmed'}
 
 
 def bench_waive(checks):
     out = []
     for c in checks:
-        if c['raw'] == 'fail' and (c['group'] in BENCH_WAIVED_GROUPS or c['id'] in BENCH_WAIVED_IDS) and c['id'] not in BENCH_KEEP:
+        if c['raw'] == 'fail' and c['id'] not in TEST_KEEP:
             c = {**c, 'raw': 'warn', 'note': ('TEST MODE: bypassed' + (' · ' + c['note'] if c.get('note') else ''))}
         out.append(c)
     return out
