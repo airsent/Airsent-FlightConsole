@@ -253,7 +253,7 @@
         checks: checks().map(c => ({ ...c, status: (st.stage !== 'standby' && lvl >= order.indexOf(gateStage[c.gate])) || c.raw === 'pass' ? c.raw : 'pending' })),
         motors: [1, 2, 3, 4].map(i => ({ ch: i, rpm: st.armed ? 1480 + i * 8 + (st.alt > 0 ? 2600 : 0) : 0, current: st.armed ? (st.alt > 0 ? 9.5 : 0.8) : 0, connected: true, status: 0 })),
         events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt,
-        config: { takeoff_alt: 5, require_rtk: false, require_esc_telemetry: true, rc_gate_channel: 7, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
+        config: { takeoff_alt: 5, require_rtk: false, require_esc_telemetry: false, rc_gate_channel: 7, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
       };
     }
     function publish() {

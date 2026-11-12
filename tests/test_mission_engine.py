@@ -143,6 +143,54 @@ class MissionEngineTests(unittest.TestCase):
         ids = {c['id'] for c in self.engine.checks}
         self.assertNotIn('obstacles', ids)
 
+    def test_soft_checks_warn_instead_of_holding(self):
+        # LiDAR inside its min range on the ground (reads 0), battery % estimate low, front camera
+        # offline, no ESC telemetry: all warnings now — none of them holds a real countdown.
+        self.config.update(require_rtk=False, require_esc_telemetry=False)
+        self.engine = self.make_engine()
+        self.overrides = {'rangefinder': 0.0, 'battery': 35, 'front_cam_active': False,
+                          'esc_telemetry': {'connected': False, 'channels': []}}
+        self.create()
+        self.run_to(61)
+        self.assertFalse(self.engine.held, self.engine.hold_reason)
+        by = {c['id']: c for c in self.engine.checks}
+        self.assertEqual(by['lidar']['raw'], 'pass')
+        self.assertEqual(by['lidar']['value'], 'LIVE (below min range)')
+        self.assertEqual(by['battery_pct']['raw'], 'warn')
+        self.assertEqual(by['front_cam']['raw'], 'warn')
+        self.assertEqual(by['motor_health']['raw'], 'warn')
+
+    def test_hard_checks_still_hold(self):
+        self.config.update(require_rtk=False, require_esc_telemetry=False)
+        self.engine = self.make_engine()
+        self.overrides = {'sensor_ages': {'rangefinder': 10, 'of': 0.1}}       # LiDAR stopped reporting
+        self.create()
+        self.run_to(170)
+        self.assertTrue(self.engine.held)
+        self.assertIn('LiDAR', self.engine.hold_reason)
+
+    def test_battery_voltage_still_holds(self):
+        self.overrides = {'voltage': 21.0}                                     # voltage is the hard battery check
+        self.create()
+        self.run_to(170)
+        self.assertTrue(self.engine.held)
+        self.assertIn('voltage', self.engine.hold_reason.lower())
+
+    def test_esc_reporting_a_stopped_motor_still_holds(self):
+        self.config.update(require_esc_telemetry=False)
+        self.engine = self.make_engine()
+        self.create()
+        self.run_to(59.5)
+        self.assertTrue(self.send('mission_go')['ok'])
+        self.gate_pwm = 1000
+        self.run_to(9.5)
+        self.overrides = {'esc_telemetry': {'connected': True, 'channels': [
+            {'channel': i, 'connected': True, 'rpm': 0 if i == 3 else 1500, 'status': 0} for i in range(1, 9)]}}
+        self.run_to(0)
+        self.tick(0.4)
+        self.assertTrue(self.engine.held)
+        self.assertIn('Motor health', self.engine.hold_reason)
+
     def test_3d_fix_is_enough_without_rtk(self):
         self.config.update(require_rtk=False)
         self.engine = self.make_engine()

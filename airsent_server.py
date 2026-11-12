@@ -1349,7 +1349,7 @@ def system_fault_conditions(s, now):
             c['sys:frontcam'] = ('warning', 'Camera', 'Front camera (OAK-D) offline')
         if not s.get('down_cam_active'):
             c['sys:downcam'] = ('warning', 'Camera', 'Down camera offline')
-        if MISSION_CONFIG['require_esc_telemetry'] and not (s.get('esc_telemetry') or {}).get('connected'):
+        if not (s.get('esc_telemetry') or {}).get('connected'):
             c['sys:esc'] = ('warning', 'ESC', 'ESC telemetry (Datalink) not connected')
     temp = s.get('jetson_temp')
     if isinstance(temp, (int, float)) and temp >= MISSION_CONFIG['max_jetson_temp']:

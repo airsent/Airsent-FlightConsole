@@ -72,7 +72,9 @@ def default_config(sim=False):
         'recycle_after': 120,        # hold longer than this -> back to T-3:00
         'min_total': 60, 'max_total': 900,
         'require_rtk': env_flag('AIRSENT_REQUIRE_RTK', False),   # 3D fix is enough to lift off; RTK is for precision landing
-        'require_esc_telemetry': env_flag('AIRSENT_REQUIRE_ESC_TELEMETRY', True),
+        # Missing ESC telemetry = warning (Datalink decoding not fully verified yet). When it IS
+        # reporting and shows a motor not spinning / uneven / ESC fault, that still holds.
+        'require_esc_telemetry': env_flag('AIRSENT_REQUIRE_ESC_TELEMETRY', False),
         'rc_gate_channel': int(channel) if channel and channel.isdigit() else None,
         # ArduPilot "Motor Emergency Stop" (RCx_OPTION=31): HIGH = stopped.
         'rc_gate_arm_max_pwm': int(env_float('AIRSENT_RC_GATE_ARM_MAX_PWM', 1300)),
@@ -237,9 +239,13 @@ def evaluate_checks(s, engine):
                      isinstance(volt, (int, float)) and volt >= cfg['min_arm_voltage'],
                      f"{volt:.1f} V" if isinstance(volt, (int, float)) and volt > 1 else '--', f">= {cfg['min_arm_voltage']} V"))
     batt = s.get('battery')
-    out.append(check('battery_pct', 'Battery', 'Battery remaining', 'prearm',
+    # % is the Pixhawk's estimate from mAh counted since power-on (wrong after a reboot or with a
+    # part-used pack), so it's a warning; voltage above is the hard check.
+    out.append(check('battery_pct', 'Battery', 'Battery remaining (estimate)', 'prearm',
                      isinstance(batt, (int, float)) and batt >= cfg['min_battery_pct'],
-                     f"{batt:.0f}%" if isinstance(batt, (int, float)) else '--', f">= {cfg['min_battery_pct']:.0f}%"))
+                     f"{batt:.0f}%" if isinstance(batt, (int, float)) else '--', f">= {cfg['min_battery_pct']:.0f}%",
+                     warn=True, note='' if isinstance(batt, (int, float)) and batt >= cfg['min_battery_pct'] else
+                     'estimate only — battery voltage is the hard check'))
 
     for key, label in (('imu', 'IMU'), ('baro', 'Barometer')):
         st = sh.get(key)
@@ -250,9 +256,11 @@ def evaluate_checks(s, engine):
                      note='' if mag == 'ok' else 'compass health not reported by the Pixhawk; ArduPilot pre-arm still covers it'))
     ages = s.get('sensor_ages') or {}
     rng_age = ages.get('rangefinder')
-    out.append(check('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm',
-                     rng_age is not None and rng_age < 3 and (s.get('rangefinder') or 0) > 0,
-                     f"{s.get('rangefinder'):.2f} m" if (s.get('rangefinder') or 0) > 0 else 'OFFLINE', 'live'))
+    # Live = still reporting. On the ground the H-Flow can be inside its minimum range and read 0 m.
+    rng_live = rng_age is not None and rng_age < 3
+    rng = s.get('rangefinder') or 0
+    out.append(check('lidar', 'Sensors', 'LiDAR rangefinder (H-Flow)', 'prearm', rng_live,
+                     (f"{rng:.2f} m" if rng > 0 else 'LIVE (below min range)') if rng_live else 'OFFLINE', 'reporting'))
     of_age = ages.get('of')
     out.append(check('flow', 'Sensors', 'Optical flow (H-Flow)', 'prearm',
                      of_age is not None and of_age < 3,
@@ -273,10 +281,12 @@ def evaluate_checks(s, engine):
         out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm', True, 'SIM (no camera)', 'streaming'))
         out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', True, 'SIM (no camera)', 'streaming'))
     else:
-        out.append(check('front_cam', 'Jetson', 'Front camera (obstacle detection)', 'prearm',
-                         bool(s.get('front_cam_active')), 'STREAMING' if s.get('front_cam_active') else 'OFFLINE', 'streaming'))
+        # Warning only: with no obstacle check at T-0 it's for recording / the pilot's view.
+        out.append(check('front_cam', 'Jetson', 'Front camera', 'prearm',
+                         bool(s.get('front_cam_active')), 'CONNECTED' if s.get('front_cam_active') else 'OFFLINE', 'connected',
+                         warn=True))
         out.append(check('down_cam', 'Jetson', 'Down camera', 'prearm', bool(s.get('down_cam_active')),
-                         'STREAMING' if s.get('down_cam_active') else 'OFFLINE', 'streaming', warn=True))
+                         'CONNECTED' if s.get('down_cam_active') else 'OFFLINE', 'connected', warn=True))
     temp = s.get('jetson_temp')
     out.append(check('jetson_temp', 'Jetson', 'Jetson temperature', 'prearm',
                      isinstance(temp, (int, float)) and temp < cfg['max_jetson_temp'],
