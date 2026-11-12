@@ -1270,6 +1270,10 @@ def save_ai_review(cmd):
         cur['reviews'] = (cur.get('reviews') or [])[-9:] + [{**review, 'saved_at': time.time(), 'by': who}]
     if isinstance(applied, dict):
         cur['applied'] = (cur.get('applied') or [])[-49:] + [{**applied, 'at': time.time(), 'by': who}]
+    if isinstance(cmd.get('compare'), dict):
+        cur['compares'] = (cur.get('compares') or [])[-4:] + [{**cmd['compare'], 'saved_at': time.time(), 'by': who}]
+    if isinstance(cmd.get('qa'), dict):
+        cur['qa'] = (cur.get('qa') or [])[-19:] + [{**cmd['qa'], 'saved_at': time.time(), 'by': who}]
     blob = json.dumps(cur, indent=1)
     if len(blob) > 400_000:
         return {'ok': False, 'msg': 'Review too large to store'}
@@ -1824,7 +1828,7 @@ def _process_command(raw):
             return {'ok': False, 'msg': 'AI review runs on the VPS — open the console at console.airsent.tech'}
         if not os.environ.get('ANTHROPIC_API_KEY'):
             return {'ok': False, 'msg': 'AI review runs on the VPS — open the console at console.airsent.tech (this Jetson has no API key)'}
-        return ai_review.review(cmd.get('report'), cmd.get('notes', ''), cmd.get('next_flight', ''))
+        return ai_review.run(cmd)
 
     with mav_lock:
         mav = mav_conn

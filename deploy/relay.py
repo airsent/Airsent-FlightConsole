@@ -183,15 +183,15 @@ async def handle_ai(ws, command):
     AI_BUSY['on'] = True
     folder = str(command.get('folder', ''))[:120]
     who = str(command.get('operator', 'Operator'))[:60]
-    JOURNAL.append(f'AI REVIEW REQUESTED: {folder}', who)
+    JOURNAL.append(f"AI {str(command.get('mode') or 'review').upper()} REQUESTED: {folder}", who)
     try:
-        res = await asyncio.to_thread(ai_review.review, command.get('report'), command.get('notes', ''),
-                                      command.get('next_flight', ''))
+        res = await asyncio.to_thread(ai_review.run, command)
     except Exception as e:                           # never take the relay down
         res = {'ok': False, 'msg': f'AI review failed: {e}'}
     finally:
         AI_BUSY['on'], AI_BUSY['last'] = False, loop.time()
-    JOURNAL.append(f"AI REVIEW {'DONE: ' + res['review']['verdict'].upper() if res.get('ok') else 'FAILED: ' + res.get('msg', '')}: {folder}",
+    mode = str(command.get('mode') or 'review').upper()
+    JOURNAL.append(f"AI {mode} {'DONE' if res.get('ok') else 'FAILED: ' + res.get('msg', '')}: {folder}",
                    'relay (advice only — nothing written to the aircraft)')
     await reply(res)
 

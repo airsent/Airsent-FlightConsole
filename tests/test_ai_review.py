@@ -118,3 +118,48 @@ class Review(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CompareAndAsk(unittest.TestCase):
+    FLIGHTS = [{'name': 'Hover 1', 'folder': 'a', 'report': {**REPORT, 'verdict': 'caution'}, 'applied': [{'values': {'INS_HNTCH_ENABLE': 1}}]},
+               {'name': 'Hover 2', 'folder': 'b', 'report': {**REPORT, 'params': {**REPORT['params'], 'INS_HNTCH_ENABLE': 1}}}]
+
+    def test_compare(self):
+        cap = {}
+        out = {'verdict': 'go', 'headline': 'Notch worked', 'summary': 's', 'improved': ['vibration'], 'worse': [],
+               'change_effects': [{'change': 'INS_HNTCH_ENABLE 0→1', 'effect': 'gyro peak gone', 'result': 'improved'}],
+               'proposals': [{'param': 'FENCE_ENABLE', 'value': 0, 'reason': 'x', 'confidence': 'low', 'recommended': True}],
+               'before_next_flight': [], 'next_flight_plan': 'staircase', 'data_gaps': []}
+        r = ar.compare(self.FLIGHTS, api_key='k', opener=opener_for(out, cap))
+        self.assertTrue(r['ok'], r)
+        body = json.loads(cap['req'].data)
+        self.assertIn('Flight A: Hover 1', body['messages'][0]['content'])
+        self.assertIn('Flight B: Hover 2', body['messages'][0]['content'])
+        self.assertIn('comparing several flights', body['system'])
+        self.assertFalse(r['compare']['proposals'][0]['allowed'])            # safety params still blocked
+        self.assertEqual(r['compare']['meta']['flights'], ['a', 'b'])
+
+    def test_compare_needs_two(self):
+        self.assertFalse(ar.compare(self.FLIGHTS[:1], api_key='k')['ok'])
+
+    def test_compare_verdict_floor_uses_latest_flight(self):
+        fl = [self.FLIGHTS[0], {**self.FLIGHTS[1], 'report': {**REPORT, 'verdict': 'no_go'}}]
+        out = {'verdict': 'go', 'headline': '', 'summary': '', 'improved': [], 'worse': [], 'change_effects': [],
+               'proposals': [], 'before_next_flight': [], 'next_flight_plan': '', 'data_gaps': []}
+        self.assertEqual(ar.compare(fl, api_key='k', opener=opener_for(out))['compare']['verdict'], 'no_go')
+
+    def test_ask(self):
+        r = ar.ask('Why did it drift?', self.FLIGHTS[:1], api_key='k',
+                   opener=opener_for({'answer': 'Wind', 'confidence': 'medium', 'followups': []}))
+        self.assertEqual(r['answer']['answer'], 'Wind')
+        self.assertEqual(r['answer']['question'], 'Why did it drift?')
+        self.assertFalse(ar.ask('', self.FLIGHTS, api_key='k')['ok'])
+
+    def test_recommended_flag_kept(self):
+        p = ar.check_proposals([{'param': 'INS_HNTCH_FREQ', 'value': 70, 'recommended': True}], {})
+        self.assertTrue(p[0]['recommended'])
+
+    def test_run_dispatch(self):
+        os.environ.pop('ANTHROPIC_API_KEY', None)
+        for mode in ('review', 'compare', 'ask'):
+            self.assertIn('ANTHROPIC_API_KEY', ar.run({'mode': mode, 'report': REPORT, 'flights': self.FLIGHTS, 'question': 'q'})['msg'])

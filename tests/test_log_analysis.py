@@ -91,6 +91,13 @@ class RealLog(unittest.TestCase):
             self.assertGreater(rep['flight']['flying_s'], 30)
             self.assertIn(rep['verdict'], ('go', 'caution', 'no_go'))
             self.assertLess(len(json.dumps(rep)), 60000)        # small enough to send to the reviewer
+            ser = json.load(open(os.path.join(tmp, 'analysis', 'series.json')))
+            for k in ('alt', 'alt_target', 'throttle', 'roll', 'roll_des', 'm1', 'm4', 'vibe_x', 'volt', 'curr', 'pos_err'):
+                self.assertIn(k, ser['series'])
+            self.assertEqual(ser['t0_offset_s'], -15.0)            # aligned to take-off
+            self.assertTrue(ser['spectrum'] and ser['modes'])
+            self.assertTrue(rep['has_series'])
+            self.assertNotIn('_curve', rep['spectrum'])
 
 
 _argv = sys.argv

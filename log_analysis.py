@@ -268,9 +268,14 @@ def gyro_spectrum(batch, flying, hover):
         sel = (fb >= a) & (fb < b)
         if sel.any():
             shape.append([round(float((a * b) ** 0.5), 1), float(f'{float(ab[sel].max()):.3g}')])
+    # ~300-point curve for the charts (max per bin, so peaks survive the downsampling)
+    nb = 300
+    step = max(1, len(fb) // nb)
+    curve = [[round(float(fb[i:i + step].mean()), 1), float(f'{float(ab[i:i + step].max()):.4g}')]
+             for i in range(0, len(fb), step)]
     return {'available': True, 'sensor': 'gyro' if kind == 1 else 'accel', 'window': use, 'blocks': len(blocks[use]),
             'sample_rate_hz': rate, 'resolution_hz': round(rate / nfft, 2), 'noise_floor': float(f'{floor:.3g}'),
-            'peaks': picked, 'shape': shape}
+            'peaks': picked, 'shape': shape, '_curve': curve}
 
 
 def analyse(path, progress=None):
@@ -403,6 +408,12 @@ def analyse(path, progress=None):
     r['events'] = {'errors': errs[:50], 'messages': msgs[:80]}
 
     r['spectrum'] = gyro_spectrum(batch, flying, hover)
+    curve = r['spectrum'].pop('_curve', None)
+    series = export_series(d, armed, flying, r)
+    if series is not None:
+        series['spectrum'] = curve
+        series['peaks'] = r['spectrum'].get('peaks')
+    r['_series'] = series
     findings, proposals = rules(r)
     r['findings'], r['proposals'] = findings, proposals
     r['verdict'] = ('no_go' if any(f['level'] == 'critical' for f in findings)
@@ -411,6 +422,109 @@ def analyse(path, progress=None):
     if progress:
         progress(1.0)
     return r
+
+
+SERIES_DT = 0.5           # seconds per point in series.json
+
+
+def export_series(d, armed, flying, report):
+    """Down-sampled time series for the Logs page charts, t = seconds since the first take-off
+    (so flights line up when compared). Mean per bucket; max for vibration."""
+    if flying.spans:
+        t0 = flying.spans[0][0]
+        start, end = t0 - 15e6, flying.spans[-1][1] + 15e6
+    elif armed.spans:
+        t0 = armed.spans[0][0]
+        start, end = t0 - 5e6, armed.spans[-1][1] + 5e6
+    else:
+        return None
+    nb = int((end - start) / 1e6 / SERIES_DT) + 1
+    if nb > 7200:                                   # very long log: coarser buckets
+        return export_series_coarse(d, start, end, t0, report)
+    return _bucket(d, start, end, t0, SERIES_DT, report)
+
+
+def export_series_coarse(d, start, end, t0, report):
+    return _bucket(d, start, end, t0, (end - start) / 1e6 / 7200, report)
+
+
+def _bucket(d, start, end, t0, dt, report):
+    nb = int((end - start) / 1e6 / dt) + 1
+    acc = {}
+
+    def put(key, t, v, how='mean'):
+        if v is None or not (start <= t <= end):
+            return
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(v):
+            return
+        i = int((t - start) / 1e6 / dt)
+        a = acc.setdefault(key, [None] * nb)
+        cur = a[i]
+        if how == 'max':
+            a[i] = v if cur is None else max(cur, v)
+        else:
+            a[i] = [v, 1] if cur is None else [cur[0] + v, cur[1] + 1]
+
+    params = report.get('params', {})
+    pmin, pmax = params.get('MOT_PWM_MIN') or 1000, params.get('MOT_PWM_MAX') or 2000
+    if pmax <= pmin:
+        pmin, pmax = 1000, 2000
+    for c in d['CTUN']:
+        put('alt', c.TimeUS, c.Alt)
+        put('alt_target', c.TimeUS, c.DAlt)
+        put('throttle', c.TimeUS, (c.ThO or 0) * 100)
+    for a in d['ATT']:
+        put('roll', a.TimeUS, a.Roll)
+        put('roll_des', a.TimeUS, a.DesRoll)
+        put('pitch', a.TimeUS, a.Pitch)
+        put('pitch_des', a.TimeUS, a.DesPitch)
+        put('yaw_err', a.TimeUS, abs(_wrap180(a.Yaw - a.DesYaw)), 'max')
+    for o in d['RCOU']:
+        for n in (1, 2, 3, 4):
+            put(f'm{n}', o.TimeUS, (getattr(o, f'C{n}') - pmin) / (pmax - pmin) * 100)
+    for v in d['VIBE']:
+        if v.IMU == 0:
+            put('vibe_x', v.TimeUS, v.VibeX, 'max')
+            put('vibe_y', v.TimeUS, v.VibeY, 'max')
+            put('vibe_z', v.TimeUS, v.VibeZ, 'max')
+    for b in d['BAT']:
+        if getattr(b, 'Inst', 0) == 0:
+            put('volt', b.TimeUS, b.Volt)
+            put('curr', b.TimeUS, b.Curr)
+    for n, e in zip(d['PSCN'], d['PSCE']):
+        put('speed', n.TimeUS, math.hypot(n.VN, e.VE))
+        put('pos_err', n.TimeUS, math.hypot(n.PN - n.TPN, e.PE - e.TPE), 'max')
+    for g in d['GPS']:
+        if getattr(g, 'I', 0) == 0:
+            put('sats', g.TimeUS, g.NSats)
+    out = {}
+    for k, a in acc.items():
+        vals = []
+        for x in a:
+            if x is None:
+                vals.append(None)
+            elif isinstance(x, list):
+                vals.append(round(x[0] / x[1], 3))
+            else:
+                vals.append(round(x, 3))
+        while vals and vals[-1] is None:
+            vals.pop()
+        out[k] = vals
+    rel = lambda us: round((us - t0) / 1e6, 1)
+    modes = []
+    for m in d['MODE']:
+        name = COPTER_MODES.get(m.ModeNum, str(m.ModeNum))
+        if (not modes or modes[-1][1] != name) and start <= m.TimeUS <= end:
+            modes.append([rel(m.TimeUS), name])
+    return {'version': 1, 't0_offset_s': round((start - t0) / 1e6, 2), 'dt': round(dt, 3), 'n': nb, 'series': out,
+            'modes': modes, 'units': {'alt': 'm', 'alt_target': 'm', 'throttle': '%', 'roll': '°', 'roll_des': '°',
+                                      'pitch': '°', 'pitch_des': '°', 'yaw_err': '°', 'm1': '%', 'm2': '%', 'm3': '%',
+                                      'm4': '%', 'vibe_x': 'm/s²', 'vibe_y': 'm/s²', 'vibe_z': 'm/s²', 'volt': 'V',
+                                      'curr': 'A', 'speed': 'm/s', 'pos_err': 'm', 'sats': ''}}
 
 
 def rules(r):
@@ -515,6 +629,12 @@ def analyse_folder(folder, progress=None):
     report = analyse(src, progress)
     out_dir = os.path.join(os.path.dirname(src), 'analysis')
     os.makedirs(out_dir, exist_ok=True)
+    series = report.pop('_series', None)
+    if series is not None:
+        with open(os.path.join(out_dir, 'series.json.tmp'), 'w') as f:
+            json.dump(series, f, separators=(',', ':'))
+        os.replace(os.path.join(out_dir, 'series.json.tmp'), os.path.join(out_dir, 'series.json'))
+    report['has_series'] = series is not None
     report['generated_at'] = time.time()
     tmp = os.path.join(out_dir, 'report.json.tmp')
     with open(tmp, 'w') as f:
