@@ -988,6 +988,7 @@ class MissionEngine:
             return {
                 'v': 1, 'revision': self.revision, 'server_time': now,
                 'stage': self.stage, 'held': self.held, 'hold_reason': self.hold_reason,
+                'armed': bool((self.last_snapshot or {}).get('armed')),
                 'hold_elapsed': round(now - self.hold_since, 1) if self.held and self.hold_since else 0,
                 'mission': self.mission, 'total': self.total,
                 'remaining': round(self.countdown_remaining(now), 2),

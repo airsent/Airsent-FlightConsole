@@ -3,7 +3,9 @@
  *   MASTER WARNING  (critical, unacknowledged): triple harsh buzz, repeats every 1.6 s until the
  *                   fault is acknowledged (ACK / ACK ALL) or clears. Viewers (who can't ACK) hear 3 rounds.
  *   MASTER CAUTION  (new warning): two short dry alert pulses, once per new warning (grouped, max 1 per 3 s).
- *   CLEARED         (a critical fault went away): a short soft falling note.
+ *   CLEARED         (a critical fault went away) and countdown cues (start, VEHICLE HANDOVER, GO/NO-GO,
+ *                   ARM, TAKE-OFF, LANDED / DISARMED): a short soft falling note.
+ *   Mute is locked while the aircraft is armed (and switches itself back on at arming).
  *
  * Only one console tab per browser sounds (the visible one, else the oldest), so a pilot with
  * five console pages open hears one alarm. Browsers block audio until the page has been clicked
@@ -134,8 +136,25 @@
     loopTimer = setTimeout(loop, 1600);
   }
 
+  // Countdown phases that play the soft 'cleared' tone (operator's choice): start, each phase,
+  // take-off, and landed / disarmed at the end.
+  const PHASE_TONE = new Set(['countdown', 'prearm', 'gonogo', 'armed', 'takeoff', 'landed', 'safed']);
+  let lastStage = null, endToned = false, armedNow = false;
+  function phase(stage) {
+    if (stage === lastStage) return;
+    const prev = lastStage; lastStage = stage;
+    if (prev === null || stage == null) return;                   // first look after page load: no tone
+    if (stage === 'countdown') endToned = false;
+    if (!PHASE_TONE.has(stage)) return;
+    if (stage === 'landed' || stage === 'safed') { if (endToned) return; endToned = true; }
+    play('cleared');
+  }
+
   function update(list, opts = {}) {
     viewerMode = !!opts.viewer;
+    armedNow = !!opts.armed;
+    if (armedNow && prefs.muted) { prefs.muted = false; save(); }   // no muted alarms on a live aircraft
+    if ('stage' in opts) phase(opts.stage);
     const open = (list || []).filter(f => !f.acked_by && f.severity !== 'info');
     const crit = open.filter(f => f.severity === 'critical');
     const critIds = new Set((list || []).filter(f => f.severity === 'critical').map(f => f.id));
@@ -199,18 +218,19 @@
       let m = b.querySelector('.aa-menu');
       if (m) { m.remove(); return; }
       m = document.createElement('div'); m.className = 'aa-menu';
-      m.innerHTML = `<div><b>FAULT TONES</b> — critical: triple buzz until ACK · warning: two pulses · cleared: soft tone</div>
-        <div class="r"><button data-a="mute">${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button></div>
+      m.innerHTML = `<div><b>FAULT TONES</b> — critical (any time, incl. holds): triple buzz until ACK · new warning: two pulses · countdown start, each phase, take-off, landed and fault cleared: soft tone</div>
+        <div class="r"><button data-a="mute" ${armedNow && !prefs.muted ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>${prefs.muted ? 'TURN SOUND ON' : 'MUTE'}</button>${armedNow ? '<span style="color:#ffb800;align-self:center">locked on while armed — ACK silences the buzzer</span>' : ''}</div>
         <label style="display:block;margin-top:8px">VOLUME<input type="range" min="0.1" max="1" step="0.05" value="${prefs.volume}"></label>
         <div class="r"><button data-a="warning">TEST WARNING</button><button data-a="caution">TEST CAUTION</button><button data-a="cleared">TEST CLEARED</button></div>`;
       m.addEventListener('click', ev => {
         ev.stopPropagation();
         const a = ev.target.closest('[data-a]'); if (!a) return;
-        if (a.dataset.a === 'mute') { prefs.muted = !prefs.muted; save(); if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop(); m.remove(); paint(); return; }
+        if (a.dataset.a === 'mute') { if (armedNow && !prefs.muted) return; prefs.muted = !prefs.muted; save(); if (prefs.muted) clearTimeout(loopTimer); else if (wantLoop) loop(); m.remove(); paint(); return; }
         test(a.dataset.a);
       });
       m.querySelector('input').addEventListener('input', ev => { prefs.volume = +ev.target.value; save(); if (master) master.gain.value = prefs.volume; });
       b.appendChild(m);
+      if (b.getBoundingClientRect().left < window.innerWidth / 2) { m.style.left = '0'; m.style.right = 'auto'; }   // keep it on screen
       const close = ev => { if (!b.contains(ev.target)) { m.remove(); document.removeEventListener('click', close, true); } };
       setTimeout(() => document.addEventListener('click', close, true), 0);
     });

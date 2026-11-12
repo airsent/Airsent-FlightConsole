@@ -400,7 +400,7 @@
     renderBadge(slotBadge, list);
     if (panelEl && panelEl.classList.contains('open')) panel();
     alertNewCritical(list);
-    if (window.AirsentAlarm) window.AirsentAlarm.update(list, { viewer: viewer() });
+    if (window.AirsentAlarm) window.AirsentAlarm.update(list, { viewer: viewer(), stage: s ? s.stage : null, armed: !!(s && s.armed) });
     if (dashboardCard) renderDashboardCard(s);
     renderPilot(s);
     renderOverlay(s);
@@ -431,7 +431,7 @@
     };
     if (window.AirsentAlarm) return add();
     const sc = document.createElement('script');
-    sc.src = 'fault-audio.js?v=3'; sc.onload = add;
+    sc.src = 'fault-audio.js?v=4'; sc.onload = add;
     document.head.appendChild(sc);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
