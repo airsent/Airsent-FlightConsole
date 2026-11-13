@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="demo-isolation.js?v=viewer-1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
+<script src="console-config.js?v=simulation-map-4"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071027">
+<title>Airsent Flight Console</title>
+<link rel="preload" href="vendor/archivo/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+  font-family: "Archivo";
+  src: url("vendor/archivo/archivo-latin-wdth-normal.woff2") format("woff2-variations");
+  font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+}
+:root {
+  --zenith: #050b1f;      /* sky overhead, half an hour after sunset */
+  --dusk: #10295a;        /* mid sky */
+  --haze: #4f7fbd;        /* just above the horizon */
+  --ground: #040816;
+  --paper: #f2f6fc;       /* text and the one solid control */
+  --mist: rgba(226, 236, 250, .62);
+  --rule: rgba(226, 236, 250, .26);
+  --port: #ff4d5e;        /* left navigation light */
+  --starboard: #3df0a2;   /* right navigation light */
+  --warn: #ffb35c;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--zenith); color: var(--paper); overflow: hidden;
+  font-family: "Archivo", "Helvetica Neue", Arial, sans-serif; font-stretch: 100%;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+#sky { position: fixed; inset: 0; width: 100%; height: 100%; display: block; transform-origin: 70% 80%;
+  transition: transform .42s cubic-bezier(.5, 0, .9, .4), opacity .42s ease-in; }
+
+.page { position: relative; z-index: 1; min-height: 100%; display: grid; grid-template-rows: auto 1fr auto;
+  padding: clamp(22px, 4vw, 44px) clamp(22px, 6vw, 88px); transition: opacity .3s ease, transform .42s ease-in; }
+.brand img { display: block; height: 15px; width: auto; opacity: .96; }
+
+.gate { align-self: center; width: min(100%, 380px); padding-bottom: 6vh; }
+h1 { margin: 0; font-weight: 640; font-stretch: 125%; font-size: clamp(34px, 4.4vw, 54px); line-height: 1.02; letter-spacing: -.012em; }
+.lede { margin: 14px 0 0; color: var(--mist); font-size: 16px; line-height: 1.5; }
+
+form { margin-top: clamp(30px, 5vh, 46px); }
+.field { position: relative; margin-bottom: 22px; }
+.field label { display: block; font-size: 13px; font-weight: 500; color: var(--mist); margin-bottom: 2px; }
+.field input {
+  width: 100%; padding: 9px 44px 11px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0;
+  background: transparent; color: var(--paper); font: inherit; font-size: 19px; font-weight: 500; letter-spacing: .01em;
+  outline: none; caret-color: var(--starboard); transition: border-color .15s;
+}
+.field input:hover { border-bottom-color: rgba(226, 236, 250, .5); }
+.field::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--paper);
+  transform: scaleX(0); transform-origin: left; transition: transform .28s cubic-bezier(.2, .7, .2, 1); }
+.field:focus-within::after { transform: scaleX(1); }
+.field:focus-within label { color: var(--paper); }
+input:-webkit-autofill { -webkit-text-fill-color: var(--paper); transition: background-color 99999s; caret-color: var(--starboard); }
+.reveal { position: absolute; right: -6px; bottom: 5px; border: 0; background: none; color: var(--mist); font: inherit; font-size: 13px;
+  padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+.reveal:hover { color: var(--paper); }
+.caps { display: none; margin: -12px 0 16px; font-size: 13px; color: var(--warn); }
+.caps.on { display: block; }
+
+#loginBtn {
+  width: 100%; margin-top: 10px; padding: 15px 18px; border: 0; border-radius: 3px; cursor: pointer;
+  background: var(--paper); color: #06102a; font: inherit; font-size: 16px; font-weight: 650; font-stretch: 112%; letter-spacing: .01em;
+  transition: background .15s, transform .08s;
+}
+#loginBtn:hover { background: #fff; }
+#loginBtn:active { transform: translateY(1px); }
+#loginBtn:disabled { cursor: progress; background: rgba(242, 246, 252, .55); }
+:is(#loginBtn, .reveal):focus-visible { outline: 2px solid var(--starboard); outline-offset: 3px; }
+
+.under { min-height: 22px; margin-top: 14px; font-size: 14px; line-height: 1.45; }
+#errorMsg { display: none; color: #ffc0c6; font-size: 14px; line-height: 1.45; margin: -6px 0 14px; }
+#errorMsg.visible { display: block; }
+#bootMessage { display: none; color: var(--paper); }
+.gate.shake { animation: shake .32s; }
+@keyframes shake { 20% { transform: translateX(-7px); } 45% { transform: translateX(6px); } 70% { transform: translateX(-3px); } }
+
+.foot { display: flex; justify-content: space-between; gap: 16px; align-items: center; font-size: 13px; color: var(--mist); }
+.link { display: inline-flex; align-items: center; gap: 9px; }
+.link i { width: 7px; height: 7px; border-radius: 50%; background: rgba(226, 236, 250, .4); flex: none; }
+.link[data-state="online"] i { background: var(--starboard); box-shadow: 0 0 10px rgba(61, 240, 162, .8); }
+.link[data-state="offline"] i { background: var(--warn); }
+#zulu { font-variant-numeric: tabular-nums; }
+
+/* signed in: the camera climbs away from the field */
+#bootOverlay { position: fixed; inset: 0; z-index: 3; background: var(--zenith); opacity: 0; pointer-events: none; transition: opacity .4s ease-in .05s; }
+#bootOverlay:not(.hidden) { opacity: 1; }
+body.launch #sky { transform: translateY(26%) scale(1.5); }
+body.launch .gate #errorMsg { display: none; }
+body.launch #bootMessage { display: block; }
+body.launch .link { visibility: hidden; }
+#bootProgressFill { display: none; }
+
+@media (max-width: 760px) {
+  .gate { align-self: end; padding-bottom: 3vh; }
+  .foot #zulu { display: none; }
+}
+@media (max-height: 560px) { .lede { display: none; } form { margin-top: 20px; } }
+@media (prefers-reduced-motion: reduce) {
+  #sky, .page, .field::after, #bootOverlay { transition: none; }
+  body.launch #sky { transform: none; }
+  .gate.shake { animation: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+<div id="bootOverlay" class="hidden"><div id="bootProgressFill"></div></div>
+
+<div class="page">
+  <header class="brand"><img src="logo-topbar.png" alt="Airsent"></header>
+
+  <main class="gate" id="gate">
+    <h1>Flight console</h1>
+    <p class="lede">Sign in to the Airsent ground station.</p>
+
+    <form id="signin" novalidate onsubmit="return false">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password">
+        <button type="button" class="reveal" id="reveal" aria-pressed="false" aria-controls="password">Show</button>
+      </div>
+      <div class="caps" id="caps">Caps Lock is on.</div>
+      <div id="errorMsg" role="alert"></div>
+      <button id="loginBtn" type="button">Sign in</button>
+      <div class="under" aria-live="polite"><div id="bootMessage"></div></div>
+    </form>
+  </main>
+
+  <footer class="foot">
+    <span class="link" id="link" data-state="checking"><i></i><span id="linkText">Checking the sign-in service</span></span>
+    <span id="zulu" title="Coordinated Universal Time, the clock the flight log uses"></span>
+  </footer>
+</div>
+
+<script src="login.js?v=simulation-map-2"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── form niceties (the sign-in itself is login.js, unchanged) ─────────────
+  $('reveal').onclick = () => {
+    const show = $('password').type === 'password';
+    $('password').type = show ? 'text' : 'password';
+    $('reveal').textContent = show ? 'Hide' : 'Show';
+    $('reveal').setAttribute('aria-pressed', String(show));
+    $('password').focus();
+  };
+  const caps = e => { if (e.getModifierState) $('caps').classList.toggle('on', e.getModifierState('CapsLock')); };
+  $('password').addEventListener('keydown', caps); $('password').addEventListener('keyup', caps);
+  $('username').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('password').focus(); } });
+
+  // login.js writes its own wording; say it in the page's voice and react to it
+  const say = {
+    'INVALID USERNAME OR PASSWORD': 'That username or password is not right. Check both and try again.',
+    'Sign-in service unavailable. Please try again.': 'The sign-in service did not answer. Check your connection and try again.',
+    'Cannot reach the sign-in service. Please try again.': 'Cannot reach the sign-in service. Check your connection and try again.',
+    'Sign-in connection closed. Please try again.': 'The connection dropped during sign-in. Try again.',
+  };
+  new MutationObserver(() => {
+    const el = $('errorMsg'), t = el.textContent.trim();
+    if (say[t]) { el.textContent = say[t]; return; }
+    if (el.classList.contains('visible')) {
+      $('gate').classList.remove('shake'); void $('gate').offsetWidth; $('gate').classList.add('shake');
+      $('loginBtn').textContent = 'Sign in'; $('password').select();
+    }
+  }).observe($('errorMsg'), { childList: true, attributes: true, attributeFilter: ['class'], characterData: true, subtree: true });
+  new MutationObserver(() => { $('loginBtn').textContent = $('loginBtn').disabled ? 'Signing in' : 'Sign in'; })
+    .observe($('loginBtn'), { attributes: true, attributeFilter: ['disabled'] });
+  new MutationObserver(() => { if (!$('bootOverlay').classList.contains('hidden')) document.body.classList.add('launch'); })
+    .observe($('bootOverlay'), { attributes: true, attributeFilter: ['class'] });
+
+  // is the sign-in service reachable? (opens the same socket login.js uses, sends nothing)
+  (function probe() {
+    const set = (state, text) => { $('link').dataset.state = state; $('linkText').textContent = text; };
+    let done = false, ws;
+    const end = (state, text) => { if (done) return; done = true; set(state, text); try { ws && ws.close(); } catch (e) {} setTimeout(probe, state === 'online' ? 60000 : 8000); };
+    try {
+      const url = new URL('/presence', location.origin); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(url.href);
+      ws.onopen = () => end('online', 'Sign-in service online');
+      ws.onerror = ws.onclose = () => end('offline', 'Sign-in service unreachable');
+      setTimeout(() => end('offline', 'Sign-in service unreachable'), 6000);
+    } catch (e) { end('offline', 'Sign-in service unreachable'); }
+  })();
+
+  const pad = n => String(n).padStart(2, '0');
+  const tick = () => { const d = new Date(); $('zulu').textContent = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`; };
+  tick(); setInterval(tick, 1000);
+
+  // ── the sky: blue hour over the field, one aircraft flying a delivery and coming home ──
+  (() => {
+    const cv = $('sky'), g = cv.getContext('2d');
+    let W = 0, H = 0, dpr = 1, hz = 0, stars = [], town = [], A, B, apex, t0 = performance.now(), boost = 0;
+    const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(20261112);
+
+    function layout() {
+      dpr = Math.min(devicePixelRatio || 1, 2);
+      W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const narrow = W < 760;
+      hz = H * (narrow ? .34 : .8);
+      A = { x: W * (narrow ? .86 : .9), y: hz };                 // the field (home)
+      B = { x: W * (narrow ? .16 : .52), y: hz };                // the drop-off
+      apex = hz - Math.min(hz * .62, (A.x - B.x) * .5);
+      const r = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
+      stars = Array.from({ length: Math.round(W * hz / 9000) }, () => ({ x: r() * W, y: Math.pow(r(), 1.7) * hz * .86, s: .4 + r() * .9, p: r() * 6.28 }));
+      town = Array.from({ length: Math.round(W / 9) }, () => {
+        const c = [.08, .3, .52, .9][Math.floor(r() * 4)], x = (c + (r() - .5) * (r() < .7 ? .12 : .5)) * W;
+        return { x, y: hz + 1.5 + Math.pow(r(), 2.2) * H * .05, s: .5 + r() * .8, w: r() < .78, p: r() * 6.28 };
+      });
+    }
+    const path = u => {                                           // u: 0 at home, 1 at the drop-off
+      const x = A.x + (B.x - A.x) * u, k = 4 * u * (1 - u);
+      return { x, y: hz - (hz - apex) * k - 3 };
+    };
+    function trace(a, b) { g.beginPath(); for (let i = 0; i <= 60; i++) { const p = path(a + (b - a) * i / 60); i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y); } }
+    const ease = x => x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+
+    function draw(now) {
+      const t = (now - t0) / 1000;
+      // sky
+      let s = g.createLinearGradient(0, 0, 0, hz);
+      s.addColorStop(0, '#050b1f'); s.addColorStop(.45, '#0c2150'); s.addColorStop(.8, '#1f4688'); s.addColorStop(.95, '#5b8bc6'); s.addColorStop(1, '#a9c6e6');
+      g.fillStyle = s; g.fillRect(0, 0, W, hz + 1);
+      // last warmth where the sun went down, off to the right
+      s = g.createRadialGradient(W * .82, hz, 0, W * .82, hz, W * .46);
+      s.addColorStop(0, 'rgba(255,196,150,.34)'); s.addColorStop(.35, 'rgba(255,170,140,.10)'); s.addColorStop(1, 'rgba(255,170,140,0)');
+      g.save(); g.beginPath(); g.rect(0, 0, W, hz); g.clip(); g.scale(1, .34); g.translate(0, hz / .34 - hz);
+      g.fillStyle = s; g.fillRect(0, hz - W * .5, W, W * .5); g.restore();
+      for (const st of stars) {
+        g.globalAlpha = (.35 + .3 * Math.sin(t * .6 + st.p)) * (1 - st.y / (hz * .9));
+        g.fillStyle = '#eaf2ff'; g.fillRect(st.x, st.y, st.s, st.s);
+      }
+      g.globalAlpha = 1;
+      // ground
+      s = g.createLinearGradient(0, hz, 0, H);
+      s.addColorStop(0, '#0a1630'); s.addColorStop(.12, '#060d20'); s.addColorStop(1, '#040816');
+      g.fillStyle = s; g.fillRect(0, hz, W, H - hz);
+      for (const l of town) {
+        g.globalAlpha = .5 + .25 * Math.sin(t * .9 + l.p);
+        g.fillStyle = l.w ? '#ffcf96' : '#cfe3ff'; g.fillRect(l.x, l.y, l.s, l.s * .8);
+      }
+      g.globalAlpha = 1;
+
+      // the sortie: out (22 s), hold at the drop-off (4 s), home (22 s), hold on the pad (6 s)
+      const OUT = 22, HOLD = 4, BACK = 22, REST = 6, cyc = (t + 3 + boost) % (OUT + HOLD + BACK + REST);
+      let u, leg;
+      if (cyc < OUT) { u = ease(cyc / OUT); leg = 'out'; }
+      else if (cyc < OUT + HOLD) { u = 1; leg = 'drop'; }
+      else if (cyc < OUT + HOLD + BACK) { u = 1 - ease((cyc - OUT - HOLD) / BACK); leg = 'back'; }
+      else { u = 0; leg = 'rest'; }
+      // planned route, then the part already flown over it
+      g.lineWidth = 1; g.setLineDash([2, 7]); g.strokeStyle = 'rgba(214,230,252,.42)'; trace(0, 1); g.stroke(); g.setLineDash([]);
+      g.lineWidth = 1.4; g.strokeStyle = 'rgba(242,246,252,.9)';
+      if (leg === 'out') { trace(0, u); g.stroke(); } else if (leg === 'back') { trace(1, u); g.stroke(); } else if (leg === 'drop') { trace(0, 1); g.stroke(); }
+      // the two ends: home pad and drop-off
+      for (const [p, home] of [[A, true], [B, false]]) {
+        g.strokeStyle = 'rgba(242,246,252,.85)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(p.x - 9, p.y + .5); g.lineTo(p.x + 9, p.y + .5); g.stroke();
+        if (home) { g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x, p.y - 7); g.stroke(); }
+      }
+      if (leg === 'drop') {                                       // delivered: one ring opens at the drop-off
+        const k = (cyc - OUT) / HOLD;
+        g.strokeStyle = `rgba(61,240,162,${.7 * (1 - k)})`; g.lineWidth = 1.2; g.beginPath(); g.ellipse(B.x, B.y, 6 + k * 46, (6 + k * 46) * .22, 0, 0, 6.283); g.stroke();
+      }
+      // the aircraft: red to port, green to starboard, white strobe double-flash
+      const p = path(u), dir = leg === 'back' ? 1 : -1, span = 5;
+      const strobe = (t % 1.5) < .06 || ((t % 1.5) > .16 && (t % 1.5) < .22);
+      const glow = (x, y, r, c) => { const q = g.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, c); q.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = q; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); };
+      glow(p.x - span * dir, p.y, 7, 'rgba(255,77,94,.9)'); glow(p.x + span * dir, p.y, 7, 'rgba(61,240,162,.9)');
+      g.fillStyle = '#ff4d5e'; g.fillRect(p.x - span * dir - 1, p.y - 1, 2, 2); g.fillStyle = '#3df0a2'; g.fillRect(p.x + span * dir - 1, p.y - 1, 2, 2);
+      g.fillStyle = 'rgba(242,246,252,.9)'; g.fillRect(p.x - span, p.y - .5, span * 2, 1);
+      if (strobe && !calm) { glow(p.x, p.y - 1, 26, 'rgba(255,255,255,.95)'); }
+      if (!calm) requestAnimationFrame(draw);
+    }
+    layout(); addEventListener('resize', () => { layout(); if (calm) draw(performance.now()); });
+    requestAnimationFrame(draw);
+  })();
+})();
+</script>
+</body>
+</html>
