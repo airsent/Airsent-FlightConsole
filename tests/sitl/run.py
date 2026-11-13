@@ -486,6 +486,23 @@ class Run:
         rev = self.c.mission_block.get('param_rev') or {}
         self.note(f"param_rev broadcast: rev {rev.get('rev')} by {rev.get('by')}")
 
+    def s_flight1_setup_script(self):
+        """deploy/flight1_setup.py (run over SSH on the Jetson): dry run changes nothing, --apply writes and reads back."""
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'deploy', 'flight1_setup.py')
+        run = lambda *a: subprocess.run([sys.executable, script, *a], capture_output=True, text=True, timeout=120)
+        self.ok(self.c.send('param_write', params={'RTL_ALT': 10500, 'INS_LOG_BAT_MASK': 0}, timeout=30), 'param_write (old values)')
+        dry = run()
+        self.expect(dry.returncode == 0 and 'Dry run' in dry.stdout, f'dry run failed: {dry.stdout[-300:]} {dry.stderr[-300:]}')
+        self.expect(abs((self.v.get_param('RTL_ALT') or 0) - 10500) < 0.01, 'dry run changed RTL_ALT')
+        done = run('--apply')
+        self.expect(done.returncode == 0 and 'OK' in done.stdout, f'apply failed: {done.stdout[-400:]} {done.stderr[-300:]}')
+        rtl, mask = self.v.get_param('RTL_ALT'), self.v.get_param('INS_LOG_BAT_MASK')
+        self.expect(rtl is not None and abs(rtl - 2000) < 0.01, f'RTL_ALT on the vehicle = {rtl}, wanted 2000 (20 m)')
+        self.expect(mask is not None and abs(mask - 1) < 0.01, f'INS_LOG_BAT_MASK on the vehicle = {mask}, wanted 1')
+        again = run('--apply')
+        self.expect('nothing to do' in again.stdout, f'second run should be a no-op: {again.stdout[-200:]}')
+        self.note(done.stdout.strip().splitlines()[-3])
+
     def s_writes_blocked_when_armed(self):
         """Parameter writes and mission uploads are refused while armed."""
         self.takeoff(6)
@@ -651,7 +668,7 @@ class Run:
         self.note(f"E-STOP answered in {time.time() - t0:.2f} s during a param read: {r.get('msg')}")
         self.v.wait(lambda s: s['alt'] < 0.5, 20)
 
-    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_flight2_profile', 's_params_roundtrip', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
+    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_flight2_profile', 's_params_roundtrip', 's_flight1_setup_script', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
                  's_normal_disarm_refused_in_air', 's_writes_blocked_when_armed', 's_joystick_and_stale_stop', 's_goto_and_rtl',
                  's_console_loss_hold_then_rtl', 's_console_back_cancels', 's_jetson_heartbeat_failsafe',
                  's_geofence', 's_estop_while_uploading', 's_battery_failsafe', 's_pixhawk_reboot_reconnect']
