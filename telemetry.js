@@ -634,6 +634,7 @@ function applyTelemetry(data) {
   window.AirsentReviewBridge?.publish(data, "telemetry");
   const pxOk = data.pixhawk_connected === true;
   const feedFresh = typeof data.telemetry_age === "number" && Number.isFinite(data.telemetry_age) && data.telemetry_age >= 0 && data.telemetry_age < 2;
+  if (feedFresh) window.airsentBoot?.mark("telemetry", "live");
   if (!feedFresh) {
     setDisconnectedState();
     updateSignalIndicators(data, false);
@@ -815,6 +816,7 @@ function connectTelemetry() {
     if (socket !== ws) return;
     isConnecting = false;
     mapHasZoomed = false;
+    window.airsentBoot?.mark("link");
   };
   ws.onclose = () => {
     if (socket !== ws) return;
