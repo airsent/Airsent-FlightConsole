@@ -531,6 +531,7 @@ class MissionEngine:
         self.mission = None
         self.home_point = None      # exact launch spot, set at takeoff
         self.plan_corners = None    # FLIGHT 2 box corners, fixed at takeoff
+        self.track = []             # flown ground track [lat, lon], thinned (map)
         self.total = 180
         self.deadline = None
         self.remaining = 180.0
@@ -554,7 +555,7 @@ class MissionEngine:
 
     PERSIST = ('stage', 'mission', 'total', 'deadline', 'remaining', 'held', 'hold_reason', 'hold_since',
                'go', 'manual', 'pic_console', 'pic_name', 'arm_sent_at', 'takeoff_at', 'flight_started',
-               'landed_at', 'abort', 'max_alt', 'handover_logged', 'step', 'home_point', 'plan_corners')
+               'landed_at', 'abort', 'max_alt', 'handover_logged', 'step', 'home_point', 'plan_corners', 'track')
 
     def _save(self):
         data = {k: getattr(self, k) for k in self.PERSIST}
@@ -977,6 +978,8 @@ class MissionEngine:
                 self._event('safed', 'SAFED — RC switch in SAFE, aircraft disarmed. Safe to approach.')
                 self.recorder.write('summary.json', self.summary())
                 self._save()
+        if self.stage in ('takeoff', 'flight', 'landed'):
+            self._record_track(s)
         if self.stage in ('takeoff', 'flight'):
             gate = rc_gate_position(s, cfg)
             if gate == 'SAFE' and not self._kill_logged:
@@ -1262,6 +1265,17 @@ class MissionEngine:
         return {'path': [[self.home_point['lat'], self.home_point['lon']]] + self.plan_corners,
                 'sides_done': (st or {}).get('sides', 0), 'leg': st.get('leg') if n == 'leg' else None}
 
+    def _record_track(self, s):
+        """Flown ground track for the map: a point every 2 m, thinned by half when it passes 300 points."""
+        lat, lon = s.get('lat'), s.get('lon')
+        if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float))) or not (lat or lon):
+            return
+        if self.track and (_dist_m(self.track[-1], (lat, lon)) or 0) < 2.0:
+            return
+        self.track.append([round(lat, 7), round(lon, 7)])
+        if len(self.track) > 300:
+            self.track = self.track[::2]
+
     def _pos_view(self):
         s = self.last_snapshot or {}
         lat, lon = s.get('lat'), s.get('lon')
@@ -1354,7 +1368,7 @@ class MissionEngine:
                 'stage': self.stage, 'held': self.held, 'hold_reason': self.hold_reason,
                 'armed': bool((self.last_snapshot or {}).get('armed')),
                 'profile': self.profile if self.mission else None, 'step': self.step_view(now),
-                'home_point': self.home_point, 'plan': self._plan_view(), 'pos': self._pos_view(),
+                'home_point': self.home_point, 'plan': self._plan_view(), 'pos': self._pos_view(), 'track': list(self.track),
                 'hold_elapsed': round(now - self.hold_since, 1) if self.held and self.hold_since else 0,
                 'mission': self.mission, 'total': self.total,
                 'remaining': round(self.countdown_remaining(now), 2),

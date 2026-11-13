@@ -772,3 +772,16 @@ class Flight2ProfileTests(MissionEngineBase):
         self.engine._enter('takeoff', self.snapshot(), self.now)
         self.assertEqual(self.engine.snapshot()['home_point']['lon'], self.LON)
         self.assertIsNone(self.engine.snapshot()['plan'])
+
+    def test_flown_track_is_recorded_and_persisted(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        self.fly(30, follow=True)
+        track = self.engine.snapshot()['track']
+        self.assertGreaterEqual(len(track), 4)            # home + the box corners (2 m spacing, 5 m sides)
+        self.assertEqual(self.make_engine().track, track)
+        # points are at least 2 m apart
+        from mission_engine import _dist_m
+        self.assertTrue(all(_dist_m(a, b) >= 2.0 for a, b in zip(track, track[1:])))

@@ -14,7 +14,7 @@
     let l = layers.get(map);
     if (l && map.hasLayer(l.group)) return l;
     if (typeof L === 'undefined') return null;
-    l = { group: L.layerGroup().addTo(map), home: null, sides: [], dots: [], live: null, sig: '' };
+    l = { group: L.layerGroup().addTo(map), home: null, sides: [], dots: [], live: null, sig: '', trail: null };
     layers.set(map, l);
     return l;
   }
@@ -40,7 +40,7 @@
     const l = ensure(map);
     if (!l) return;
     const hp = s && s.home_point, plan = s && s.plan;
-    if (!hp) { l.group.clearLayers(); l.home = null; l.sides = []; l.dots = []; l.live = null; l.sig = ''; return; }
+    if (!hp) { l.group.clearLayers(); l.home = null; l.sides = []; l.dots = []; l.live = null; l.sig = ''; l.trail = null; return; }
     if (!l.home) {
       l.home = L.marker([hp.lat, hp.lon], { icon: homeIcon(), interactive: true, zIndexOffset: 900, keyboard: false })
         .bindTooltip('HOME — set at takeoff', { direction: 'top' }).addTo(l.group);
@@ -54,6 +54,13 @@
         for (let k = 0; k < 4; k++) l.sides.push(L.polyline([plan.path[k], plan.path[k + 1]], { color: BLUE, weight: 4, opacity: .95 }).addTo(l.group));
         for (let k = 1; k < 4; k++) l.dots.push(L.circleMarker(plan.path[k], { radius: 4, color: '#0b1118', weight: 1, fillColor: BLUE, fillOpacity: 1 }).addTo(l.group));
       }
+    }
+    // flown path: where the aircraft has actually been, from takeoff to its position now
+    const pts = (s.track || []).slice();
+    if (s.pos && s.pos[0] != null && ['takeoff', 'flight'].includes(s.stage)) pts.push(s.pos);
+    if (pts.length > 1) {
+      if (!l.trail) { l.trail = L.polyline(pts, { color: GREEN, weight: 3, opacity: .85, lineJoin: 'round' }).addTo(l.group); l.trail.bringToBack(); }
+      else l.trail.setLatLngs(pts);
     }
     if (!plan) return;
     plan.path.slice(0, 4).forEach((a, k) => {
