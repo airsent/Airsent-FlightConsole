@@ -82,6 +82,7 @@ form { margin-top: clamp(26px, 4.5vh, 40px); }
 }
 .field select:hover { border-bottom-color: rgba(234, 240, 249, .45); }
 .field select option { background: #08121f; color: var(--paper); }
+.field select:invalid { color: var(--mist); font-weight: 400; }
 .chev { position: absolute; right: 3px; bottom: 17px; width: 11px; height: 7px; pointer-events: none; fill: none;
   stroke: var(--mist); stroke-width: 1.6; }
 .field:focus-within .chev { stroke: var(--paper); }
@@ -179,7 +180,8 @@ body.launch .foot { visibility: hidden; }
     <form id="signin" novalidate onsubmit="return false">
       <div class="field">
         <label for="username">Account</label>
-        <select id="username" name="username" autocomplete="username">
+        <select id="username" name="username" autocomplete="username" required>
+          <option value="" disabled selected>Select account</option>
           <option value="operator">Operator</option>
           <option value="viewer">Viewer</option>
           <option value="simulation">Simulator</option>
@@ -223,7 +225,20 @@ body.launch .foot { visibility: hidden; }
   $('password').addEventListener('keydown', caps); $('password').addEventListener('keyup', caps);
   $('username').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('password').focus(); } });
   $('username').addEventListener('change', () => $('password').focus());
-  $('password').focus();
+  $('username').focus();
+
+  // login.js listens on document in the capture phase; window runs first, so the guard lands ahead of it
+  const noAccount = () => {
+    const e = $('errorMsg');
+    e.textContent = 'Pick an account to sign in to.'; e.classList.add('visible');
+    $('username').focus();
+  };
+  addEventListener('click', e => {
+    if (e.target.closest?.('#loginBtn') && !$('username').value) { e.preventDefault(); e.stopImmediatePropagation(); noAccount(); }
+  }, true);
+  addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.id === 'password' && !$('username').value) { e.preventDefault(); e.stopImmediatePropagation(); noAccount(); }
+  }, true);
 
   // login.js owns the sign-in; say its outcomes in the page's own voice
   const say = {
