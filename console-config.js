@@ -36,6 +36,9 @@ window.airsentApiUrl = function(path, websocket = false) {
 };
 window.airsentMapLayer = function(map) {
   const cfg = window.AIRSENT_CONFIG;
+  (window.airsentMaps = window.airsentMaps || new Set()).add(map);
+  map.on('unload', () => window.airsentMaps.delete(map));
+  try { window.dispatchEvent(new Event('airsent-map')); } catch (e) { /* non-browser harness */ }
   const layer = L.tileLayer(cfg.mapTileUrl, {
     maxZoom: cfg.mapMaxZoom, subdomains: "abcd", attribution: cfg.mapAttribution,
   }).addTo(map);

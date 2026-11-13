@@ -1536,6 +1536,40 @@ class MavVehicle:
     def rtl(self):
         return self._run('RTL', send_rtl)
 
+    def goto_alt(self, alt, lat=None, lon=None):
+        """GUIDED: climb/descend to `alt` (m above home) over (lat, lon) — the take-off point."""
+        global vel_last_cmd_ts
+        lat = lat if lat is not None else telem.get('lat')
+        lon = lon if lon is not None else telem.get('lon')
+        if lat is None or lon is None:
+            log_mavlink('MISSION GOTO ALT FAILED — no position')
+            return False
+        with vel_lock:                       # no joystick velocity may override the target
+            vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+            vel_last_cmd_ts = 0.0
+        _vel_streaming[0] = False
+
+        def send(mav):
+            mav.mav.set_position_target_global_int_send(
+                0, mav.target_system, mav.target_component, mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+                0b0000110111111000, int(round(lat * 1e7)), int(round(lon * 1e7)), float(alt), 0, 0, 0, 0, 0, 0, 0, 0)
+            log_mavlink(f"MISSION GOTO {float(alt):.1f} m over {lat:.6f},{lon:.6f}")
+        return self._run('GOTO ALT', send)
+
+    def yaw(self, degrees, rate=30.0):
+        """GUIDED: turn clockwise by `degrees` at `rate` deg/s (MAV_CMD_CONDITION_YAW, relative)."""
+        global vel_last_cmd_ts
+        with vel_lock:
+            vel_setpoint.update({'vx': 0, 'vy': 0, 'vz': 0, 'yaw_rate': 0})
+            vel_last_cmd_ts = 0.0
+        _vel_streaming[0] = False
+
+        def send(mav):
+            mav.mav.command_long_send(mav.target_system, mav.target_component, mavutil.mavlink.MAV_CMD_CONDITION_YAW,
+                                      0, float(degrees), float(rate), 1, 1, 0, 0, 0)
+            log_mavlink(f"MISSION YAW {float(degrees):.0f}° clockwise at {float(rate):.0f}°/s")
+        return self._run('YAW', send)
+
 
 MISSION_ROOT = os.environ.get('AIRSENT_MISSION_DIR',
                               os.path.expanduser('~/airsent_missions_sim' if SIM_MODE else '~/airsent_missions'))

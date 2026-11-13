@@ -12,6 +12,8 @@ class FakeVehicle:
     def __init__(self):
         self.armed = False
         self.calls = []
+        self.goto = []              # (alt, lat, lon) of every goto_alt
+        self.yaws = []
         self.alt = 0.0
 
     def set_mode(self, name): self.calls.append(('mode', name))
@@ -20,9 +22,11 @@ class FakeVehicle:
     def takeoff(self, alt): self.calls.append(('takeoff', alt))
     def land(self): self.calls.append(('land',))
     def rtl(self): self.calls.append(('rtl',))
+    def goto_alt(self, alt, lat=None, lon=None): self.calls.append(('goto_alt', alt)); self.goto.append((alt, lat, lon))
+    def yaw(self, degrees, rate=30.0): self.calls.append(('yaw', degrees)); self.yaws.append((degrees, rate))
 
 
-class MissionEngineTests(unittest.TestCase):
+class MissionEngineBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -87,6 +91,9 @@ class MissionEngineTests(unittest.TestCase):
             self.send('mission_ping')
             self.tick(min(1.0, self.engine.countdown_remaining() - remaining))
 
+
+
+class MissionEngineTests(MissionEngineBase):
     # ── bench test (props off) ───────────────────────────────────────────────
     def test_test_mode_bypasses_checks_force_arms_and_takes_off(self):
         # outdoors-but-not-ready: no RTK, weak GPS, EKF degraded, low battery, parameters not approved, no ESC telemetry
@@ -475,3 +482,306 @@ class FaultAckTests(unittest.TestCase):
         self.tick({}, dt=3)
         self.tick({'batt': ('critical', 'Battery', 'critical')}, dt=1)
         self.assertEqual(self.active()[0]['acked_by'], 'Aarav')
+
+class Flight1ProfileTests(MissionEngineBase):
+    """FLIGHT 1: take off to 2 m, automatic check, climb to 5 m, hover, land."""
+    def setUp(self):
+        super().setUp()
+        self.overrides.update({'flight_mode': 'GUIDED', 'lat': 33.4213, 'lon': -111.9327})
+
+    def launch(self):
+        self.send('mission_ping'); self.tick()
+        r = self.send('mission_create', name='flight 1', confirm='flight', total=180, profile='flight1')
+        self.assertTrue(r['ok'], r)
+        self.assertEqual(self.engine.mission['profile'], 'flight1')
+        self.send('mission_manual', key='manual_observers', value=True)
+        # jump to T-0 with the aircraft armed (the countdown itself is covered by other tests)
+        self.engine.stage = 'takeoff'
+        self.engine.takeoff_at = self.now
+        self.vehicle.armed = True
+        self.gate_pwm = 1000
+
+    def fly(self, seconds, alt, **extra):
+        self.vehicle.alt = alt
+        self.overrides.update(extra)
+        end = self.now + seconds
+        while self.now < end:
+            self.send('mission_ping')
+            self.tick(0.5)
+
+    def test_takes_off_to_2m(self):
+        self.launch()
+        self.engine._enter('takeoff', self.snapshot(), self.now)
+        self.assertIn(('takeoff', 2.0), self.vehicle.calls)
+        self.assertEqual(self.engine.snapshot()['config']['takeoff_alt'], 2.0)
+
+    def test_full_profile(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.assertEqual(self.engine.stage, 'flight')
+        self.assertEqual(self.engine.step['name'], 'hold_low')
+        self.fly(21, 2.05)
+        self.assertIn(('goto_alt', 5.0), self.vehicle.calls)
+        self.assertEqual(self.engine.step['name'], 'climb')
+        self.assertTrue(self.engine.step['checks']['ok'])
+        self.fly(3, 4.8)
+        self.assertEqual(self.engine.step['name'], 'hold_high')
+        self.assertNotIn(('land',), self.vehicle.calls)
+        self.fly(31, 5.0)
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertFalse(self.engine.step['failed'])
+        self.fly(5, 0.1)
+        self.vehicle.armed = False
+        self.fly(1, 0.0)
+        self.assertEqual(self.engine.stage, 'landed')
+        self.assertTrue(any('CHECK PASSED' in e['msg'] for e in self.engine.events))
+
+    def test_failed_check_lands_from_2m(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.fly(21, 2.0, roll=14)                     # leaning 14° in a hover
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertNotIn(('goto_alt', 5.0), self.vehicle.calls)
+        self.assertTrue(self.engine.step['failed'])
+        self.assertIn('tilted', self.engine.step['why'])
+
+    def test_drift_and_height_failures(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.fly(21, 2.9, lat=33.4213 + 3 / 111320)    # 3 m north, 0.9 m too high
+        why = self.engine.step['why']
+        self.assertIn('drifted', why)
+        self.assertIn('height wandered', why)
+
+    def test_violent_hover_lands_immediately(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.fly(1, 2.0, vib_x=75)
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertEqual(self.engine.step['name'], 'landing')
+
+    def test_pilot_takeover_stops_the_profile(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.fly(1, 2.0, flight_mode='LOITER')
+        self.assertEqual(self.engine.step['name'], 'released')
+        self.fly(30, 2.0)
+        self.assertNotIn(('goto_alt', 5.0), self.vehicle.calls)
+        self.assertNotIn(('land',), self.vehicle.calls)
+
+    def test_climb_timeout_lands(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.fly(21, 2.0)
+        self.fly(22, 3.0)                              # stuck at 3 m
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertIn('did not reach', self.engine.step['why'])
+
+    def test_restart_mid_profile_hands_over(self):
+        self.launch()
+        self.fly(2, 2.0)
+        self.engine = self.make_engine()               # Jetson restarts
+        self.assertEqual(self.engine.step['name'], 'released')
+        self.fly(30, 2.0)
+        self.assertNotIn(('goto_alt', 5.0), self.vehicle.calls)
+
+    def test_profile_validation(self):
+        self.send('mission_ping'); self.tick()
+        self.assertFalse(self.send('mission_create', name='x', confirm='flight', profile='loop-de-loop')['ok'])
+        self.assertFalse(self.send('mission_create', name='x', confirm='test', bench=True, profile='route')['ok'])
+
+    def test_hover_profile_unchanged(self):
+        self.create()
+        self.assertEqual(self.engine.mission['profile'], 'hover')
+        self.assertEqual(self.engine.takeoff_alt(), 5.0)
+
+
+class Flight2ProfileTests(MissionEngineBase):
+    """FLIGHT 2: 5/10/15/20 m staircase with a check at each, 360° yaw, 5 m box, home at 20 m, land."""
+    LAT, LON = 33.4213, -111.9327
+
+    def setUp(self):
+        super().setUp()
+        self.overrides.update({'flight_mode': 'GUIDED', 'lat': self.LAT, 'lon': self.LON, 'yaw': 90.0})
+
+    def launch(self):
+        self.send('mission_ping'); self.tick()
+        r = self.send('mission_create', name='flight 2', confirm='flight', total=180, profile='flight2')
+        self.assertTrue(r['ok'], r)
+        self.send('mission_manual', key='manual_observers', value=True)
+        self.vehicle.armed = True
+        self.gate_pwm = 1000
+        self.engine.stage = 'takeoff'
+        self.engine._enter('takeoff', self.snapshot(), self.now)     # sets the home point and the box
+
+    def fly(self, seconds, follow=True, **extra):
+        """Fly the aircraft toward whatever the Jetson last commanded."""
+        self.overrides.update(extra)
+        end = self.now + seconds
+        while self.now < end:
+            if follow:
+                if self.vehicle.goto:
+                    alt, lat, lon = self.vehicle.goto[-1]
+                    self.vehicle.alt += max(-1.0, min(1.0, alt - self.vehicle.alt))          # 2 m/s
+                    if lat is not None:
+                        self.overrides.update(lat=lat, lon=lon)
+            self.send('mission_ping')
+            self.tick(0.5)
+
+    def test_takes_off_to_5m_and_starts_checking(self):
+        self.launch()
+        self.engine._enter('takeoff', self.snapshot(), self.now)
+        self.assertIn(('takeoff', 5.0), self.vehicle.calls)
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        self.assertEqual(self.engine.stage, 'flight')
+        self.assertEqual((self.engine.step['name'], self.engine.step['i']), ('hold', 0))
+        view = self.engine.snapshot()['step']
+        self.assertEqual(view['labels'][view['pos']], '5 m')
+
+    def test_staircase_then_yaw(self):
+        self.launch()
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        self.fly(16, follow=False)                       # 15 s hold at 5 m, passes
+        self.assertIn(('goto_alt', 10.0), self.vehicle.calls)
+        self.assertEqual(self.engine.step['name'], 'climb')
+        for alt in (10.0, 15.0, 20.0):
+            self.fly(6, follow=True)                     # climbs there
+            self.assertEqual(self.engine.step['name'], 'hold', alt)
+            self.fly(16, follow=False)
+        self.assertEqual(self.engine.step['name'], 'yaw')
+        self.assertEqual(self.vehicle.yaws, [(360.0, 30.0)])
+        self.assertEqual([r['alt'] for r in self.engine.step['results']], [5.0, 10.0, 15.0, 20.0])
+        self.assertTrue(all(r['ok'] for r in self.engine.step['results']))
+        self.assertNotIn(('land',), self.vehicle.calls)
+
+    def _to_yaw(self):
+        self.launch()
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        for _ in range(4):
+            self.fly(16, follow=False)
+            self.fly(6, follow=True)
+        self.assertEqual(self.engine.step['name'], 'yaw')
+
+    def test_yaw_then_box_then_home_then_land(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):                    # the aircraft turns through a full circle
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        self.assertEqual(self.engine.step['name'], 'leg')
+        corners = self.engine.step['corners']
+        self.assertEqual(len(corners), 4)
+        # a closed 5 m square: the last corner is the take-off point
+        self.assertLess(abs(corners[3][0] - self.LAT) * 111320, 0.01)
+        self.assertLess(abs(corners[3][1] - self.LON) * 111320 * 0.835, 0.01)
+        self.fly(30, follow=True)                        # the four sides, home, then land
+        self.assertEqual([g[0] for g in self.vehicle.goto[-6:]], [20.0] * 6)
+        self.assertEqual(self.vehicle.goto[-1][1:], (self.LAT, self.LON))     # last target: the home point
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertFalse(self.engine.step['failed'])
+        self.assertTrue(any('box complete' in e['msg'] for e in self.engine.events))
+
+    def test_failed_check_lands_where_it_is(self):
+        self.launch()
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        self.fly(16, follow=False)
+        self.fly(6, follow=True)
+        self.fly(16, follow=False, roll=14)              # leaning at 10 m
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertNotIn(('goto_alt', 15.0), self.vehicle.calls)
+        self.assertTrue(self.engine.step['failed'])
+        self.assertEqual(self.engine.step['at_pos'], 1)
+        self.assertIn('10 m', self.engine.step['why'])
+
+    def test_yaw_never_finishes_lands(self):
+        self._to_yaw()
+        self.fly(32, follow=False)                       # heading never changes
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertIn('360° turn not finished', self.engine.step['why'])
+
+    def test_box_side_not_reached_lands(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        self.fly(27, follow=False)                       # drone never moves
+        self.assertIn('not reached', self.engine.step['why'])
+        self.assertIn(('land',), self.vehicle.calls)
+
+    def test_pilot_takeover_and_restart(self):
+        self.launch()
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        self.fly(1, follow=False, flight_mode='LOITER')
+        self.assertEqual(self.engine.step['name'], 'released')
+        self.fly(30, follow=False)
+        self.assertNotIn(('goto_alt', 10.0), self.vehicle.calls)
+        self.overrides['flight_mode'] = 'GUIDED'
+        self.engine = self.make_engine()
+        self.assertEqual(self.engine.step['name'], 'released')
+
+    def test_violent_vibration_lands_immediately(self):
+        self.launch()
+        self.vehicle.alt = 5.0
+        self.fly(2, follow=False)
+        self.fly(1, follow=False, vib_x=75)
+        self.assertIn(('land',), self.vehicle.calls)
+
+    def test_flight1_unaffected(self):
+        self.send('mission_ping'); self.tick()
+        self.assertTrue(self.send('mission_create', name='f1', confirm='flight', total=180, profile='flight1')['ok'])
+        self.assertEqual(self.engine.takeoff_alt(), 2.0)
+
+    def test_home_point_set_at_takeoff_and_box_planned(self):
+        self.launch()
+        snap = self.engine.snapshot()
+        self.assertEqual((snap['home_point']['lat'], snap['home_point']['lon']), (self.LAT, self.LON))
+        self.assertTrue(any(e['kind'] == 'home' and 'HOME POINT SET' in e['msg'] for e in self.engine.events))
+        plan = snap['plan']
+        self.assertEqual(len(plan['path']), 5)
+        self.assertEqual(plan['sides_done'], 0)
+        # heading 90° (east): the first side goes east, the box closes on the home point
+        self.assertGreater(plan['path'][1][1], self.LON)
+        self.assertAlmostEqual(plan['path'][1][0], self.LAT, places=6)
+        self.assertAlmostEqual(plan['path'][4][0], self.LAT, places=6)
+        self.assertAlmostEqual(plan['path'][4][1], self.LON, places=6)
+        self.assertEqual(snap['pos'], [self.LAT, self.LON])
+
+    def test_plan_progress_and_persistence(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        for _ in range(60):                       # fly the box a bit at a time
+            self.fly(1, follow=True)
+            if self.engine.step['name'] != 'leg':
+                break
+        self.assertEqual(self.engine.snapshot()['plan']['sides_done'], 4)
+        restarted = self.make_engine()
+        self.assertEqual(restarted.home_point['lat'], self.LAT)
+        self.assertEqual(len(restarted.plan_corners), 4)
+
+    def test_hover_profile_also_sets_home(self):
+        self.send('mission_ping'); self.tick()
+        self.assertTrue(self.send('mission_create', name='h', confirm='flight', total=180)['ok'])
+        self.vehicle.armed = True; self.gate_pwm = 1000
+        self.engine.stage = 'takeoff'
+        self.engine._enter('takeoff', self.snapshot(), self.now)
+        self.assertEqual(self.engine.snapshot()['home_point']['lon'], self.LON)
+        self.assertIsNone(self.engine.snapshot()['plan'])
+
+    def test_flown_track_is_recorded_and_persisted(self):
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        self.fly(30, follow=True)
+        track = self.engine.snapshot()['track']
+        self.assertGreaterEqual(len(track), 4)            # home + the box corners (2 m spacing, 5 m sides)
+        self.assertEqual(self.make_engine().track, track)
+        # points are at least 2 m apart
+        from mission_engine import _dist_m
+        self.assertTrue(all(_dist_m(a, b) >= 2.0 for a, b in zip(track, track[1:])))

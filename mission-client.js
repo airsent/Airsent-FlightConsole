@@ -226,14 +226,66 @@
             if (s === 'prearm') ev('handover', 'VEHICLE HANDOVER — full pre-arm check');
             if (s === 'gonogo') ev('gonogo', 'GO/NO-GO — pilot: confirm area clear, RC pilot: switch to ARM');
             if (s === 'armed' && !blocking('armed').length) { st.armed = true; st.armed_at = t; ev('arm', 'ARM — motors to idle (T-00:10)'); }
-            if (s === 'takeoff') { st.takeoff_at = t; st.remaining = 0; ev('takeoff', 'T-0 — TAKEOFF to 5 m'); return; }
+            if (s === 'takeoff') { st.takeoff_at = t; st.remaining = 0; st.home = { lat: 33.4242, lon: -111.9281, heading: 0, at: t }; ev('home', 'HOME POINT SET — 33.424200, -111.928100'); ev('takeoff', `T-0 — TAKEOFF to ${st.profile === 'flight1' ? 2 : 5} m`); return; }
           }
           const b = blocking(s);
           if (b.length) { hold(b[0].label + ': ' + b[0].value); return; }
         }
       } else if (st.stage === 'takeoff') {
-        st.alt = Math.min(5, (t - st.takeoff_at) * 1.2);
-        if (st.alt >= 4.5) { st.stage = 'flight'; ev('flight', 'Climb complete — hovering at 4.5 m'); }
+        const top = st.profile === 'flight1' ? 2 : 5;
+        st.alt = Math.min(top, (t - st.takeoff_at) * 1.2);
+        if (st.alt >= 0.9 * top) { st.stage = 'flight'; st.flight_at = t; ev('flight', `Climb complete — hovering at ${st.alt.toFixed(1)} m`); }
+      } else if (st.stage === 'flight' && st.profile === 'flight1' && !st.abort) {
+        // demo FLIGHT 1: 20 s check at 2 m → climb → 30 s at 5 m → land
+        const e = t - st.flight_at, plan = { low_alt: 2, low_hold: 20, high_alt: 5, high_hold: 30 };
+        const chk = { ok: true, fails: [], summary: { alt_err_max: 0.12, tilt_max: 2.1, vib_max: 6.4, drift_max: 0.4 } };
+        if (e < 20) { st.alt = 2; st.step = { name: 'hold_low', remaining: 20 - e, plan }; }
+        else if (e < 23) { if (st.step.name === 'hold_low') ev('profile', 'FLIGHT 1 CHECK PASSED at 2 m — climbing to 5 m'); st.alt = Math.min(5, 2 + (e - 20)); st.step = { name: 'climb', remaining: null, plan, checks: chk }; }
+        else if (e < 53) { st.alt = 5; st.step = { name: 'hold_high', remaining: 53 - e, plan, checks: chk }; }
+        else { if (st.step.name !== 'landing') ev('profile', 'FLIGHT 1 — 30 s hover at 5 m complete — landing'); st.alt = Math.max(0, 5 - (e - 53) * 0.8); st.step = { name: 'landing', remaining: null, plan, checks: chk };
+          if (st.alt <= 0) { st.step = { name: 'done', plan, checks: chk }; st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); } }
+      } else if (st.stage === 'flight' && st.profile === 'flight2' && !st.abort) {
+        // demo FLIGHT 2: 15 s per step at 5/10/15/20 m (2 s climbs), 12 s turn, 4 x 4 s box, 4 s home, landing
+        const e = t - st.flight_at, labels = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND'];
+        const plan = { alts: [5, 10, 15, 20], hold: 15, box: 5 };
+        const sum = { alt_err_max: 0.14, tilt_max: 2.4, vib_max: 6.8, drift_max: 0.5 };
+        const results = [], mk = (a) => ({ alt: a, ok: true, fails: [], summary: sum });
+        let step, pos = 0;
+        if (e < 15 + 3 * 17) {                                   // staircase: 15 s hold + 2 s climb per step
+          const i = Math.min(3, Math.floor(e / 17)), r = e - i * 17;
+          for (let k = 0; k < i; k++) results.push(mk(plan.alts[k]));
+          pos = i; st.alt = r < 15 ? plan.alts[i] : plan.alts[i] + (r - 15) * 2.5;
+          step = { name: r < 15 ? 'hold' : 'climb', i, remaining: r < 15 ? 15 - r : null };
+          if (r >= 15 && i < 3) st.alt = Math.min(plan.alts[i + 1], plan.alts[i] + (r - 15) * 2.5);
+        } else if (e < 15 + 3 * 17 + 12) {
+          pos = 4; st.alt = 20; results.push(...plan.alts.map(mk));
+          step = { name: 'yaw', yaw_done: Math.round(((e - 66) / 12) * 360) };
+        } else if (e < 78 + 16) {
+          pos = 5; st.alt = 20; results.push(...plan.alts.map(mk));
+          step = { name: 'leg', leg: Math.min(3, Math.floor((e - 78) / 4)) };
+        } else if (e < 94 + 4) {
+          pos = 6; st.alt = 20; results.push(...plan.alts.map(mk)); step = { name: 'home' };
+        } else {
+          pos = 7; results.push(...plan.alts.map(mk)); st.alt = Math.max(0, 20 - (e - 98) * 1.5);
+          step = st.alt <= 0 ? { name: 'done' } : { name: 'landing' };
+          if (st.alt <= 0) { st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); }
+        }
+        if (!st.f2 || st.f2.name !== step.name) {
+          const msg = { yaw: 'FLIGHT 2 CHECK PASSED at 20 m — turning 360°', leg: 'FLIGHT 2: 360° turn complete — flying the box',
+                        home: 'FLIGHT 2: box complete — returning to the home point at 20 m', landing: 'FLIGHT 2 — over the home point — descending and landing' }[step.name];
+          if (msg) ev('profile', msg);
+        }
+        st.f2 = step;
+        const d = 60, dLat = d / 111320, dLon = d / (111320 * Math.cos(33.4242 * Math.PI / 180)), h = st.home;
+        const path = [[h.lat, h.lon], [h.lat + dLat, h.lon], [h.lat + dLat, h.lon - dLon], [h.lat, h.lon - dLon], [h.lat, h.lon]];
+        const sides = pos >= 6 ? 4 : pos === 5 ? step.leg : 0, k = pos === 5 ? step.leg : null;
+        let at = path[0];
+        if (k != null) { const f = ((e - 78) % 4) / 4, a = path[k], b = path[k + 1]; at = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+        else if (pos >= 6) at = path[4];
+        st.demoPlan = { path, sides_done: sides, leg: k }; st.demoPos = at;
+        const lastT = (st.track || [])[(st.track || []).length - 1];
+        if (!lastT || Math.hypot(lastT[0] - at[0], lastT[1] - at[1]) > 1.5e-5) st.track = [...(st.track || []), at];
+        st.step = { ...step, pos, labels, plan, results, at_pos: null, failed: false };
       } else if (st.stage === 'flight' && st.abort) {
         st.alt = Math.max(0, st.alt - 0.15);
         if (st.alt <= 0) { st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); }
@@ -252,8 +304,10 @@
         consoles: [{ console: consoleId, operator: api.operatorName, page: '', age: 0 }],
         checks: checks().map(c => ({ ...c, status: (st.stage !== 'standby' && lvl >= order.indexOf(gateStage[c.gate])) || c.raw === 'pass' ? c.raw : 'pending' })),
         motors: [1, 2, 3, 4].map(i => ({ ch: i, rpm: st.armed ? 1480 + i * 8 + (st.alt > 0 ? 2600 : 0) : 0, current: st.armed ? (st.alt > 0 ? 9.5 : 0.8) : 0, connected: true, status: 0 })),
-        events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt,
-        config: { takeoff_alt: 5, require_rtk: false, require_esc_telemetry: false, rc_gate_channel: 5, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
+        events: st.events.slice(0, 20), abort: st.abort, max_alt: st.alt, armed: !!st.armed,
+        profile: st.mission ? st.profile : null, step: st.step || null,
+        track: st.track || [], home_point: st.home || null, plan: st.profile === 'flight2' && st.home ? st.demoPlan || null : null, pos: st.demoPos || (st.home ? [st.home.lat, st.home.lon] : null),
+        config: { takeoff_alt: st.profile === 'flight1' ? 2 : 5, require_rtk: false, require_esc_telemetry: false, rc_gate_channel: 5, handover_at: 180, gonogo_at: 60, arm_at: 10, recycle_after: 120, sim: false },
       };
     }
     function publish() {
@@ -273,8 +327,8 @@
           if (String(c.confirm || '').trim().toLowerCase() !== word) return no(`Type '${word}' to confirm`);
           if (!String(c.name || '').trim()) return no('Mission name is required');
           st = { ...st, stage: 'countdown', total: c.total || 180, remaining: c.total || 180, deadline: now() + (c.total || 180), held: false,
-            mission: { name: c.name, folder: '~/airsent_missions/DEMO_' + c.name, operator: who, created_at: now() }, go: null, manual: {},
-            rc: 'SAFE', takeoff_at: null, alt: 0, armed: false, abort: null, pic: { console: c.console_id, name: who }, events: [] };
+            mission: { name: c.name, folder: '~/airsent_missions/DEMO_' + c.name, operator: who, created_at: now(), profile: c.profile || 'hover', bench: !!c.bench }, profile: c.profile || 'hover', step: null, go: null, manual: {},
+            rc: 'SAFE', takeoff_at: null, alt: 0, armed: false, abort: null, pic: { console: c.console_id, name: who }, events: [], home: null, demoPlan: null, demoPos: null, f2: null, track: [] };
           ev('create', `Mission '${c.name}' created (demo)`, who); return ok('Mission started (demo)');
         case 'mission_hold': if (!pre.includes(st.stage)) return no('Hold is only available before takeoff'); hold('Hold requested by ' + who, who); return ok('Held');
         case 'mission_resume': {
