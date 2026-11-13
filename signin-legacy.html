@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="demo-isolation.js?v=viewer-1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
+<script src="console-config.js?v=simulation-map-4"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Airsent Flight Console — previous sign-in</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="login-page-body">
+
+  <!-- BOOT SCREEN -->
+  <div id="bootOverlay" class="boot-overlay hidden">
+    <div class="boot-panel">
+      <img src="logo.png" alt="Airsent logo" class="boot-logo" />
+
+      <div class="boot-title">FLIGHT CONSOLE</div>
+      <div class="boot-subtitle">SYSTEM INITIALIZATION</div>
+
+      <div class="boot-status-list">
+        <div class="boot-status-row"><span>AUTHENTICATION</span><b id="bootStep1">PENDING</b></div>
+        <div class="boot-status-row"><span>MODE PROFILE</span><b id="bootStep2">PENDING</b></div>
+        <div class="boot-status-row"><span>UI SYSTEMS</span><b id="bootStep3">PENDING</b></div>
+        <div class="boot-status-row"><span>TELEMETRY BUS</span><b id="bootStep4">PENDING</b></div>
+        <div class="boot-status-row"><span>MISSION CONSOLE</span><b id="bootStep5">PENDING</b></div>
+      </div>
+
+      <div class="boot-progress-wrap">
+        <div class="boot-progress-bar">
+          <div id="bootProgressFill" class="boot-progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="bootMessage" class="boot-message">
+        Starting secure session...
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <main class="login-shell">
+
+    <!-- LOGO ABOVE BOX -->
+    <div class="login-logo-wrap">
+      <img src="logo-topbar.png" alt="Airsent logo" class="login-top-logo" />
+    </div>
+
+    <!-- LOGIN PANEL -->
+    <section class="login-panel">
+
+      <div class="login-title">FLIGHT CONSOLE</div>
+
+      <div class="login-form">
+
+        <div class="login-field">
+          <label>USERNAME</label>
+          <input type="text" id="username" placeholder="demo / viewer / operator" autocomplete="off" />
+        </div>
+
+        <div class="login-field">
+          <label>PASSWORD</label>
+          <input type="password" id="password" placeholder="••••••" />
+        </div>
+
+        <button id="loginBtn" class="login-submit-btn">
+          ACCESS SYSTEM
+        </button>
+
+        <div id="errorMsg" class="login-error-msg">
+          INVALID CREDENTIALS
+        </div>
+
+        <div class="login-footer-text">
+          AIRSENT FLIGHT SYSTEM INTERFACE
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <script src="login.js?v=simulation-map-2"></script>
+
+</body>
+</html>
