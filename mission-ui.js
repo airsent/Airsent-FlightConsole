@@ -410,8 +410,13 @@
   // FLIGHT 1: live progress strip on every page while the profile runs.
   let f1El = null;
   const F1_STEPS = [['hold_low', 'CHECK AT 2 m'], ['climb', 'CLIMB'], ['hold_high', 'HOVER 5 m'], ['landing', 'LAND']];
+  const mmss = sec => {
+    const n = Math.max(0, Math.round(Number(sec) || 0));
+    return n < 60 ? `${n}s` : `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+  };
+
   function flight2Html(s, st) {
-    const labels = (st && st.labels) || ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND'];
+    const labels = (st && st.labels) || ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'HOLD', 'LAND'];
     const plan = (st && st.plan) || { alts: [5, 10, 15, 20], hold: 15, box: 5 };
     const stopped = st && st.failed ? st.at_pos : null;
     const pos = st ? (st.pos == null ? 0 : st.pos) : -1;
@@ -423,6 +428,7 @@
       const col = bad ? '#ff4d4d' : now ? '#00c8ff' : done ? '#00e383' : '#4d6478';
       let extra = '';
       if (now && st.name === 'hold' && st.remaining != null) extra = ' ' + Math.ceil(st.remaining) + 's';
+      else if (now && st.name === 'hold_home' && st.held_for != null) extra = ' ' + mmss(st.held_for);
       else if (now && st.name === 'yaw' && st.yaw_done != null) extra = ' ' + Math.min(360, Math.abs(st.yaw_done)) + '°';
       else if (now && st.name === 'leg' && st.leg != null) extra = ' ' + (st.leg + 1) + '/4';
       return `<span style="color:${col}">${bad ? '✗' : done ? '✓' : now ? '▶' : '·'} ${label}${extra}</span>`;
@@ -432,8 +438,11 @@
     else if (st.name === 'released') msg = `<span style="color:#ffb800">HANDED TO THE PILOT — ${esc(st.why || '')}</span>`;
     else if (st.failed) msg = `<span style="color:#ffb800">${esc(st.why || '')}</span>`;
     else if (st.name === 'done') msg = 'FLIGHT 2 complete';
+    else if (st.holding) msg = `<span style="color:#00e383">Holding over the home point at ${plan.alts[plan.alts.length - 1]} m for ${mmss(st.held_for)}.</span>` +
+      ` Land when you are ready — this button, or LAND on the RC.` +
+      `<div style="margin-top:2px;color:#7f93ad">Lands on its own after ${Math.round((plan.hold_max || 300) / 60)} min (${mmss(st.hold_left)} left) or below ${plan.hold_min_volt || 21.5} V.</div>`;
     else if (res.length) { const r = res[res.length - 1], c = r.summary || {}; msg = `<span style="color:#00e383">${r.alt} m check passed</span> · height ±${c.alt_err_max} m · tilt ${c.tilt_max}° · vib ${c.vib_max}`; }
-    return `<span style="color:#00c8ff;font-weight:700">FLIGHT 2</span> &nbsp; ${steps}${msg ? `<div style="margin-top:3px;font-size:10px;color:#9fb3c4">${msg}</div>` : ''}`;
+    return { steps, msg, holding: !!(st && st.holding) };
   }
 
   function renderFlight1(s) {
@@ -445,7 +454,33 @@
         'padding:6px 12px;font:11px "Share Tech Mono",monospace;letter-spacing:1px;color:#c7d6e3;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.6);max-width:92vw';
       document.body.append(f1El);
     }
-    if (s.profile === 'flight2') { f1El.innerHTML = flight2Html(s, st); return; }
+    if (s.profile === 'flight2') {
+      // The strip repaints with every telemetry frame, so the LAND button is built once and kept:
+      // replacing it would detach it from under the pilot's finger mid-click.
+      if (f1El.dataset.kind !== 'f2') {
+        f1El.dataset.kind = 'f2';
+        f1El.innerHTML = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">' +
+          '<span style="color:#00c8ff;font-weight:700">FLIGHT 2</span><span id="f2Steps"></span>' +
+          '<button id="msnHoldLand" hidden style="background:#ffb800;color:#000;border:0;border-radius:3px;padding:7px 16px;' +
+          'font:700 12px var(--msn-mono, monospace);letter-spacing:1px;cursor:pointer;pointer-events:auto">▼ LAND NOW</button></div>' +
+          '<div id="f2Msg" style="margin-top:3px;font-size:10px;color:#9fb3c4"></div>';
+        $('msnHoldLand').onclick = async () => {
+          const b = $('msnHoldLand');
+          b.disabled = true; b.textContent = 'LANDING…';
+          const r = await act('mission_land', {}, 'Landing');
+          if (!r.ok) { b.disabled = false; b.textContent = '▼ LAND NOW'; }
+        };
+      }
+      const v = flight2Html(s, st);
+      $('f2Steps').innerHTML = v.steps;
+      $('f2Msg').innerHTML = v.msg;
+      $('f2Msg').style.display = v.msg ? '' : 'none';
+      const b = $('msnHoldLand');
+      b.hidden = !v.holding;
+      if (v.holding && !b.disabled) b.textContent = '▼ LAND NOW';
+      return;
+    }
+    if (f1El.dataset.kind === 'f2') { f1El.dataset.kind = ''; f1El.innerHTML = ''; }
     const plan = (st && st.plan) || { low_alt: 2, low_hold: 20, high_alt: 5, high_hold: 30 };
     const cur = st ? st.name : (s.stage === 'takeoff' ? 'takeoff' : null);
     const idx = F1_STEPS.findIndex(x => x[0] === cur);

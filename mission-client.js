@@ -246,8 +246,8 @@
           if (st.alt <= 0) { st.step = { name: 'done', plan, checks: chk }; st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); } }
       } else if (st.stage === 'flight' && st.profile === 'flight2' && !st.abort) {
         // demo FLIGHT 2: 15 s per step at 5/10/15/20 m (2 s climbs), 12 s turn, 4 x 4 s box, 4 s home, landing
-        const e = t - st.flight_at, labels = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND'];
-        const plan = { alts: [5, 10, 15, 20], hold: 15, box: 5 };
+        const e = t - st.flight_at, labels = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'HOLD', 'LAND'];
+        const plan = { alts: [5, 10, 15, 20], hold: 15, box: 5, hold_max: 300, hold_min_volt: 21.5 };
         const sum = { alt_err_max: 0.14, tilt_max: 2.4, vib_max: 6.8, drift_max: 0.5 };
         const results = [], mk = (a) => ({ alt: a, ok: true, fails: [], summary: sum });
         let step, pos = 0;
@@ -265,14 +265,22 @@
           step = { name: 'leg', leg: Math.min(3, Math.floor((e - 78) / 4)) };
         } else if (e < 94 + 4) {
           pos = 6; st.alt = 20; results.push(...plan.alts.map(mk)); step = { name: 'home' };
+        } else if (!st.landFrom) {
+          // holds over the home point for photographs until the pilot lands
+          pos = 7; st.alt = 20; results.push(...plan.alts.map(mk));
+          const held = e - 98;
+          step = { name: 'hold_home', holding: true, held_for: Math.round(held),
+                   hold_left: Math.max(0, 300 - Math.round(held)) };
         } else {
-          pos = 7; results.push(...plan.alts.map(mk)); st.alt = Math.max(0, 20 - (e - 98) * 1.5);
+          pos = 8; results.push(...plan.alts.map(mk)); st.alt = Math.max(0, 20 - (t - st.landFrom) * 1.5);
           step = st.alt <= 0 ? { name: 'done' } : { name: 'landing' };
           if (st.alt <= 0) { st.armed = false; st.stage = 'landed'; ev('landed', 'Aircraft disarmed — landed'); }
         }
         if (!st.f2 || st.f2.name !== step.name) {
           const msg = { yaw: 'FLIGHT 2 CHECK PASSED at 20 m — turning 360°', leg: 'FLIGHT 2: 360° turn complete — flying the box',
-                        home: 'FLIGHT 2: box complete — returning to the home point at 20 m', landing: 'FLIGHT 2 — over the home point — descending and landing' }[step.name];
+                        home: 'FLIGHT 2: box complete — returning to the home point at 20 m',
+                        hold_home: 'FLIGHT 2 — holding over the home point at 20 m. Land from the console or with LAND on the RC.',
+                        landing: 'LANDING — commanded by the pilot' }[step.name];
           if (msg) ev('profile', msg);
         }
         st.f2 = step;
@@ -345,6 +353,11 @@
         case 'mission_manual':
           if (c.value) st.manual[c.key] = { by: who, at: now() }; else delete st.manual[c.key];
           ev('check', (c.value ? 'Confirmed: ' : 'Unconfirmed: ') + manualLabels[c.key], who); return ok('Updated');
+        case 'mission_land':
+          if (st.stage !== 'flight' && st.stage !== 'takeoff') return { ok: false, msg: 'The aircraft is not flying' };
+          st.landFrom = now();
+          ev('profile', 'LANDING — commanded by ' + who);
+          return { ok: true, msg: 'Landing' };
         case 'mission_abort':
           if (pre.includes(st.stage)) { st.armed = false; st.remaining = remaining(); st.deadline = null; st.held = false; st.abort = { reason: 'Aborted by operator', by: who, mode: 'disarm' }; st.stage = 'aborted'; ev('abort', 'ABORTED before takeoff', who); return ok('Aborted'); }
           if (['takeoff', 'flight'].includes(st.stage)) { st.stage = 'flight'; st.abort = { reason: 'Aborted by operator', by: who, mode: c.mode === 'rtl' ? 'rtl' : 'land' }; ev('abort', 'ABORT in flight — ' + (c.mode === 'rtl' ? 'RETURN TO HOME' : 'LAND NOW'), who); return ok('Abort'); }

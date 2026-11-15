@@ -110,6 +110,10 @@ def default_config(sim=False):
         'f2_leg_tol': 1.0,                                         # m: leg counts as flown inside this
         'f2_leg_timeout': env_float('AIRSENT_F2_LEG_TIMEOUT', 25.0),
         'f2_settle': 2.0,                                          # s pause at each corner
+        # After the box it holds over the take-off point at the top height for photographs, until the
+        # pilot lands (console button, or LAND on the RC). These two are the backstops, not the plan.
+        'f2_hold_max': env_float('AIRSENT_F2_HOLD_MAX', 300.0),    # s before it lands on its own
+        'f2_hold_min_volt': env_float('AIRSENT_F2_HOLD_MIN_VOLT', 21.5),   # 6S under load, with margin
         'sim': sim,
     }
 
@@ -132,7 +136,7 @@ PROFILES = {
 
 # Box sides, flown relative to the heading the aircraft has after the yaw: front, left, back, right
 BOX_LEGS = (('front', 0.0), ('left', -90.0), ('back', 180.0), ('right', 90.0))
-F2_LABELS = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'LAND']
+F2_LABELS = ['5 m', '10 m', '15 m', '20 m', '360°', 'BOX', 'HOME', 'HOLD', 'LAND']
 
 
 def _offset(lat, lon, bearing_deg, metres):
@@ -697,6 +701,8 @@ class MissionEngine:
                     return self._create(cmd, console, who, now)
                 if action == 'mission_abort':
                     return self._abort(cmd, who, now)
+                if action == 'mission_land':
+                    return self._land(who, now)
                 if action == 'mission_hold':
                     if self.stage not in PRE_TAKEOFF:
                         raise ValueError('Hold is only available before takeoff')
@@ -852,6 +858,19 @@ class MissionEngine:
         self._event('resume', 'Countdown resumed' + note, who)
         self._save()
         return self._ok('Countdown resumed' + note)
+
+    def _land(self, who, now):
+        """A planned landing, not an abort: the pilot ends the flight from the console."""
+        if self.stage not in ('takeoff', 'flight'):
+            raise ValueError('The aircraft is not flying')
+        if self.vehicle:
+            self.vehicle.land()
+        if self.step and self.step.get('name') not in ('done', 'landing'):
+            self.step = {**self.step, 'name': 'landing', 'pos': self._f2_pos(self.step) if self.profile == 'flight2' else None,
+                         'since': now, 'failed': False, 'why': f'landing — commanded by {who}'}
+        self._event('profile', f"LANDING — commanded by {who}", who)
+        self._save()
+        return self._ok('Landing')
 
     def _abort(self, cmd, who, now):
         if self.stage in PRE_TAKEOFF:
@@ -1059,6 +1078,15 @@ class MissionEngine:
         if name in ('done', 'released', 'landing'):
             if name == 'landing' and (s.get('alt') or 0) < 0.3:
                 self.step = {**st, 'name': 'done', 'since': now}
+            elif (name == 'landing' and st.get('by_rc') and s.get('flight_mode') == 'GUIDED'
+                  and (s.get('alt') or 0) > 1.0):
+                # The pilot let the LAND switch go: ArduPilot returns to the mode switch's mode
+                # (Guided) and the descent stops. Take the hold back so the aircraft is being
+                # flown by something and the console can land it again.
+                self.step = {**st, 'name': 'hold_home', 'since': now, 'by_rc': None, 'pinned': 0,
+                             'why': None, 'target': 'hold'}
+                self._event('profile', 'FLIGHT 2 — LAND released on the RC; holding over the home point again')
+                self._save()
             return
         mode = s.get('flight_mode')
         if mode and mode != 'GUIDED':
@@ -1131,20 +1159,25 @@ class MissionEngine:
         n = st.get('name')
         if n in ('hold', 'climb'):
             return st.get('i', 0)
-        return {'yaw': 4, 'leg': 5, 'home': 6, 'landing': 7, 'done': 7}.get(n, st.get('pos', 0))
+        return {'yaw': 4, 'leg': 5, 'home': 6, 'hold_home': 7, 'landing': 8, 'done': 8}.get(n, st.get('pos', 0))
 
     def _step_view2(self, st, now):
         cfg = self.config
         n = st['name']
         dur = {'hold': cfg['f2_hold'], 'climb': cfg['f2_climb_timeout'], 'yaw': cfg['f2_yaw_timeout'],
                'leg': cfg['f2_leg_timeout']}.get(n)
+        holding = n == 'hold_home'
         return {'name': n, 'elapsed': round(now - st['since'], 1),
                 'remaining': round(max(0.0, dur - (now - st['since'])), 1) if n == 'hold' else None,
                 'pos': self._f2_pos(st), 'at_pos': st.get('at_pos'), 'labels': F2_LABELS, 'i': st.get('i'), 'leg': st.get('leg'),
                 'yaw_done': round(st.get('yaw_acc', 0.0)) if n == 'yaw' else None,
                 'target': st.get('target'), 'why': st.get('why'), 'failed': st.get('failed'),
                 'results': st.get('results') or [],
-                'plan': {'alts': list(cfg['f2_alts']), 'hold': cfg['f2_hold'], 'box': cfg['f2_box']}}
+                'holding': holding,
+                'held_for': round(now - st['since'], 0) if holding else None,
+                'hold_left': round(max(0.0, cfg['f2_hold_max'] - (now - st['since'])), 0) if holding else None,
+                'plan': {'alts': list(cfg['f2_alts']), 'hold': cfg['f2_hold'], 'box': cfg['f2_box'],
+                         'hold_max': cfg['f2_hold_max'], 'hold_min_volt': cfg['f2_hold_min_volt']}}
 
     def _run_flight2(self, s, now):
         """FLIGHT 2: staircase with a check at every height, 360° yaw, box, home at the top, land.
@@ -1155,8 +1188,23 @@ class MissionEngine:
         if name in ('done', 'released', 'landing'):
             if name == 'landing' and (s.get('alt') or 0) < 0.3:
                 self.step = {**st, 'name': 'done', 'since': now}
+            elif (name == 'landing' and st.get('by_rc') and s.get('flight_mode') == 'GUIDED'
+                  and (s.get('alt') or 0) > 1.0):
+                # The pilot let the LAND switch go: ArduPilot returns to the mode switch's mode
+                # (Guided) and the descent stops. Take the hold back, so something is flying the
+                # aircraft and the console can land it again.
+                self.step = {**st, 'name': 'hold_home', 'since': now, 'by_rc': None, 'pinned': 0,
+                             'why': None, 'target': 'hold'}
+                self._event('profile', 'FLIGHT 2 — LAND released on the RC; holding over the home point again')
+                self._save()
             return
         mode = s.get('flight_mode')
+        if mode == 'LAND':
+            self.step = {**st, 'name': 'landing', 'pos': self._f2_pos(st), 'since': now, 'failed': False,
+                         'by_rc': True, 'why': 'landing — commanded by the pilot'}
+            self._event('profile', 'FLIGHT 2 — pilot commanded LAND; descending')
+            self._save()
+            return
         if mode and mode != 'GUIDED':
             self.step = {**st, 'name': 'released', 'pos': self._f2_pos(st), 'since': now,
                          'why': f'mode changed to {mode} (pilot / failsafe)'}
@@ -1250,11 +1298,29 @@ class MissionEngine:
             if dist is not None and dist <= cfg['f2_leg_tol'] and not st.get('arrived'):
                 st['arrived'] = now
             if st.get('arrived') and now - st['arrived'] >= cfg['f2_settle']:
-                self._f1_land(now, f"over the home point at {alts[-1]:g} m — descending and landing", failed=False)
+                self.step = {**st, 'name': 'hold_home', 'since': now, 'arrived': None, 'target': 'hold'}
+                self._event('profile', f"FLIGHT 2 — holding over the home point at {alts[-1]:g} m. "
+                                       f"Land from the console or with LAND on the RC "
+                                       f"(it lands on its own after {cfg['f2_hold_max'] / 60:.0f} min "
+                                       f"or below {cfg['f2_hold_min_volt']:.1f} V).")
                 self._save()
             elif t > cfg['f2_leg_timeout']:
                 self._f1_land(now, f"home point not reached in {cfg['f2_leg_timeout']:.0f} s — landing here")
                 self._save()
+        elif name == 'hold_home':
+            volts = s.get('voltage')
+            if isinstance(volts, (int, float)) and volts > 1 and not cfg.get('sim') and volts < cfg['f2_hold_min_volt']:
+                self._f1_land(now, f"battery down to {volts:.1f} V while holding "
+                                   f"(limit {cfg['f2_hold_min_volt']:.1f} V) — landing", failed=False)
+                self._save()
+            elif t >= cfg['f2_hold_max']:
+                self._f1_land(now, f"held {cfg['f2_hold_max'] / 60:.0f} min over the home point "
+                                   f"with no land command — landing", failed=False)
+                self._save()
+            elif now - st.get('pinned', 0) > 5.0:
+                if self.vehicle:                       # keep it pinned over the take-off point
+                    self.vehicle.goto_alt(alts[-1], *point)
+                self.step = {**st, 'pinned': now}
 
     def _plan_view(self):
         """Planned ground track for the map (FLIGHT 2 box): home → four corners (the last is home)."""

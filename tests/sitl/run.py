@@ -616,12 +616,14 @@ class Run:
             if start is None and st.get('name') == 'hold':
                 start = (self.v.get('lat'), self.v.get('lon'))
             trace.append((self.v.get('alt') or 0, st.get('name'), st.get('i'), self.v.get('lat'), self.v.get('lon'), self.v.get('yaw')))
+            if (m.get('step') or {}).get('name') == 'hold_home' and time.time() - t0 > 60:
+                break                                   # it now waits over home for the pilot
             if stage in ('landed', 'safed') or (stage == 'standby' and max(a for a, *_ in trace) > 1):
                 break
             time.sleep(0.5)
         seen = list(dict.fromkeys(n for _, n, *_ in trace if n))
-        self.expect(seen[:6] == ['hold', 'climb', 'yaw', 'leg', 'home', 'landing'] or
-                    (seen[0] == 'hold' and seen[-3:] == ['leg', 'home', 'landing'] and 'yaw' in seen), f'unexpected step order {seen}')
+        self.expect(seen[0] == 'hold' and 'yaw' in seen and seen[-3:] == ['leg', 'home', 'hold_home'],
+                    f'unexpected step order {seen}')
         for i, alt in enumerate((5, 10, 15, 20)):
             held = [a for a, n, k, *_ in trace if n == 'hold' and k == i]
             self.expect(held and abs(sum(held) / len(held) - alt) < 1.0, f'did not hover at {alt} m (saw {min(held or [0]):.1f}–{max(held or [0]):.1f})')
@@ -633,6 +635,18 @@ class Run:
         self.expect(max(a for a, *_ in trace) > 19, 'did not reach 20 m')
         self.expect(4.0 < far < 9.0, f'box was not ~5 m (reached {far:.1f} m)')
         self.expect(turned > 300, f'did not turn a full circle ({turned:.0f}°)')
+        # it holds over the home point for photographs rather than landing itself
+        st = (self.c.mission_block.get('mission') or {}).get('step') or {}
+        self.expect(st.get('name') == 'hold_home' and st.get('holding'), f'did not hold over home: {st}')
+        held0 = st.get('held_for') or 0
+        for _ in range(16):
+            self.c.ping(); time.sleep(0.5)
+        st = (self.c.mission_block.get('mission') or {}).get('step') or {}
+        self.expect(st.get('name') == 'hold_home', f'stopped holding on its own: {st}')
+        self.expect((st.get('held_for') or 0) > held0 + 4, 'hold timer is not running')
+        self.expect(abs((self.v.get('alt') or 0) - 20) < 2.0, f"drifted off the hold height: {self.v.get('alt')}")
+        self.note(f"held over home at {self.v.get('alt'):.1f} m for {st.get('held_for')} s, then landed on command")
+        self.ok(self.c.send('mission_land'), 'mission_land')
         end = time.time() + 90
         while time.time() < end and (self.c.mission_block.get('mission') or {}).get('stage') not in ('landed', 'safed'):
             self.c.ping(); time.sleep(1)
