@@ -849,3 +849,24 @@ class Flight2ProfileTests(MissionEngineBase):
         r = self.send('mission_land')
         self.assertFalse(r['ok'])
         self.assertIn('not flying', r['msg'])
+
+    def test_letting_the_rc_land_switch_go_returns_to_the_hold(self):
+        # ArduPilot's aux LAND switch returns to the mode switch's mode when released
+        # (RC_Channel.cpp: reset_mode_switch), so the descent stops and Guided holds it.
+        self._to_box_done()
+        self.fly(2, follow=False, flight_mode='LAND')
+        self.assertEqual(self.engine.step['name'], 'landing')
+        self.vehicle.alt = 14.0
+        self.fly(2, follow=False, flight_mode='GUIDED')
+        self.assertEqual(self.engine.step['name'], 'hold_home')
+        self.assertTrue(any('LAND released on the RC' in e['msg'] for e in self.engine.events))
+        r = self.send('mission_land')                 # and the console can still land it
+        self.assertTrue(r['ok'], r)
+        self.assertEqual(self.engine.step['name'], 'landing')
+
+    def test_a_console_landing_is_not_undone_by_the_mode(self):
+        self._to_box_done()
+        self.send('mission_land')
+        self.vehicle.alt = 14.0
+        self.fly(2, follow=False, flight_mode='GUIDED')
+        self.assertEqual(self.engine.step['name'], 'landing')

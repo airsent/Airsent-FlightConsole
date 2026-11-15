@@ -1078,6 +1078,15 @@ class MissionEngine:
         if name in ('done', 'released', 'landing'):
             if name == 'landing' and (s.get('alt') or 0) < 0.3:
                 self.step = {**st, 'name': 'done', 'since': now}
+            elif (name == 'landing' and st.get('by_rc') and s.get('flight_mode') == 'GUIDED'
+                  and (s.get('alt') or 0) > 1.0):
+                # The pilot let the LAND switch go: ArduPilot returns to the mode switch's mode
+                # (Guided) and the descent stops. Take the hold back so the aircraft is being
+                # flown by something and the console can land it again.
+                self.step = {**st, 'name': 'hold_home', 'since': now, 'by_rc': None, 'pinned': 0,
+                             'why': None, 'target': 'hold'}
+                self._event('profile', 'FLIGHT 2 — LAND released on the RC; holding over the home point again')
+                self._save()
             return
         mode = s.get('flight_mode')
         if mode and mode != 'GUIDED':
@@ -1179,11 +1188,20 @@ class MissionEngine:
         if name in ('done', 'released', 'landing'):
             if name == 'landing' and (s.get('alt') or 0) < 0.3:
                 self.step = {**st, 'name': 'done', 'since': now}
+            elif (name == 'landing' and st.get('by_rc') and s.get('flight_mode') == 'GUIDED'
+                  and (s.get('alt') or 0) > 1.0):
+                # The pilot let the LAND switch go: ArduPilot returns to the mode switch's mode
+                # (Guided) and the descent stops. Take the hold back, so something is flying the
+                # aircraft and the console can land it again.
+                self.step = {**st, 'name': 'hold_home', 'since': now, 'by_rc': None, 'pinned': 0,
+                             'why': None, 'target': 'hold'}
+                self._event('profile', 'FLIGHT 2 — LAND released on the RC; holding over the home point again')
+                self._save()
             return
         mode = s.get('flight_mode')
         if mode == 'LAND':
             self.step = {**st, 'name': 'landing', 'pos': self._f2_pos(st), 'since': now, 'failed': False,
-                         'why': 'landing — commanded by the pilot'}
+                         'by_rc': True, 'why': 'landing — commanded by the pilot'}
             self._event('profile', 'FLIGHT 2 — pilot commanded LAND; descending')
             self._save()
             return
