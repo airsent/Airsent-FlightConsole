@@ -333,10 +333,14 @@ class NewActions(unittest.TestCase):
         self.assertIn('armed', run('motor_test', motor=1, props_off_confirmed=True)['msg'])
         srv.telem['armed'] = False
         self.assertIn('propellers', run('motor_test', motor=1)['msg'])
-        self.assertIn('Throttle', run('motor_test', motor=1, throttle=50, props_off_confirmed=True)['msg'])
-        r = run('motor_test', motor=2, throttle=8, seconds=2, props_off_confirmed=True)
+        self.assertIn('Throttle', run('motor_test', motor=1, throttle=101, props_off_confirmed=True)['msg'])
+        self.assertIn('Time must be', run('motor_test', motor=1, throttle=50, seconds=181, props_off_confirmed=True)['msg'])
+        r = run('motor_test', motor=2, throttle=50, seconds=120, props_off_confirmed=True)   # full range is allowed now
         self.assertTrue(r['ok'], r)
         self.assertEqual(self.fc.commands[-1][:2], (srv.mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, 2))
+        self.assertIn('already running', run('motor_test', motor=3, throttle=10, props_off_confirmed=True)['msg'])
+        self.assertTrue(run('motor_test', stop=True)['ok'])
+        self.assertFalse(srv.motor_test_state['active'])
 
     def test_mission_files_and_path_safety(self):
         import base64, tempfile

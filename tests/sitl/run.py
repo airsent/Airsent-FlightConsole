@@ -642,6 +642,46 @@ class Run:
         self.expect(os.path.exists(os.path.join(folder, 'flight2_checks.json')), 'no flight2_checks.json')
         self.c.send('mission_close')
 
+    def s_motor_test_full(self):
+        """Motor test: any throttle, long runs kept alive by the Jetson, stop cuts it, mapping learned."""
+        self.expect(self.v.wait(lambda s: s['servo'], 10), 'no servo output from SITL')
+        base = max((self.v.get('servo') or {0: 0}).values())
+        t0 = time.time()
+        hot = lambda: [i for i, v in (self.v.get('servo') or {}).items() if v > base + 80]
+        self.ok(self.c.send('motor_test', motor=2, throttle=45, seconds=12, props_off_confirmed=True, timeout=10),
+                'motor_test start')
+        self.expect(self.v.wait(lambda s: [i for i, v in (s['servo'] or {}).items() if v > base + 80], 5),
+                    f"nothing spun up (servo {self.v.get('servo')}, idle {base}); "
+                    f"pixhawk said: {self.v.texts_since(t0)[-6:]}")
+        spun = hot()
+        self.expect(len(spun) == 1, f'expected one output to spin, got {spun}')
+        # The Pixhawk is only ever given a ~2 s window, so staying up past it proves the Jetson refreshes it.
+        time.sleep(6)
+        self.expect(hot() == spun, f'output stopped early ({hot()} vs {spun}) — the keep-alive is not working')
+        self.c.ping()
+        mt = (self.c.telem or {}).get('motor_test') or {}
+        self.expect(mt.get('active') and mt.get('stage') == 2, f'telemetry does not report the run: {mt}')
+        self.expect(2 < mt.get('remaining', 0) < 8, f"remaining looks wrong: {mt.get('remaining')}")
+        # The output is learned from what actually moved, not assumed to equal the test position.
+        self.expect(mt.get('output') == spun[0],
+                    f"learned output {mt.get('output')} but {spun[0]} is turning")
+        self.expect((mt.get('map') or {}).get('2') == spun[0] or (mt.get('map') or {}).get(2) == spun[0],
+                    f"mapping not recorded: {mt.get('map')}")
+        self.ok(self.c.send('motor_test', stop=True, timeout=10), 'motor_test stop')
+        self.expect(self.v.wait(lambda s: not [i for i, v in (s['servo'] or {}).items() if v > base + 40], 6),
+                    f"still turning after stop (servo {self.v.get('servo')})")
+        self.c.ping()
+        self.expect(not ((self.c.telem or {}).get('motor_test') or {}).get('active'), 'still reported active after stop')
+        # a short run ends by itself
+        self.ok(self.c.send('motor_test', motor=3, throttle=30, seconds=4, props_off_confirmed=True, timeout=10), 'short run')
+        self.expect(self.v.wait(lambda s: [i for i, v in (s['servo'] or {}).items() if v > base + 50], 5), 'position C did not spin')
+        self.expect(self.v.wait(lambda s: not [i for i, v in (s['servo'] or {}).items() if v > base + 40], 12), 'did not stop on time')
+        self.expect(not self.c.send('motor_test', motor=1, throttle=20, timeout=10).get('ok'),
+                    'ran without props-off confirmation')
+        self.c.ping()
+        self.note(f"idle {base}; position 2 drives output M{spun[0]}; kept alive past the 2.2 s window; "
+                  f"learned map {((self.c.telem or {}).get('motor_test') or {}).get('map')}")
+
     def s_pixhawk_reboot_reconnect(self):
         """Pixhawk power-cycles on the ground: the server notices, reconnects and streams again."""
         n0 = self.rig.server_log().count('Pixhawk connected')
@@ -668,7 +708,7 @@ class Run:
         self.note(f"E-STOP answered in {time.time() - t0:.2f} s during a param read: {r.get('msg')}")
         self.v.wait(lambda s: s['alt'] < 0.5, 20)
 
-    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_flight2_profile', 's_params_roundtrip', 's_flight1_setup_script', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
+    SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_flight2_profile', 's_motor_test_full', 's_params_roundtrip', 's_flight1_setup_script', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
                  's_normal_disarm_refused_in_air', 's_writes_blocked_when_armed', 's_joystick_and_stale_stop', 's_goto_and_rtl',
                  's_console_loss_hold_then_rtl', 's_console_back_cancels', 's_jetson_heartbeat_failsafe',
                  's_geofence', 's_estop_while_uploading', 's_battery_failsafe', 's_pixhawk_reboot_reconnect']

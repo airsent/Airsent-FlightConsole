@@ -21,44 +21,112 @@
   globalThis.AirsentActuatorView = {model};
   if (typeof document === 'undefined') return;
   const mode = (new URLSearchParams(location.search).get('trial') === 'demo' ? 'demo' : localStorage.getItem('airsentMode') || 'real').toLowerCase();
-  if (mode === 'demo') return;
   const el = id => document.getElementById(id);
+  if (mode === 'demo') {
+    document.querySelectorAll('.actuator-tests-panel .test-btn, .actuator-tests-panel input, .actuator-tests-panel .mt-presets button')
+      .forEach(node => { node.disabled = true; });
+    const demoNote = document.getElementById('mtMsg');
+    if (demoNote) demoNote.textContent = 'Demo mode — the motor test only runs on a real aircraft.';
+    return;
+  }
   const text = (id, value) => { if(el(id)) el(id).textContent=value; };
   const format = (value, suffix='', digits=0) => finite(value) ? value.toFixed(digits)+suffix : '--';
   const histories = [[],[],[],[]];
   let socket=null, retry=null, lastReceived=0, started=0, latest={};
+  let mtPaint=null;
   const maxAge=2500;
-  // ── Props-off motor test through the Jetson (MAV_CMD_DO_MOTOR_TEST). Disarmed only, 5–20 %, ≤ 3 s.
+  // ── Props-off motor test ────────────────────────────────────────────────────
+  // Full control: any motor, any throttle, up to three minutes. The Jetson keeps the run
+  // alive on a short refresh window, so the motors stop within ~2 s if anything drops out.
   (function motorTest(){
-    const panel=document.querySelector('.actuator-tests-panel'); if(!panel) return;
+    const panel=document.querySelector('.actuator-tests-panel'); if(!panel||!el('mtThrottle')) return;
     const viewer=mode==='viewer';
-    const warning=panel.querySelector('.tests-warning');
-    if(warning) warning.textContent='PROPS MUST BE REMOVED. Each test spins the motor for the set time, then stops by itself. Disarmed only.';
-    const stop=panel.querySelector('[data-motor="all-stop"]');
-    if(stop){stop.dataset.motor='0';stop.textContent='ALL MOTORS IN TURN';stop.classList.remove('stop-btn');}
-    const ctl=document.createElement('div');ctl.className='mt-ctl';
-    ctl.innerHTML='<label>THROTTLE <select id="mtThrottle"><option>5</option><option selected>8</option><option>10</option><option>15</option><option>20</option></select> %</label>'+
-      '<label>TIME <select id="mtSeconds"><option>1</option><option selected>2</option><option>3</option></select> s</label>'+
-      '<label class="mt-props"><input type="checkbox" id="mtProps"> PROPELLERS ARE REMOVED</label><div id="mtMsg" class="mt-msg"></div>';
-    panel.querySelector('.tests-grid').before(ctl);
-    const st=document.createElement('style');st.textContent='.mt-ctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:8px 0;font-size:11px;color:#9fb3c4}'+
-      '.mt-ctl select{background:#0b1620;color:#e8f4ff;border:1px solid #2a3e4e;padding:2px 4px}.mt-props{color:#ffb800;font-weight:700}.mt-msg{flex-basis:100%;min-height:14px;font-size:11px}'+
-      '.mt-msg.ok{color:#00e383}.mt-msg.err{color:#ff5c7a}.test-btn.running{background:#ffb800!important;color:#000!important}';document.head.appendChild(st);
-    const buttons=[...panel.querySelectorAll('.test-btn')];
-    const props=el('mtProps');
-    const sync=()=>buttons.forEach(b=>{b.disabled=viewer||!props.checked;b.title=viewer?'Viewer mode — read only':props.checked?'Spin this motor':'Tick "propellers are removed" first';});
-    props.addEventListener('change',sync);sync();
-    let busy=false;
-    buttons.forEach(b=>b.addEventListener('click',async()=>{
-      if(busy||viewer||!props.checked)return;
-      if(latest.armed){text('mtMsg','Disarm first — motor test is blocked while armed');el('mtMsg').className='mt-msg err';return;}
-      const motor=Number(b.dataset.motor),throttle=Number(el('mtThrottle').value),seconds=Number(el('mtSeconds').value);
-      busy=true;b.classList.add('running');text('mtMsg','Sending…');el('mtMsg').className='mt-msg';
-      const r=window.airsentMission?await window.airsentMission.send('motor_test',{motor,throttle,seconds,props_off_confirmed:true},{timeout:6000}):{ok:false,msg:'Command link not loaded'};
-      text('mtMsg',(r.ok?'✓ ':'✗ ')+r.msg);el('mtMsg').className='mt-msg '+(r.ok?'ok':'err');
-      setTimeout(()=>{b.classList.remove('running');busy=false;},r.ok?seconds*1000*(motor===0?4:1)+300:0);
+    const thr=el('mtThrottle'),thrN=el('mtThrottleNum'),sec=el('mtSeconds'),secN=el('mtSecondsNum');
+    const props=el('mtProps'),note=el('mtNote'),stopBtn=el('mtStop'),live=el('mtLive');
+    const runButtons=[...panel.querySelectorAll('.test-btn[data-motor]')];
+    const mapTags=new Map([...panel.querySelectorAll('[data-map]')].map(n=>[Number(n.dataset.map),n]));
+    const presets=[...panel.querySelectorAll('.mt-presets button')];
+    const warn=panel.querySelector('.tests-warning');
+    if(warn) warn.textContent='PROPS MUST BE REMOVED. The motors spin for the time you set, then stop by themselves. Disarmed only.';
+    let running=false, sending=false;
+
+    const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,Number.isFinite(v)?v:lo));
+    const throttle=()=>clamp(Math.round(Number(thrN.value)),0,100);
+    const seconds=()=>clamp(Math.round(Number(secN.value)),1,180);
+    const say=(s,kind='')=>{text('mtMsg',s);if(el('mtMsg'))el('mtMsg').className='mt-msg '+kind;};
+
+    function advice(){
+      const p=throttle(),s=seconds();
+      if(p>=70&&s>30) return 'High throttle for this long with no load: watch ESC and motor temperature, and stop if anything gets hot to touch.';
+      if(p>=70) return 'Unloaded motors reach very high RPM at this throttle. Keep clear of the bell.';
+      if(s>60) return 'Long run: ESCs get no airflow with the props off, so check their temperature afterwards.';
+      if(p===0) return 'At 0 % the motor will not turn — raise the throttle to spin it.';
+      return '';
+    }
+    function sync(){
+      const ok=props.checked&&!viewer&&!running&&!sending;
+      runButtons.forEach(b=>{b.disabled=!ok;
+        b.title=viewer?'Viewer mode — read only':running?'A test is running':props.checked?'Spin this motor':'Tick "propellers are removed" first';});
+      stopBtn.disabled=viewer;
+      presets.forEach(b=>b.classList.toggle('on',Number(b.dataset.secs)===seconds()));
+      if(note) note.textContent=advice();
+    }
+    const pair=(range,num,lo,hi)=>{
+      range.addEventListener('input',()=>{num.value=range.value;sync();});
+      num.addEventListener('input',()=>{const v=clamp(Math.round(Number(num.value)),lo,hi);range.value=v;sync();});
+      num.addEventListener('blur',()=>{const v=clamp(Math.round(Number(num.value)),lo,hi);num.value=v;range.value=v;sync();});
+    };
+    pair(thr,thrN,0,100); pair(sec,secN,1,180);
+    presets.forEach(b=>b.addEventListener('click',()=>{sec.value=secN.value=b.dataset.secs;sync();}));
+    props.addEventListener('change',sync);
+
+    async function send(payload,label){
+      if(sending) return;
+      sending=true;sync();say(label+'…');
+      const r=window.airsentMission
+        ? await window.airsentMission.send('motor_test',payload,{timeout:6000})
+        : {ok:false,msg:'Command link not loaded'};
+      sending=false;say((r.ok?'✓ ':'✗ ')+r.msg,r.ok?'ok':'err');sync();
+      return r;
+    }
+    runButtons.forEach(b=>b.addEventListener('click',()=>{
+      if(b.disabled) return;
+      if(latest.armed) return say('Disarm first — motor test is blocked while armed','err');
+      const motor=Number(b.dataset.motor);
+      send({motor,throttle:throttle(),seconds:seconds(),props_off_confirmed:true},
+           motor===0?'Starting every position in turn':`Starting position ${'ABCD'[motor-1]}`);
     }));
+    stopBtn.addEventListener('click',()=>{ if(!stopBtn.disabled) send({stop:true,props_off_confirmed:true},'Stopping'); });
+    // Space or Escape stops a running test without hunting for the button.
+    addEventListener('keydown',e=>{
+      if(running&&!viewer&&(e.key==='Escape'||e.key===' ')&&!/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)){
+        e.preventDefault();stopBtn.click();
+      }
+    });
+
+    mtPaint=mt=>{
+      const map=(mt&&mt.map)||{};
+      mapTags.forEach((node,pos)=>{node.textContent=map[pos]?` M${map[pos]}`:'';});
+      const on=!!(mt&&mt.active);
+      if(on!==running){running=on;sync();}
+      live.hidden=!on;
+      if(!on){
+        const why=mt&&mt.outcome;
+        if(why&&why!=='finished'&&!/^stopped by/.test(why)&&!sending) say('Test ended — '+why,'err');
+        runButtons.forEach(b=>b.classList.remove('running'));
+        return;
+      }
+      const letter='ABCD'[(mt.stage||1)-1]||'?';
+      const out=mt.output?` → M${mt.output}`:'';
+      const what=(mt.sequence?`${letter} of 4`:letter)+out+` · ${Math.round(mt.pct)}%`;
+      text('mtLiveWhat',what);
+      text('mtLiveLeft',`${Math.ceil(mt.remaining||0)} s left`);
+      if(el('mtBar')) el('mtBar').style.width=`${mt.total?Math.min(100,100*mt.elapsed/mt.total):0}%`;
+      runButtons.forEach(b=>b.classList.toggle('running',Number(b.dataset.motor)===(mt.sequence?0:mt.stage)));
+    };
+    sync();
   })();
+
   ['statusSelect','flightModeSelect'].forEach(id=>{if(el(id)) el(id).disabled=true;});
   ['failsafeStateTop','summaryFailsafe'].forEach(id=>{const node=el(id);if(node) node.parentElement.childNodes.forEach(child=>{if(child.nodeType===3)child.textContent=child.textContent.replace(/FAILSAFE:/g,'ESC STATUS:');});});
   const escLabel=el('failsafeStateTop')?.parentElement.querySelector('.subbar-label');if(escLabel)escLabel.textContent='ESC STATUS:';
@@ -115,6 +183,7 @@
       if(append){histories[i].push({pwm:m.pwm,output:m.output});if(histories[i].length>60)histories[i].shift();}
       chart(`motorSpark${m.id}`,[histories[i].map(v=>v.output)],100);
     });
+    if(mtPaint) mtPaint(data.motor_test);
     chart('motorPwmChart',histories.map(h=>h.map(v=>v.pwm)),2200);
     chart('motorOutputChart',histories.map(h=>h.map(v=>v.output)),100);
   }

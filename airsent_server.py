@@ -1081,8 +1081,150 @@ def goto_point(mav, cmd):
     return {'ok': True, 'msg': f'Flying to the point — {dist:.0f} m away at {alt:.0f} m', 'dist_m': round(dist, 1), 'alt_m': alt}
 
 
+# ── Props-off motor test ──────────────────────────────────────────────────────
+# The Pixhawk is never handed a long timeout. The Jetson re-sends the command on a short
+# window, so if the Jetson, the command link or this process stops, the motors wind down
+# within MOTOR_TEST_WINDOW seconds instead of running out a three-minute timer alone.
+MOTOR_TEST_MAX_PCT = 100.0
+MOTOR_TEST_MAX_S = 180.0
+MOTOR_TEST_REFRESH = 0.7      # how often the command is re-sent while a test runs
+MOTOR_TEST_WINDOW = 2.2       # the Pixhawk's own timeout per send: the dead-man margin
+
+motor_test_lock = threading.Lock()
+motor_test_state = {'active': False, 'motor': 0, 'pct': 0.0, 'seconds': 0.0, 'sequence': False,
+                    'stage': None, 'started': 0.0, 'until': 0.0, 'by': '', 'outcome': None, 'sent': 0.0,
+                    'output': None, 'idle': None}
+# ArduCopter's param1 is the frame's TEST POSITION (what QGroundControl calls A-D), not the output
+# number: on an X quad test position 2 spins output 4. It ignores the "motor test order" parameter
+# altogether (ArduCopter/GCS_Mavlink.cpp passes param5 as the motor count and never reads param6),
+# so the output cannot be addressed directly. We watch the servo outputs instead and learn the real
+# mapping from what actually moved, which works whatever the frame is.
+motor_test_map = {}          # test position (1-4) -> motor output that answered
+
+
+def _motor_test_send(mav, position, pct, window):
+    # param1 test position, param2 0 = percent, param3 throttle, param4 seconds, param5 motor count
+    mav.mav.command_long_send(mav.target_system, mav.target_component, mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, 0,
+                              int(position), 0, float(pct), float(window), 0, 0, 0)
+
+
+def _motor_outputs():
+    return {i: telem.get(f'm{i}') for i in (1, 2, 3, 4)}
+
+
+def _motor_test_watch(position, idle):
+    """Which output actually answered this test? Learned from the servo outputs, not assumed."""
+    now_pwm = _motor_outputs()
+    moved = [(i, now_pwm[i] - (idle or {}).get(i, 0)) for i in (1, 2, 3, 4)
+             if isinstance(now_pwm[i], (int, float)) and isinstance((idle or {}).get(i), (int, float))]
+    if not moved:
+        return None
+    best, rise = max(moved, key=lambda kv: kv[1])
+    others = max((d for i, d in moved if i != best), default=0)
+    if rise < 40 or rise < others + 25:          # nothing clearly spinning yet
+        return None
+    if motor_test_map.get(position) != best:
+        motor_test_map[position] = best
+        log_mavlink(f"MOTOR TEST position {position} is output M{best}")
+    return best
+
+
+def _motor_test_halt(outcome, quiet=False):
+    """Stop the run and tell the Pixhawk to cut every motor. Safe to call at any time."""
+    with motor_test_lock:
+        was = motor_test_state['active']
+        motor_test_state.update({'active': False, 'stage': None, 'until': 0.0, 'outcome': outcome})
+    with mav_lock:
+        mav = mav_conn
+    if mav:
+        for m in (1, 2, 3, 4):
+            try:
+                _motor_test_send(mav, m, 0.0, 0.0)
+            except Exception:
+                pass
+    if was and not quiet:
+        log_mavlink(f"MOTOR TEST ENDED — {outcome}")
+    return was
+
+
+def _motor_test_tick(now=None):
+    """One step of a running test: keep it alive, move the sequence on, or end it.
+    Returns True while a test is still running."""
+    now = now or time.time()
+    with motor_test_lock:
+        st = dict(motor_test_state)
+    if not st['active']:
+        return False
+    # 'armed' is not an abort: ArduCopter arms the motors itself for the duration of a motor test
+    # (motor_test.cpp calls motors->armed(true)), so the heartbeat reports armed while this runs.
+    # A test can only be started from disarmed; what guards it from here is the duration, the
+    # refresh window, the operator's stop, and the link check below.
+    with mav_lock:
+        mav = mav_conn
+    beat = now - last_mav_heartbeat if last_mav_heartbeat else None
+    if mav is None or beat is None or beat > 5:
+        _motor_test_halt('Pixhawk link lost')
+        return False
+    if now >= st['until']:
+        _motor_test_halt('finished')
+        return False
+    stage = st['stage']
+    if st['sequence']:                              # each motor in turn, st['seconds'] each
+        want = 1 + min(3, int((now - st['started']) / st['seconds']))
+        if want != stage:
+            try:
+                _motor_test_send(mav, stage, 0.0, 0.0)       # stop this one before starting the next
+            except Exception:
+                pass
+            stage = want
+            with motor_test_lock:
+                motor_test_state['stage'] = stage
+                motor_test_state['output'] = None
+                motor_test_state['idle'] = _motor_outputs()
+            log_mavlink(f"MOTOR TEST M{stage} at {st['pct']:.0f}%")
+    if now - st['sent'] >= MOTOR_TEST_REFRESH:
+        _motor_test_send(mav, stage, st['pct'], min(MOTOR_TEST_WINDOW, max(0.3, st['until'] - now + 0.2)))
+        with motor_test_lock:
+            motor_test_state['sent'] = now
+    if st['pct'] > 0 and now - st['started'] > 0.6:
+        found = _motor_test_watch(stage, st['idle'])
+        if found:
+            with motor_test_lock:
+                motor_test_state['output'] = found
+    return True
+
+
+def motor_test_runner():
+    """Keeps a running test alive and ends it on time, on arming, or on a lost link."""
+    while True:
+        try:
+            time.sleep(0.1 if _motor_test_tick() else 0.15)
+        except Exception as e:
+            log_mavlink(f"MOTOR TEST ERROR — {e}")
+            _motor_test_halt('internal error')
+            time.sleep(0.5)
+
+
+def motor_test_snapshot(now=None):
+    now = now or time.time()
+    with motor_test_lock:
+        st = dict(motor_test_state)
+    st.pop('sent', None)
+    st.pop('idle', None)
+    st['map'] = dict(motor_test_map)
+    st['elapsed'] = round(max(0.0, now - st['started']), 1) if st['active'] else 0.0
+    st['remaining'] = round(max(0.0, st['until'] - now), 1) if st['active'] else 0.0
+    st['total'] = round(st['until'] - st['started'], 1) if st['active'] else 0.0
+    st['limits'] = {'max_pct': MOTOR_TEST_MAX_PCT, 'max_seconds': MOTOR_TEST_MAX_S}
+    return st
+
+
 def motor_test(mav, cmd):
-    """Props-off motor test (MAV_CMD_DO_MOTOR_TEST). Disarmed only; throttle and time capped."""
+    """Props-off motor test (MAV_CMD_DO_MOTOR_TEST). Disarmed only, any throttle, up to three minutes."""
+    who = cmd.get('operator') or 'Operator'
+    if cmd.get('stop'):
+        return {'ok': True, 'msg': 'Motor test stopped' if _motor_test_halt(f'stopped by {who}')
+                else 'No motor test was running'}
     if telem.get('armed'):
         return {'ok': False, 'msg': 'Motor test is blocked while armed'}
     if not cmd.get('props_off_confirmed'):
@@ -1094,21 +1236,33 @@ def motor_test(mav, cmd):
     except (TypeError, ValueError):
         return {'ok': False, 'msg': 'Invalid motor test settings'}
     if motor not in (0, 1, 2, 3, 4):
-        return {'ok': False, 'msg': 'Motor must be 1–4 (or 0 for all in turn)'}
-    if not (5 <= pct <= 20) or not (0.5 <= secs <= 3):
-        return {'ok': False, 'msg': 'Throttle must be 5–20 % and time 0.5–3 s'}
+        return {'ok': False, 'msg': 'Test position must be 1–4 (or 0 for all in turn)'}
+    if not (0 <= pct <= MOTOR_TEST_MAX_PCT):
+        return {'ok': False, 'msg': f'Throttle must be 0–{MOTOR_TEST_MAX_PCT:.0f} %'}
+    if not (0.5 <= secs <= MOTOR_TEST_MAX_S):
+        return {'ok': False, 'msg': f'Time must be 0.5–{MOTOR_TEST_MAX_S:.0f} s per motor'}
+    with motor_test_lock:
+        if motor_test_state['active']:
+            return {'ok': False, 'msg': 'A motor test is already running — stop it first'}
+    stage = motor or 1
     since = time.time()
-    # param1 motor (output number with board order), param2 0 = percent, param3 throttle, param4 seconds,
-    # param5 motor count (all four in turn when motor == 0), param6 2 = board (output) order
-    mav.mav.command_long_send(mav.target_system, mav.target_component, mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, 0,
-                              motor or 1, 0, pct, secs, 4 if motor == 0 else 0, 2, 0)
-    who = cmd.get('operator') or 'Operator'
-    which = 'all motors in turn' if motor == 0 else f'M{motor}'
+    idle = _motor_outputs()                                   # baseline, to see which output answers
+    _motor_test_send(mav, stage, pct, MOTOR_TEST_WINDOW)      # sent inline so a refusal is reported now
     r = wait_ack(mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST, since, 2.0)
     if r == 0:
-        log_mavlink(f"MOTOR TEST {which} {pct:.0f}% {secs:.1f}s by {who}")
-        return {'ok': True, 'msg': f'Motor test running — {which} at {pct:.0f}% for {secs:.1f} s' + (' each' if motor == 0 else '')}
-    reason = next((t for _, _, t in reversed(list(statustext_log)) if 'motor test' in t.lower() and time.time() - _ < 5), '')
+        total = secs * (4 if motor == 0 else 1)
+        with motor_test_lock:
+            motor_test_state.update({'active': True, 'motor': motor, 'pct': pct, 'seconds': secs,
+                                     'sequence': motor == 0, 'stage': stage, 'started': since,
+                                     'until': since + total, 'by': who, 'outcome': None, 'sent': since,
+                                     'output': None, 'idle': idle})
+        which = 'all positions in turn' if motor == 0 else f'position {motor}'
+        log_mavlink(f"MOTOR TEST {which} {pct:.0f}% {secs:.0f}s by {who}")
+        return {'ok': True, 'msg': f'Running — {which} at {pct:.0f}% for {secs:.0f} s'
+                                   + (' each' if motor == 0 else '')}
+    _motor_test_halt('refused by the Pixhawk', quiet=True)
+    reason = next((txt for ts, _, txt in reversed(list(statustext_log))
+                   if 'motor test' in txt.lower() and time.time() - ts < 5), '')
     return {'ok': False, 'msg': 'Pixhawk refused the motor test: ' + (ACK_RESULTS.get(r, str(r)) if r is not None else 'no answer')
             + (f' — {reason}' if reason else '')}
 
@@ -2313,6 +2467,7 @@ def build_telemetry_payload(include_mission=True):
     payload = dict(telem)
     payload['mavlink_log'] = log
     payload['esc_telemetry'] = esc_monitor.snapshot() if esc_monitor else None
+    payload['motor_test'] = motor_test_snapshot(now)
     # Motor output % is computed from the Pixhawk's command PWM against its own range.
     lo, hi = param_store.get('MOT_PWM_MIN'), param_store.get('MOT_PWM_MAX')
     payload['mot_pwm'] = {'min': (lo or {}).get('value') or 1100, 'max': (hi or {}).get('value') or 1940,
@@ -3334,6 +3489,7 @@ if __name__ == "__main__":
     threading.Thread(target=cellular_signal_reader, daemon=True).start()
     threading.Thread(target=netlink_reader, daemon=True).start()
     threading.Thread(target=velocity_sender,        daemon=True).start()
+    threading.Thread(target=motor_test_runner,      daemon=True, name='motor-test').start()
     threading.Thread(target=mission_loop,           daemon=True).start()
     threading.Thread(target=asc_loop,               daemon=True).start()
     if not SIM_MODE:
