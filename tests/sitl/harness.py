@@ -85,11 +85,11 @@ class Vehicle:
     """Independent view of the SITL vehicle on its second port (tcp 5762)."""
     def __init__(self, url='tcp:127.0.0.1:5762'):
         self.m = mavutil.mavlink_connection(url, source_system=250, source_component=191)
-        self.state = {'armed': False, 'mode': None, 'alt': 0.0, 'lat': None, 'lon': None, 'yaw': None, 'texts': [], 'params': {}}
+        self.state = {'armed': False, 'mode': None, 'alt': 0.0, 'lat': None, 'lon': None, 'yaw': None, 'texts': [], 'params': {}, 'servo': {}}
         self.lock = threading.Lock()
         self.m.wait_heartbeat(timeout=30)
         # streams on this port too
-        for mid, hz in ((33, 10), (0, 2), (74, 5), (24, 2)):
+        for mid, hz in ((33, 10), (0, 2), (74, 5), (24, 2), (36, 10)):
             self.m.mav.command_long_send(1, 1, 511, 0, mid, 1e6 / hz, 0, 0, 0, 0, 0)
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -111,6 +111,8 @@ class Vehicle:
                     self.state['lat'], self.state['lon'] = msg.lat / 1e7, msg.lon / 1e7
                     if msg.hdg != 65535:
                         self.state['yaw'] = msg.hdg / 100.0
+                elif t == 'SERVO_OUTPUT_RAW':
+                    self.state['servo'] = {i: getattr(msg, f'servo{i}_raw', 0) for i in (1, 2, 3, 4)}
                 elif t == 'STATUSTEXT':
                     self.state['texts'].append((time.time(), msg.text))
                     self.state['texts'] = self.state['texts'][-200:]

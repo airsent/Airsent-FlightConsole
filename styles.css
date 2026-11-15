@@ -3717,3 +3717,32 @@ body.dashboard-fixed .launch-clock-row a {
   grid-row: 2 !important;
 }
 
+
+/* ── Motor test panel (actuators) ─────────────────────────────────────────── */
+.actuator-tests-panel .mt-row{display:flex;align-items:center;gap:8px;margin:7px 0}
+.actuator-tests-panel .mt-label{flex:none;width:66px;font-size:10px;letter-spacing:.08em;color:#9fb3c4}
+.actuator-tests-panel .mt-row input[type=range]{flex:1;min-width:70px;accent-color:#00c8ff;height:18px}
+.actuator-tests-panel .mt-num{width:52px;background:#0b1620;color:#e8f4ff;border:1px solid #2a3e4e;
+  padding:3px 4px;font:inherit;font-size:12px;text-align:right}
+.actuator-tests-panel .mt-unit{font-size:10px;color:#9fb3c4;width:10px}
+.actuator-tests-panel .mt-presets{display:flex;gap:5px;margin:6px 0 2px;flex-wrap:wrap}
+.actuator-tests-panel .mt-presets button{flex:1;min-width:42px;background:#0b1620;color:#9fb3c4;
+  border:1px solid #2a3e4e;padding:4px 2px;font:inherit;font-size:10px;cursor:pointer}
+.actuator-tests-panel .mt-presets button:hover:not(:disabled){color:#e8f4ff;border-color:#3d5570}
+.actuator-tests-panel .mt-presets button.on{background:#13304a;color:#e8f4ff;border-color:#00c8ff}
+.actuator-tests-panel .mt-note{min-height:13px;font-size:10px;line-height:1.35;color:#ffb800;margin:4px 0}
+.actuator-tests-panel .mt-props{display:block;margin:6px 0 8px;color:#ffb800;font-weight:700;font-size:11px;cursor:pointer}
+.actuator-tests-panel .mt-wide{width:100%;margin-top:6px}
+.actuator-tests-panel .test-btn.running{background:#ffb800!important;color:#000!important}
+.actuator-tests-panel .test-btn:disabled{opacity:.42;cursor:not-allowed}
+.actuator-tests-panel .mt-live{margin-top:9px;padding:7px 8px;background:#0b1620;border:1px solid #2a3e4e}
+.actuator-tests-panel .mt-live-head{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#e8f4ff}
+.actuator-tests-panel .mt-live-head span{color:#9fb3c4;font-variant-numeric:tabular-nums}
+.actuator-tests-panel .mt-bar{margin-top:5px;height:4px;background:#17242f;overflow:hidden}
+.actuator-tests-panel .mt-bar i{display:block;height:100%;width:0;background:#00c8ff;transition:width .3s linear}
+.actuator-tests-panel .mt-msg{min-height:14px;font-size:11px;line-height:1.4;margin-top:6px;color:#9fb3c4}
+.actuator-tests-panel .mt-msg.ok{color:#00e383}
+.actuator-tests-panel .mt-msg.err{color:#ff5c7a}
+.actuator-tests-panel .mt-maphint{font-size:10px;line-height:1.4;color:#7f93ad;margin:2px 0 7px}
+.actuator-tests-panel .test-btn i{font-style:normal;color:#00c8ff;font-size:9px;margin-left:3px}
+.actuator-tests-panel .test-btn.running i{color:#3a2800}

@@ -366,20 +366,57 @@
       </section>
 
       <section class="panel actuator-tests-panel">
-        <div class="panel-title">MOTOR TESTS</div>
+        <div class="panel-title">MOTOR TEST</div>
 
         <div class="tests-warning">
           PROPS MUST BE REMOVED BEFORE RUNNING ANY MOTOR TEST.
         </div>
 
-        <div class="tests-grid">
-          <button class="test-btn" data-motor="1">M1 TEST</button>
-          <button class="test-btn" data-motor="2">M2 TEST</button>
-          <button class="test-btn" data-motor="3">M3 TEST</button>
-          <button class="test-btn" data-motor="4">M4 TEST</button>
+        <div class="mt-row">
+          <label class="mt-label" for="mtThrottle">THROTTLE</label>
+          <input id="mtThrottle" type="range" min="0" max="100" step="1" value="10">
+          <input id="mtThrottleNum" type="number" min="0" max="100" step="1" value="10" class="mt-num" aria-label="Throttle percent">
+          <span class="mt-unit">%</span>
         </div>
 
-        <button class="test-btn stop-btn" data-motor="all-stop">ALL MOTORS STOP</button>
+        <div class="mt-row">
+          <label class="mt-label" for="mtSeconds">RUN TIME</label>
+          <input id="mtSeconds" type="range" min="1" max="180" step="1" value="5">
+          <input id="mtSecondsNum" type="number" min="1" max="180" step="1" value="5" class="mt-num" aria-label="Run time in seconds">
+          <span class="mt-unit">s</span>
+        </div>
+
+        <div class="mt-presets">
+          <button type="button" data-secs="2">2s</button>
+          <button type="button" data-secs="10">10s</button>
+          <button type="button" data-secs="30">30s</button>
+          <button type="button" data-secs="60">1min</button>
+          <button type="button" data-secs="180">3min</button>
+        </div>
+
+        <div class="mt-note" id="mtNote"></div>
+
+        <label class="mt-props"><input type="checkbox" id="mtProps"> PROPELLERS ARE REMOVED</label>
+
+        <div class="mt-maphint">Positions are ArduPilot's test order, the same A-D QGroundControl uses.
+          The output each one drives is shown once it has run.</div>
+
+        <div class="tests-grid">
+          <button class="test-btn" data-motor="1">A<i data-map="1"></i></button>
+          <button class="test-btn" data-motor="2">B<i data-map="2"></i></button>
+          <button class="test-btn" data-motor="3">C<i data-map="3"></i></button>
+          <button class="test-btn" data-motor="4">D<i data-map="4"></i></button>
+        </div>
+
+        <button class="test-btn mt-wide" data-motor="0">ALL POSITIONS IN TURN</button>
+        <button class="test-btn stop-btn mt-wide" id="mtStop">STOP</button>
+
+        <div class="mt-live" id="mtLive" hidden>
+          <div class="mt-live-head"><b id="mtLiveWhat">--</b><span id="mtLiveLeft">--</span></div>
+          <div class="mt-bar"><i id="mtBar"></i></div>
+        </div>
+
+        <div id="mtMsg" class="mt-msg" role="status" aria-live="polite"></div>
       </section>
     </main>
   </div>
@@ -735,7 +772,7 @@
 
   }
   </script>
-<script src="actuators-live.js?v=motortest-1"></script>
+<script src="actuators-live.js?v=motor-test-2"></script>
 <script src="presence.js?v=sitl-1"></script>
 <script src="nav-toggle.js?v=1"></script>
 <script src="mission-client.js?v=14"></script>
