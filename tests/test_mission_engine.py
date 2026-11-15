@@ -665,7 +665,19 @@ class Flight2ProfileTests(MissionEngineBase):
             self.fly(6, follow=True)
         self.assertEqual(self.engine.step['name'], 'yaw')
 
-    def test_yaw_then_box_then_home_then_land(self):
+    def _to_box_done(self):
+        """Fly the whole profile up to the hold over home."""
+        self._to_yaw()
+        for deg in range(0, 361, 30):
+            self.overrides['yaw'] = (90 + deg) % 360
+            self.fly(1, follow=False)
+        for _ in range(80):
+            self.fly(1, follow=True)
+            if self.engine.step['name'] == 'hold_home':
+                return
+        raise AssertionError(f"never reached the hold (step {self.engine.step['name']})")
+
+    def test_yaw_then_box_then_hold_over_home(self):
         self._to_yaw()
         for deg in range(0, 361, 30):                    # the aircraft turns through a full circle
             self.overrides['yaw'] = (90 + deg) % 360
@@ -676,11 +688,12 @@ class Flight2ProfileTests(MissionEngineBase):
         # a closed 5 m square: the last corner is the take-off point
         self.assertLess(abs(corners[3][0] - self.LAT) * 111320, 0.01)
         self.assertLess(abs(corners[3][1] - self.LON) * 111320 * 0.835, 0.01)
-        self.fly(30, follow=True)                        # the four sides, home, then land
+        self.fly(30, follow=True)                        # the four sides, then home
         self.assertEqual([g[0] for g in self.vehicle.goto[-6:]], [20.0] * 6)
         self.assertEqual(self.vehicle.goto[-1][1:], (self.LAT, self.LON))     # last target: the home point
-        self.assertIn(('land',), self.vehicle.calls)
-        self.assertFalse(self.engine.step['failed'])
+        self.assertEqual(self.engine.step['name'], 'hold_home')               # waits for the pilot, does not land
+        self.assertNotIn(('land',), self.vehicle.calls)
+        self.assertFalse(self.engine.step.get('failed'))
         self.assertTrue(any('box complete' in e['msg'] for e in self.engine.events))
 
     def test_failed_check_lands_where_it_is(self):
@@ -785,3 +798,54 @@ class Flight2ProfileTests(MissionEngineBase):
         # points are at least 2 m apart
         from mission_engine import _dist_m
         self.assertTrue(all(_dist_m(a, b) >= 2.0 for a, b in zip(track, track[1:])))
+
+    def test_holds_over_home_for_photos_until_the_pilot_lands(self):
+        self._to_box_done()
+        self.assertEqual(self.engine.step['name'], 'hold_home')
+        view = self.engine.snapshot()['step']
+        self.assertTrue(view['holding'])
+        self.assertEqual(view['labels'][view['pos']], 'HOLD')
+        self.assertNotIn(('land',), self.vehicle.calls)
+        self.fly(60, follow=True)                       # a minute of photographs
+        self.assertEqual(self.engine.step['name'], 'hold_home')
+        self.assertNotIn(('land',), self.vehicle.calls)
+        self.assertGreaterEqual(self.engine.snapshot()['step']['held_for'], 60)
+        # it stays pinned over the take-off point at the top height
+        self.assertEqual(self.vehicle.goto[-1], (20.0, self.LAT, self.LON))
+        r = self.send('mission_land')
+        self.assertTrue(r['ok'], r)
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertEqual(self.engine.step['name'], 'landing')
+        self.assertFalse(self.engine.step.get('failed'))
+        self.assertTrue(any('LANDING — commanded by Aarav' in e['msg'] for e in self.engine.events))
+
+    def test_pilot_land_on_the_rc_is_a_landing_not_a_handover(self):
+        self._to_box_done()
+        self.fly(2, follow=False, flight_mode='LAND')
+        self.assertEqual(self.engine.step['name'], 'landing')
+        self.assertFalse(self.engine.step.get('failed'))
+        self.assertTrue(any('pilot commanded LAND' in e['msg'] for e in self.engine.events))
+
+    def test_another_mode_during_the_hold_is_still_a_handover(self):
+        self._to_box_done()
+        self.fly(2, follow=False, flight_mode='LOITER')
+        self.assertEqual(self.engine.step['name'], 'released')
+
+    def test_hold_lands_itself_on_a_low_battery(self):
+        self._to_box_done()
+        self.fly(3, follow=False, voltage=21.4)
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertIn('21.4 V', self.engine.step['why'])
+        self.assertFalse(self.engine.step['failed'])
+
+    def test_hold_lands_itself_at_the_time_limit(self):
+        self._to_box_done()
+        self.fly(302, follow=True)
+        self.assertIn(('land',), self.vehicle.calls)
+        self.assertIn('no land command', self.engine.step['why'])
+
+    def test_land_is_refused_on_the_ground(self):
+        self.send('mission_ping'); self.tick()
+        r = self.send('mission_land')
+        self.assertFalse(r['ok'])
+        self.assertIn('not flying', r['msg'])
