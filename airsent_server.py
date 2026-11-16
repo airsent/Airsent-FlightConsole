@@ -447,11 +447,29 @@ def log_mavlink(msg):
             mavlink_log.pop(0)
     print(f"[MAV CMD] {msg}")
 
-def rtmp_port_reachable(timeout=1.5):
+SRT_PORT = int(os.environ.get("SRT_PORT", "8890"))
+
+
+def vps_route_ok(timeout=1.5):
+    """Is there a usable route to the VPS for the video push?
+
+    The video goes to srt://RTMP_HOST:8890 — UDP. This used to open a TCP connection to port
+    1935 (RTMP), left over from when the Jetson pushed RTMP: a different protocol on a
+    different port, so it could call the VPS unreachable while SRT was perfectly fine, and
+    call it reachable while SRT was blocked. UDP has no handshake to test, so this only
+    checks that a route to the host exists; the pipeline itself reports a real failure and
+    retries every 3 s.
+    """
     try:
-        with socket.create_connection((RTMP_HOST, RTMP_PORT), timeout=timeout):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(timeout)
+        try:
+            s.connect((RTMP_HOST, SRT_PORT))      # sends nothing: resolves and picks a route
             return True
-    except OSError:
+        finally:
+            s.close()
+    except OSError as e:
+        print(f"[SRT] No route to {RTMP_HOST}:{SRT_PORT} ({e})")
         return False
 
 # ── Thermal monitor ──────────────────────────────
@@ -2909,7 +2927,7 @@ def cam_rtmp_thread():
     DOWN_FACTOR    = 0.7            # multiply on congestion
     CLEAN_SECS     = 3              # clean seconds before stepping up
     LOSS_LIMIT     = 0.02           # (retransmits + drops) / sent that counts as congestion
-    uri            = f"srt://{RTMP_HOST}:8890"
+    uri            = f"srt://{RTMP_HOST}:{SRT_PORT}"
     STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms', 'bandwidth-mbps')
 
     def build():
@@ -2952,8 +2970,8 @@ def cam_rtmp_thread():
             frontcam_bitrate_kbps = 0
             time.sleep(0.5)                       # on demand: nobody watching, send nothing
             continue
-        if not rtmp_port_reachable():
-            print("[SRT] VPS unreachable — retrying in 3s")
+        if not vps_route_ok():
+            print("[SRT] No route to the VPS — retrying in 3s")
             time.sleep(3)
             continue
 
@@ -3083,7 +3101,7 @@ def downcam_rtmp_thread():
     DOWN_FACTOR    = 0.7
     CLEAN_SECS     = 3
     LOSS_LIMIT     = 0.02
-    uri            = f"srt://{RTMP_HOST}:8890"
+    uri            = f"srt://{RTMP_HOST}:{SRT_PORT}"
     STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms')
 
     def ceiling():
@@ -3132,8 +3150,8 @@ def downcam_rtmp_thread():
             downcam_bitrate_kbps = 0
             time.sleep(0.5)
             continue
-        if not rtmp_port_reachable():
-            print("[SRT-DOWN] VPS unreachable — retrying in 3s")
+        if not vps_route_ok():
+            print("[SRT-DOWN] No route to the VPS — retrying in 3s")
             time.sleep(3)
             continue
 
