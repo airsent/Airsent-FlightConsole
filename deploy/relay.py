@@ -75,6 +75,12 @@ async def telem_jetson(ws):
                 except Exception:
                     dead.add(b)
             browsers["telem"] -= dead
+    except websockets.exceptions.ConnectionClosed:
+        # An aircraft losing its link is routine, not an error. Letting it escape
+        # made websockets log a ~15-line traceback per drop — written synchronously
+        # to the journal from inside the event loop, which is the last place this
+        # process should be doing blocking I/O while it owes someone a pong.
+        pass
     finally:
         if jetson["telem"] is ws:
             jetson["telem"] = None
@@ -137,6 +143,8 @@ async def cmd_jetson(ws):
                 except Exception:
                     dead.add(b)
             browsers["cmd"] -= dead
+    except websockets.exceptions.ConnectionClosed:
+        pass                                         # see telem_jetson
     finally:
         if jetson["cmd"] is ws:
             jetson["cmd"] = None

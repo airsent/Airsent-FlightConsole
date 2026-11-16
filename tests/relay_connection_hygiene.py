@@ -121,9 +121,55 @@ async def test_reaps_silent_peer():
         await server.wait_closed()
 
 
+async def test_drop_logs_no_traceback():
+    """An aircraft dropping its link is routine and must not log a traceback.
+
+    websockets logs an unhandled handler exception at ERROR with a full stack.
+    Written synchronously to the journal from inside the event loop, that is
+    blocking I/O in the one process that owes the aircraft a pong.
+    """
+    import logging
+
+    records = []
+
+    class Catch(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.ERROR:
+                records.append(record)
+
+    catcher = Catch()
+    logging.getLogger("websockets").addHandler(catcher)
+    relay.jetson["telem"] = None
+    server = await websockets.serve(relay.telem_jetson, "127.0.0.1", 19004, ping_interval=None)
+    try:
+        # Abrupt close, the way a link loss looks: no close handshake.
+        ws = await websockets.connect("ws://127.0.0.1:19004")
+        await asyncio.sleep(0.2)
+        ws.transport.abort()
+        await asyncio.sleep(1.0)
+        check(not records,
+              f"a dropped aircraft logged no error ({len(records)} logged)")
+
+        # And a supersede, the other path that used to raise.
+        records.clear()
+        a = await websockets.connect("ws://127.0.0.1:19004")
+        await asyncio.sleep(0.2)
+        b = await websockets.connect("ws://127.0.0.1:19004")
+        await asyncio.sleep(1.0)
+        check(not records,
+              f"a superseded connection logged no error ({len(records)} logged)")
+        await a.close()
+        await b.close()
+    finally:
+        logging.getLogger("websockets").removeHandler(catcher)
+        server.close()
+        await server.wait_closed()
+
+
 async def main():
     print("relay connection hygiene")
-    for t in (test_rejects_probe, test_supersedes_old_connection, test_reaps_silent_peer):
+    for t in (test_rejects_probe, test_supersedes_old_connection, test_reaps_silent_peer,
+              test_drop_logs_no_traceback):
         print(f"\n{t.__name__}:")
         await t()
     print()
