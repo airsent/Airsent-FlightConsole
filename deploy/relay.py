@@ -1,4 +1,5 @@
 import asyncio
+import http
 import json
 import os
 import sys
@@ -28,9 +29,38 @@ browsers = {
     "cmd":   set(),
 }
 
+# 9001 and 9004 face the open internet, so scanners reach them. Without this every
+# probe that is not a websocket upgrade raises InvalidUpgrade inside the library and
+# the traceback lands in the journal — 120 of them a day, burying real errors.
+def reject_non_websocket(connection, request):
+    try:
+        upgrade = request.headers.get("Upgrade", "") or ""
+    except Exception:                                # duplicate Upgrade headers
+        upgrade = ""
+    if upgrade.lower() != "websocket":
+        return connection.respond(http.HTTPStatus.UPGRADE_REQUIRED,
+                                  "Airsent relay: this is a websocket endpoint.\n")
+    return None
+
+async def _close_superseded(ws, label):
+    """Hang up on the Jetson socket a reconnect just replaced.
+
+    The aircraft reconnects on every link drop. The handler used to overwrite
+    jetson[...] and leave the old socket open; with no server-side ping nothing
+    ever reaped it, so each reconnect leaked a half-open connection and an fd.
+    """
+    print(f"[RELAY] Closing superseded Jetson {label} connection")
+    try:
+        await ws.close(1001, "superseded by a newer aircraft connection")
+    except Exception:
+        pass
+
 # ── Jetson-facing telemetry handler (port 9001) ───────────────────────────────
 async def telem_jetson(ws):
+    prev = jetson["telem"]
     jetson["telem"] = ws
+    if prev is not None and prev is not ws:
+        asyncio.create_task(_close_superseded(prev, "telemetry"))
     JOURNAL.append("AIRCRAFT TELEMETRY CHANNEL CONNECTED", "relay")
     print("[RELAY] Jetson telemetry connected")
     try:
@@ -76,7 +106,10 @@ def remember(request_id, ws):
 
 # ── Jetson-facing command handler (port 9004) ─────────────────────────────────
 async def cmd_jetson(ws):
+    prev = jetson["cmd"]
     jetson["cmd"] = ws
+    if prev is not None and prev is not ws:
+        asyncio.create_task(_close_superseded(prev, "command"))
     JOURNAL.append("AIRCRAFT COMMAND CHANNEL CONNECTED", "relay")
     print("[RELAY] Jetson command channel connected")
     try:
@@ -229,9 +262,14 @@ async def events_browser(ws):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
-    jetson_srv   = await websockets.serve(telem_jetson,  "0.0.0.0", 9001, ping_interval=None)
+    # The aircraft-facing ports ping: with ping_interval=None the relay never noticed a
+    # Jetson that went away, so dead sessions accumulated (seven live sockets on 9001
+    # for one aircraft, after 57 days). 20 s/20 s reaps a gone aircraft in about 40 s.
+    jetson_srv   = await websockets.serve(telem_jetson,  "0.0.0.0", 9001, ping_interval=20, ping_timeout=20,
+                                          process_request=reject_non_websocket)
     browser_srv  = await websockets.serve(telem_browser, "0.0.0.0", 9101, ping_interval=None)
-    cmd_jet_srv  = await websockets.serve(cmd_jetson,    "0.0.0.0", 9004, ping_interval=None)
+    cmd_jet_srv  = await websockets.serve(cmd_jetson,    "0.0.0.0", 9004, ping_interval=20, ping_timeout=20,
+                                          process_request=reject_non_websocket)
     cmd_brw_srv  = await websockets.serve(cmd_browser,   "0.0.0.0", 9104, ping_interval=None)
     events_srv = await websockets.serve(events_browser, "127.0.0.1", 9105, ping_interval=20)
     print("[RELAY] Airsent VPS relay running")
