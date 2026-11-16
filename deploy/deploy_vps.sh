@@ -28,6 +28,28 @@ cp event_journal.py presence_auth.py shared_state_server.py ai_review.py "$OPT/"
 cp "$RELAY" "$RELAY.bak" 2>/dev/null || true
 cp deploy/relay.py "$RELAY"
 python3 -m py_compile "$RELAY" "$OPT/event_journal.py" "$OPT/ai_review.py"
+
+# Units, so a rebuilt droplet comes up from the repo rather than from memory. This script
+# previously installed none of them — it only restarted the relay, while telling you to
+# `systemctl enable --now airsent-shared-state` for a unit that wasn't in the repo at all.
+for u in airsent-relay airsent-presence airsent-sequence airsent-shared-state; do
+  install -m 644 "deploy/$u.service" "/etc/systemd/system/$u.service"
+done
+# Relay drop-ins carry its resource limits, auth and logging settings.
+if [ -d deploy/airsent-relay.service.d ]; then
+  install -d -m 755 /etc/systemd/system/airsent-relay.service.d
+  install -m 644 deploy/airsent-relay.service.d/*.conf /etc/systemd/system/airsent-relay.service.d/
+fi
+# The simulation stack is installed but deliberately left disabled — it burned 199 min of
+# CPU on this single core for three log lines in thirty days (SIMULATION.md). Start it by
+# hand for a demo; do not enable it here.
+for u in airsent-sitl airsent-simulation-backend airsent-simulation-gateway; do
+  install -m 644 "deploy/$u.service" "/etc/systemd/system/$u.service"
+done
+systemctl daemon-reload
+systemd-analyze verify /etc/systemd/system/airsent-relay.service >/dev/null 2>&1 \
+  || echo "⚠ systemd-analyze verify flagged airsent-relay.service"
+systemctl enable --quiet airsent-relay airsent-presence airsent-sequence airsent-shared-state
 systemctl restart airsent-relay
 [ -s /etc/airsent/ai.env ] && echo "✓ AI flight review: API key installed" || echo "ℹ AI flight review not set up yet — run: bash deploy/set_ai_key.sh"
 echo "Web → $WEB · relay → $RELAY · modules → $OPT"
@@ -35,4 +57,4 @@ sleep 2
 for s in airsent-relay airsent-shared-state airsent-presence nginx; do
   printf '%-22s %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null || true)"
 done
-systemctl is-active --quiet airsent-shared-state || echo "⚠ airsent-shared-state is not running — shared settings (mission plan, checklist, drafts) will not sync. Start it: systemctl enable --now airsent-shared-state"
+systemctl is-active --quiet airsent-shared-state || echo "⚠ airsent-shared-state is enabled but not running — shared settings (mission plan, checklist, drafts) will not sync. Why: journalctl -u airsent-shared-state -n 30"

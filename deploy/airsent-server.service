@@ -1,0 +1,17 @@
+[Unit]
+Description=Airsent Jetson Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=airsent
+WorkingDirectory=/home/airsent
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/python3 /home/airsent/airsent_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

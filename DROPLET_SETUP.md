@@ -19,15 +19,23 @@ On the Droplet:
 
 ```sh
 apt update
-apt install -y nginx python3-venv certbot python3-certbot-nginx
+apt install -y nginx certbot python3-certbot-nginx python3-websockets
 useradd --system --home /opt/airsent --shell /usr/sbin/nologin airsent
-python3 -m venv /opt/airsent/.venv
-/opt/airsent/.venv/bin/pip install -r /opt/airsent/deploy/requirements.txt
 chown -R airsent:airsent /opt/airsent
-cp /opt/airsent/deploy/airsent-*.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now airsent-telemetry airsent-presence
 ```
+
+Then run the deploy script, which installs and enables the units itself:
+
+```sh
+cd /opt/airsent && bash deploy/deploy_vps.sh
+```
+
+The live services are **`airsent-relay`, `airsent-presence`, `airsent-sequence` and `airsent-shared-state`**, all on the system `python3`. Two things this section used to say are wrong and will waste your time:
+
+- There is no `/opt/airsent/.venv`. The services run `/usr/bin/python3`, which carries `websockets`. A unit pointing into a venv fails to start — `airsent-presence.service` carried exactly that bug in git until 2026-11-16, so a droplet rebuilt from the repo would have come up with console sign-in dead.
+- `airsent-telemetry` is **legacy**. `deploy/relay.py` (as `airsent-relay`) replaced `telemetry_server.py`, binds the same 9001/9101, and adds the token auth the old one had none of. Do not enable `airsent-telemetry`.
+
+The simulation units (`airsent-sitl`, `airsent-simulation-backend`, `airsent-simulation-gateway`) are installed but deliberately left disabled; see SIMULATION.md.
 
 Edit /opt/airsent/deploy/nginx.conf: replace console.example.com with your domain. Then:
 
@@ -69,11 +77,11 @@ Do not open command ports publicly: UI operator/viewer selection is not server-s
 ## Verify and troubleshoot
 
 ```sh
-systemctl status airsent-telemetry airsent-presence
-journalctl -u airsent-telemetry -n 50 --no-pager
+systemctl status airsent-relay airsent-presence airsent-sequence airsent-shared-state
+journalctl -u airsent-relay -n 50 --no-pager
 ```
 
-The telemetry service should log a Jetson connection and a browser connection. In browser developer tools, /telem should upgrade with HTTP 101 and receive JSON containing lat/lon. No location movement usually means the Jetson isn't connected or lacks a GPS fix. Missing tiles show an on-map error; inspect tile requests and provider configuration. Reload after changing console-config.js.
+The relay should log a Jetson connection and a browser connection. In browser developer tools, /telem should upgrade with HTTP 101 and receive JSON containing lat/lon. No location movement usually means the Jetson isn't connected or lacks a GPS fix. Missing tiles show an on-map error; inspect tile requests and provider configuration. Reload after changing console-config.js.
 
 Reference: https://www.digitalocean.com/community/tutorials/how-to-configure-buildbot-with-ssl-using-an-nginx-reverse-proxy (WebSocket proxy pattern); https://websockets.readthedocs.io/en/stable/reference/asyncio/server.html .
 
