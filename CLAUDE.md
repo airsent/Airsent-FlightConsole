@@ -27,13 +27,19 @@ node tests/health-model.test.js        # JS tests are plain node scripts that pr
 python airsent_server.py --sim         # sim backend: TCP MAVLink, no camera, loopback sockets, no production relays
 ```
 
-`tests/sitl/run.py` needs a built SITL. **Use Docker, not a native build.** The rig in `~/airsent-sitl` wraps a pinned ArduCopter image and is the supported path:
+**Two SITL paths, and they are not interchangeable.**
+
+The Docker rig gives you a MAVLink endpoint on `tcp:127.0.0.1:5760` and nothing else:
 
 ```bash
 cd ~/airsent-sitl && docker compose up -d     # not ./run.sh — it needs a TTY
 ```
 
-The native build (`cd ~/ardupilot && ./waf configure --board sitl --disable-DroneCAN && ./waf copter`) hangs on macOS: configure succeeds, then `waf copter` sits producing zero object files indefinitely. Don't lose an hour to it the way this file's author did.
+That is enough for `tests/vps_relay_client.py`, which only needs something to talk MAVLink to.
+
+It is **not** enough for `tests/sitl/run.py`, which spawns `$ardupilot/build/sitl/bin/arducopter` itself, wipes its EEPROM for a fresh start, and kills and restarts the process to simulate pulling the Pixhawk's power. It needs a native binary it owns, so it cannot attach to the container and fails with `FileNotFoundError: .../build/sitl/bin/arducopter`.
+
+The native build (`cd ~/ardupilot && ./waf configure --board sitl --disable-DroneCAN && ./waf copter`) hangs on macOS: configure succeeds, then `waf copter` sits producing zero object files indefinitely. **So on macOS the safety-path suite cannot be run at all.** Run it on the Jetson or another Linux box, and say plainly when a change shipped without it.
 
 **`--sim` does not exercise the VPS relays** — it disables them by design (see `SIMULATION.md`, "Backend isolation"). So `tests/sitl/run.py` cannot cover `vps_telem_relay()` or `vps_cmd_relay()`, the code that carries telemetry and commands to the ground in flight. Use `tests/vps_relay_client.py` for those.
 
