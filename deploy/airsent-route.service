@@ -1,0 +1,11 @@
+[Unit]
+Description=Airsent cellular route priority
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/airsent-route.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
