@@ -99,7 +99,10 @@
   }
 
   function connectCommands() {
-    if (!canCommand || mode === 'demo') return;
+    // Viewers open this too, but only to say which cameras are on their screen (cam_watch):
+    // on cellular the Jetson streams a camera only while a console is showing it, and a viewer
+    // that could not ask would sit on 'offline' for ever. send() still refuses them everything else.
+    if (mode === 'demo') return;
     try { cmd = new WebSocket(apiUrl('/cmd', true)); } catch (e) { setTimeout(connectCommands, 3000); return; }
     cmd.onmessage = ev => {
       let r; try { r = JSON.parse(ev.data); } catch (e) { return; }
@@ -132,7 +135,7 @@
   api.watchedCams = watchedCams;
   let lastWatch = '', lastWatchAt = 0;
   setInterval(() => {
-    if (mode === 'demo' || !canCommand || !cmd || cmd.readyState !== WebSocket.OPEN) return;
+    if (mode === 'demo' || !cmd || cmd.readyState !== WebSocket.OPEN) return;
     const cams = watchedCams(), key = cams.join(',');
     const now = performance.now();
     if (!cams.length || (key === lastWatch && now - lastWatchAt < 4000)) { if (!cams.length) lastWatch = ''; return; }
