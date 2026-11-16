@@ -323,6 +323,13 @@ WATCH_HOLD_S = 15.0
 cam_watch = {'front': 0.0, 'down': 0.0}
 
 
+def cam_frames_fresh(cam, now=None):
+    """Are pictures actually arriving? front_cam_ok() is satisfied by the USB device being
+    present, so a camera that has stopped producing frames still reads as nominal."""
+    at = front_frame_at[0] if cam == 'front' else downcam_frame_at[0]
+    return bool(at) and (now or time.time()) - at < 5
+
+
 def video_profile(cam):
     return VIDEO_PROFILES['cellular' if link_kind() == 'cellular' else 'wifi'][cam]
 
@@ -340,7 +347,10 @@ def netlink_payload():
             'switches': (st or {}).get('switches', 0), 'last_switch': (st or {}).get('last_switch'),
             'back_to_wifi_s': (st or {}).get('back_to_wifi_s'),
             'video': {'on_demand': VIDEO_ON_DEMAND, 'front': cam_wanted('front'), 'down': cam_wanted('down'),
-                      'front_kbps': globals().get('frontcam_bitrate_kbps', 0), 'down_kbps': globals().get('downcam_bitrate_kbps', 0)}}
+                      'front_kbps': globals().get('frontcam_bitrate_kbps', 0), 'down_kbps': globals().get('downcam_bitrate_kbps', 0),
+                      # A camera can be plugged in and produce nothing: the status checks the USB
+                      # device, this checks the pictures. Without it a dead feed looks 'nominal'.
+                      'front_frames': cam_frames_fresh('front'), 'down_frames': cam_frames_fresh('down')}}
 
 
 def merge_netlink(result, st):
@@ -424,6 +434,7 @@ detection_active = pilot_settings.values["detection"]
 downcam_raw = {'frame': None}
 downcam_jpg = {'b64': None}
 downcam_lock = threading.Lock()
+downcam_frame_at = [0.0]        # last frame from the IMX219 (proof the down camera works)
 
 apriltag_result = {'detected': False, 'tags': []}
 apriltag_lock = threading.Lock()
@@ -447,11 +458,37 @@ def log_mavlink(msg):
             mavlink_log.pop(0)
     print(f"[MAV CMD] {msg}")
 
-def rtmp_port_reachable(timeout=1.5):
+SRT_PORT = int(os.environ.get("SRT_PORT", "8890"))
+
+
+def _say_idle(state, tag, why, every=20.0):
+    """Log why a camera is not streaming, at most every 20 s and only when the reason changes."""
+    now = time.time()
+    if why != state[1] or now - state[0] >= every:
+        state[0], state[1] = now, why
+        print(f"[{tag}] {why}")
+
+
+def vps_route_ok(timeout=1.5):
+    """Is there a usable route to the VPS for the video push?
+
+    The video goes to srt://RTMP_HOST:8890 — UDP. This used to open a TCP connection to port
+    1935 (RTMP), left over from when the Jetson pushed RTMP: a different protocol on a
+    different port, so it could call the VPS unreachable while SRT was perfectly fine, and
+    call it reachable while SRT was blocked. UDP has no handshake to test, so this only
+    checks that a route to the host exists; the pipeline itself reports a real failure and
+    retries every 3 s.
+    """
     try:
-        with socket.create_connection((RTMP_HOST, RTMP_PORT), timeout=timeout):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(timeout)
+        try:
+            s.connect((RTMP_HOST, SRT_PORT))      # sends nothing: resolves and picks a route
             return True
-    except OSError:
+        finally:
+            s.close()
+    except OSError as e:
+        print(f"[SRT] No route to {RTMP_HOST}:{SRT_PORT} ({e})")
         return False
 
 # ── Thermal monitor ──────────────────────────────
@@ -2909,7 +2946,7 @@ def cam_rtmp_thread():
     DOWN_FACTOR    = 0.7            # multiply on congestion
     CLEAN_SECS     = 3              # clean seconds before stepping up
     LOSS_LIMIT     = 0.02           # (retransmits + drops) / sent that counts as congestion
-    uri            = f"srt://{RTMP_HOST}:8890"
+    uri            = f"srt://{RTMP_HOST}:{SRT_PORT}"
     STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms', 'bandwidth-mbps')
 
     def build():
@@ -2942,18 +2979,21 @@ def cam_rtmp_thread():
                 pass
         return out
 
+    idle_said = [0.0, '']                         # these two waits used to be silent for ever
     while True:
         with cam_buf_lock:
             ready = cam_color_buf['frame'] is not None
         if not ready:
+            _say_idle(idle_said, 'SRT', 'no frames from the OAK-D yet — not streaming')
             time.sleep(2)
             continue
         if not cam_wanted('front'):
             frontcam_bitrate_kbps = 0
-            time.sleep(0.5)                       # on demand: nobody watching, send nothing
+            _say_idle(idle_said, 'SRT', 'nobody watching the front cam — paused (video on demand)')
+            time.sleep(0.5)
             continue
-        if not rtmp_port_reachable():
-            print("[SRT] VPS unreachable — retrying in 3s")
+        if not vps_route_ok():
+            print("[SRT] No route to the VPS — retrying in 3s")
             time.sleep(3)
             continue
 
@@ -3083,7 +3123,7 @@ def downcam_rtmp_thread():
     DOWN_FACTOR    = 0.7
     CLEAN_SECS     = 3
     LOSS_LIMIT     = 0.02
-    uri            = f"srt://{RTMP_HOST}:8890"
+    uri            = f"srt://{RTMP_HOST}:{SRT_PORT}"
     STAT_KEYS      = ('packets-sent', 'packets-retransmitted', 'packets-sent-dropped', 'rtt-ms')
 
     def ceiling():
@@ -3122,18 +3162,21 @@ def downcam_rtmp_thread():
                 pass
         return out
 
+    idle_said = [0.0, '']                         # these two waits used to be silent for ever
     while True:
         with downcam_lock:
             ready = downcam_raw['frame'] is not None
         if not ready:
+            _say_idle(idle_said, 'SRT-DOWN', 'no frames from the IMX219 yet — not streaming')
             time.sleep(2)
             continue
         if not cam_wanted('down'):
             downcam_bitrate_kbps = 0
+            _say_idle(idle_said, 'SRT-DOWN', 'nobody watching the down cam — paused (video on demand)')
             time.sleep(0.5)
             continue
-        if not rtmp_port_reachable():
-            print("[SRT-DOWN] VPS unreachable — retrying in 3s")
+        if not vps_route_ok():
+            print("[SRT-DOWN] No route to the VPS — retrying in 3s")
             time.sleep(3)
             continue
 
@@ -3352,6 +3395,7 @@ def downcam_capture_thread():
                     b64 = base64.b64encode(jbuf).decode('utf-8')
                     with downcam_lock:
                         downcam_raw['frame'] = frame   # full-res for RTMP + AprilTag
+                        downcam_frame_at[0] = time.time()
                         downcam_jpg['b64'] = b64        # downscaled JPEG for WebSocket
         except Exception as e:
             print(f"[DOWNCAM] Capture error: {e}")
