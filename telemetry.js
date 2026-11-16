@@ -845,10 +845,25 @@ function resetTelemetryConnection(ws) {
   reconnectTimer = setTimeout(connectTelemetry, 1000);
 }
 
+// A quiet feed is not the same as a broken socket, and this used to treat them
+// alike: 2.5 s of silence tore down a perfectly healthy connection to the relay,
+// showed DISCONNECTED, and waited another second before reconnecting. The aircraft
+// drops its own relay and recovers in about two seconds, so every one of those
+// turned into a four-second blackout on every open console — the dashboard
+// flickering once or twice a minute. Tearing down the browser's socket does
+// nothing for a quiet aircraft anyway; it is the aircraft that went away.
+//
+// A genuinely broken socket already reports itself through onclose/onerror. This
+// check is only the last resort for one that wedges open without either firing,
+// so it can afford to be patient. Staleness short of that shows in the UI as
+// FEED STALE, which is what it is for.
+const STALE_FEED_MS = 12000;       // feed was live and went quiet
+const NO_FIRST_FRAME_MS = 30000;   // connected, but the aircraft has never spoken
+
 function checkTelemetryFreshness() {
   if (!isRealMode || !socket) return;
   const reference = lastFreshTelemetryAt || telemetryConnectionStartedAt;
-  const timeout = lastFreshTelemetryAt ? 2500 : 5000;
+  const timeout = lastFreshTelemetryAt ? STALE_FEED_MS : NO_FIRST_FRAME_MS;
   if (reference && Date.now() - reference > timeout) resetTelemetryConnection(socket);
 }
 setInterval(checkTelemetryFreshness, 500);

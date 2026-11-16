@@ -32,6 +32,15 @@ from pymavlink import mavutil
 from pymavlink.dialects.v20 import ardupilotmega as mavlink2
 VPS_TELEM_URL = os.environ.get("VPS_TELEM_URL", "ws://146.190.50.189:9001")
 
+# Keepalive for both VPS relays. The aircraft flies on cellular and on congested
+# wifi, where a multi-second stall is ordinary: a ping across the LAN was measured
+# at 3.5 s while video was saturating 2.4 GHz. Against that, a 10 s deadline turned
+# routine stalls into dropped links — 110 drops in 103 minutes, each one a visible
+# flicker in the console. 30 s rides them out; a genuinely dead link is still caught
+# within ~40 s, and the console learns sooner from telemetry_age either way.
+WS_PING_INTERVAL = int(os.environ.get("AIRSENT_WS_PING_INTERVAL", "10"))
+WS_PING_TIMEOUT = int(os.environ.get("AIRSENT_WS_PING_TIMEOUT", "30"))
+
 try:
     from pupil_apriltags import Detector as _AprilDetector
     _APRILTAG_AVAILABLE = True
@@ -3445,11 +3454,16 @@ async def vps_telem_relay():
     while True:
         ep = netlink['epoch']
         watcher = None
+        connected_at = 0.0
+        sent = 0
+        slowest_send = 0.0
         try:
             print("[VPS] Connecting telemetry relay...")
 
-            remote = await asyncio.wait_for(websockets.connect(VPS_TELEM_URL, ping_interval=5, ping_timeout=10), 8)
+            remote = await asyncio.wait_for(websockets.connect(
+                VPS_TELEM_URL, ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT), 8)
 
+            connected_at = time.time()
             print(f"[VPS] Telemetry relay connected ({link_kind().upper()})")
             vps_relay_state['telem'] = True
             watcher = asyncio.create_task(_close_on_link_switch(remote, ep))
@@ -3459,11 +3473,19 @@ async def vps_telem_relay():
                 include = time.time() - last_mission >= mission_interval()
                 if include:
                     last_mission = time.time()
+                # Time the send: if the link is backed up, this is where it shows,
+                # and knowing it at the moment of a drop is what the logs never said.
+                t0 = time.time()
                 await remote.send(json.dumps(build_telemetry_payload(include_mission=include)))
+                slowest_send = max(slowest_send, time.time() - t0)
+                sent += 1
                 await asyncio.sleep(0.05)
 
         except Exception as e:
-            print(f"[VPS] Relay error: {e}")
+            # Say what the link was doing when it died, not just that it died.
+            up = time.time() - connected_at if connected_at else 0.0
+            print(f"[VPS] Relay error after {up:.0f}s up on {link_kind().upper()}, "
+                  f"{sent} msgs sent, slowest send {slowest_send * 1000:.0f}ms: {e}")
         finally:
             if watcher:
                 watcher.cancel()
@@ -3486,7 +3508,8 @@ async def vps_cmd_relay():
         watcher = None
         try:
             print("[VPS] Connecting command relay...")
-            remote = await asyncio.wait_for(websockets.connect(VPS_CMD_URL, ping_interval=5, ping_timeout=10), 8)
+            remote = await asyncio.wait_for(websockets.connect(
+                VPS_CMD_URL, ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT), 8)
             print(f"[VPS] Command relay connected ({link_kind().upper()})")
             watcher = asyncio.create_task(_close_on_link_switch(remote, ep))
 

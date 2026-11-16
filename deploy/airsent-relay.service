@@ -1,0 +1,12 @@
+[Unit]
+Description=Airsent VPS Telemetry Relay
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /root/relay.py
+WorkingDirectory=/root
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
