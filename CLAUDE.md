@@ -27,7 +27,15 @@ node tests/health-model.test.js        # JS tests are plain node scripts that pr
 python airsent_server.py --sim         # sim backend: TCP MAVLink, no camera, loopback sockets, no production relays
 ```
 
-`tests/sitl/run.py` needs a built SITL: `cd ~/ardupilot && ./waf configure --board sitl --disable-DroneCAN && ./waf copter`. The full one-command rig lives in `~/airsent-sitl`.
+`tests/sitl/run.py` needs a built SITL. **Use Docker, not a native build.** The rig in `~/airsent-sitl` wraps a pinned ArduCopter image and is the supported path:
+
+```bash
+cd ~/airsent-sitl && docker compose up -d     # not ./run.sh — it needs a TTY
+```
+
+The native build (`cd ~/ardupilot && ./waf configure --board sitl --disable-DroneCAN && ./waf copter`) hangs on macOS: configure succeeds, then `waf copter` sits producing zero object files indefinitely. Don't lose an hour to it the way this file's author did.
+
+**`--sim` does not exercise the VPS relays** — it disables them by design (see `SIMULATION.md`, "Backend isolation"). So `tests/sitl/run.py` cannot cover `vps_telem_relay()` or `vps_cmd_relay()`, the code that carries telemetry and commands to the ground in flight. Use `tests/vps_relay_client.py` for those.
 
 ## Git
 
