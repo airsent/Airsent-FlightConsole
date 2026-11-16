@@ -12,6 +12,15 @@ The SIM backend starts only with `python airsent_server.py --sim`. It uses a MAV
 
 The hosted simulator uses the ArduCopter binary and copter defaults from the tested `radarku/ardupilot-sitl` image digest `sha256:2364ae14e190e4cdd5d0839b3a55e6b5c6a980d9ff0000b1be7b8baae6fd50f1`. This is the same binary used by the local Docker setup; the production droplet runs it natively to avoid an additional Docker daemon. Obtain ArduPilot source and licensing from the image's upstream ArduPilot project when redistributing the binary; binaries are not committed here.
 
+**These services are disabled on the droplet and do not start at boot.** They ran continuously from deployment until 2026-11-15, when the gateway showed three log lines and zero connections over thirty days while ArduCopter SITL had consumed 199 minutes of CPU on the droplet's single core. Start them before a demo and stop them after:
+
+```bash
+systemctl start airsent-sitl airsent-simulation-backend airsent-simulation-gateway
+systemctl stop  airsent-sitl airsent-simulation-backend airsent-simulation-gateway
+```
+
+`systemctl enable --now` on all three restores the old always-on behaviour. While they are stopped, signing in as `simulation` reaches nginx and fails at the gateway; the live operator and viewer paths are unaffected, because they never touch these services.
+
 Services in `deploy/`: `airsent-sitl`, `airsent-simulation-backend`, `airsent-simulation-gateway`. Files live in `/opt/airsent-simulation`, state in `/var/lib/airsent-simulation`, and Python dependencies in `/opt/airsent-simulation-venv`. The same-user parent wrapper is required by this binary's parent-liveness check under systemd. Services are unprivileged, use low CPU scheduling weight, have memory limits and permit only loopback networking.
 
 Ports: simulator MAVLink 15760; telemetry 18765; commands 18767; camera placeholders 18766/18768; authenticated gateway 19760. Nginx proxies `/simulation/` to the gateway. The gateway reads the existing presence signing secret via `/etc/airsent-presence.env`; credentials and signing secrets must never be committed.
