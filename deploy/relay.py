@@ -201,6 +201,8 @@ async def cmd_browser(ws):
                     await ws.send('{"ok":false,"msg":"Failed to reach Jetson"}')
                 except Exception:
                     pass
+    except websockets.exceptions.ConnectionClosed:
+        pass                                         # a console closing its tab is not an error
     finally:
         browsers["cmd"].discard(ws)
         print(f"[RELAY] Browser cmd disconnected ({len(browsers['cmd'])} remaining)")
@@ -275,10 +277,14 @@ async def main():
     # for one aircraft, after 57 days). 20 s/20 s reaps a gone aircraft in about 40 s.
     jetson_srv   = await websockets.serve(telem_jetson,  "0.0.0.0", 9001, ping_interval=20, ping_timeout=20,
                                           process_request=reject_non_websocket)
-    browser_srv  = await websockets.serve(telem_browser, "0.0.0.0", 9101, ping_interval=None)
+    # 9101 and 9104 are just as exposed as the aircraft ports, and were still
+    # collecting scanner tracebacks after the first pass guarded only 9001/9004.
+    browser_srv  = await websockets.serve(telem_browser, "0.0.0.0", 9101, ping_interval=None,
+                                          process_request=reject_non_websocket)
     cmd_jet_srv  = await websockets.serve(cmd_jetson,    "0.0.0.0", 9004, ping_interval=20, ping_timeout=20,
                                           process_request=reject_non_websocket)
-    cmd_brw_srv  = await websockets.serve(cmd_browser,   "0.0.0.0", 9104, ping_interval=None)
+    cmd_brw_srv  = await websockets.serve(cmd_browser,   "0.0.0.0", 9104, ping_interval=None,
+                                          process_request=reject_non_websocket)
     events_srv = await websockets.serve(events_browser, "127.0.0.1", 9105, ping_interval=20)
     print("[RELAY] Airsent VPS relay running")
     print("[RELAY]   Jetson telem -> ws://0.0.0.0:9001  (Jetson connects here)")

@@ -54,6 +54,24 @@ async def test_rejects_probe():
         server.close()
         await server.wait_closed()
 
+    # The browser-facing ports face the internet too. The first pass guarded only
+    # the aircraft ports, and scanners kept producing tracebacks on these.
+    browser = await websockets.serve(relay.telem_browser, "127.0.0.1", 19005,
+                                     ping_interval=None, process_request=relay.reject_non_websocket)
+    try:
+        def probe_browser():
+            try:
+                urllib.request.urlopen("http://127.0.0.1:19005/", timeout=5)
+                return None
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        status = await asyncio.to_thread(probe_browser)
+        check(status == 426, f"browser-facing port answered {status} (want 426)")
+    finally:
+        browser.close()
+        await browser.wait_closed()
+
 
 async def test_supersedes_old_connection():
     """A second aircraft connection hangs up the first instead of leaking it."""
