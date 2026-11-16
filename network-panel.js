@@ -79,7 +79,9 @@
     const act = n.active || 'none';
     const label = act === 'wifi' ? 'WIFI' : act === 'cellular' ? 'CELLULAR' : 'NO LINK';
     const pct = Math.min(100, d.plan_pct || 0);
-    const vid = (on, kbps) => !on ? '<b>PAUSED · nobody watching</b>' : kbps ? `<b class="ok">STREAMING · ${kbps} kbps</b>` : '<b>STARTING…</b>';
+    // 'frames' is the camera actually producing pictures; the sensor status only knows the USB device is there.
+    const vid = (on, kbps, frames) => frames === false ? '<b class="bad">NO FRAMES FROM THE CAMERA</b>'
+      : !on ? '<b>PAUSED · nobody watching</b>' : kbps ? `<b class="ok">STREAMING · ${kbps} kbps</b>` : '<b>STARTING…</b>';
     body.innerHTML = `
       <div class="big ${act}">${label}</div>
       <div class="sub">${n.prefer === 'auto' ? 'AUTO — WiFi first, cellular when WiFi stops reaching the server' : `FORCED ${String(n.prefer).toUpperCase()} — ground testing only`}
@@ -105,8 +107,8 @@
       <div class="bar"><i style="width:${pct}%;${pct > 90 ? 'background:#ff3355' : pct > 70 ? 'background:#ffb800' : ''}"></i></div>
       ${d.resets ? `<div class="note">Resets ${esc(d.resets)} · counted by the Jetson. To match T-Mobile: <b>sudo airsent-netlink --plan GB --bill-day D --used GB</b></div>` : ''}
       <h4>VIDEO ${v.on_demand === 'off' ? '' : v.on_demand === 'always' ? '· ON DEMAND' : '· ON DEMAND WHEN ON CELLULAR'}</h4>
-      <div class="row"><span>Front camera</span>${vid(v.front, v.front_kbps)}</div>
-      <div class="row"><span>Down camera</span>${vid(v.down, v.down_kbps)}</div>
+      <div class="row"><span>Front camera</span>${vid(v.front, v.front_kbps, v.front_frames)}</div>
+      <div class="row"><span>Down camera</span>${vid(v.down, v.down_kbps, v.down_frames)}</div>
       ${ls ? `<h4>LAST SWITCH</h4><div class="row"><span>${esc(String(ls.from || 'start').toUpperCase())} → ${esc(String(ls.to || '').toUpperCase())}</span><b>${ago(ls.at)}</b></div>
         <div class="note">${esc(ls.reason || '')}</div>` : ''}
       <div class="note">On a switch the Jetson reconnects telemetry, commands and video over the new link within about a second.
