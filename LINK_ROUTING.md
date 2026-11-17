@@ -16,6 +16,8 @@ WiFi when it works, cellular when it does not: WiFi → cellular after 3 consecu
 
 It detects cellular through ModemManager, or — since `deploy_jetson.sh` disables ModemManager for the RM520N in ECM mode — by finding the interface itself.
 
+On every real switch it also calls `redial_tunnel()`, which restarts `airsent-tunnel` so remote SSH follows the new link instead of waiting for `autossh` to time out. An abandoned tunnel socket whose old interface is still up keeps answering the VPS's keepalive probes, so it is never reaped and holds `127.0.0.1:2222` against every retry — one measured at 21 minutes. The restart is issued with `systemctl --no-block` and a 5 s cap, because this runs in the main loop and must never delay a route decision in flight. See REMOTE_ACCESS.md, "VPS side".
+
 ## airsent-route — the default route
 
 `deploy/airsent-route.sh`, installed at `/usr/local/bin/airsent-route.sh`, unit `deploy/airsent-route.service`. Added to this repo on 2026-11-15; before that it existed only on the aircraft's filesystem and would have been lost in a reflash.
