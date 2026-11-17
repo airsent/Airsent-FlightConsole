@@ -87,20 +87,42 @@ class Vehicle:
         self.m = mavutil.mavlink_connection(url, source_system=250, source_component=191)
         self.state = {'armed': False, 'mode': None, 'alt': 0.0, 'lat': None, 'lon': None, 'yaw': None, 'texts': [], 'params': {}, 'servo': {}}
         self.lock = threading.Lock()
+        self.stopped = False
         self.m.wait_heartbeat(timeout=30)
         # streams on this port too
         for mid, hz in ((33, 10), (0, 2), (74, 5), (24, 2), (36, 10)):
             self.m.mav.command_long_send(1, 1, 511, 0, mid, 1e6 / hz, 0, 0, 0, 0, 0)
         threading.Thread(target=self._run, daemon=True).start()
 
+    def stop(self):
+        """Stop reading and close the socket.
+
+        Call this before replacing a Vehicle after a SITL power cycle. pymavlink prints
+        'EOF on TCP socket' and returns None when the far end is gone — it does not raise —
+        so a reader left running on a dead connection spins at full speed printing that
+        line. An orphan did 41 million lines and filled the disk on 2026-11-17.
+        """
+        self.stopped = True
+        try:
+            self.m.close()
+        except Exception:
+            pass
+
     def _run(self):
-        while True:
+        blanks = 0
+        while not self.stopped:
             try:
                 msg = self.m.recv_match(blocking=True, timeout=1)
             except Exception:
                 return                     # SITL went away (power-cycle test makes a new Vehicle)
             if not msg:
+                # A closed socket returns None immediately and forever. recv_match with
+                # timeout=1 should block, so a burst of instant blanks means EOF, not quiet.
+                blanks += 1
+                if blanks > 200:
+                    return
                 continue
+            blanks = 0
             t = msg.get_type()
             with self.lock:
                 if t == 'HEARTBEAT' and msg.get_srcSystem() == 1 and msg.get_srcComponent() == 1:

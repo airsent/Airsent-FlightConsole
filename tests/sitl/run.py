@@ -506,7 +506,10 @@ class Run:
         # refuses to arm with "PreArm: Batch sampling requires reboot". Leaving that behind
         # cost every later scenario its arming: 13 failures from this one line, all of them
         # looking like flight bugs. Power-cycle here so the next scenario starts armable.
+        self.v.stop()                       # or its reader spins on a dead socket for the rest of the suite
         self.rig.power_cycle_sitl()
+        self.v = Vehicle()
+        self.wait_ready(120)
         self.c.ping()
         self.note('power-cycled the Pixhawk so INS_LOG_BAT_MASK takes effect and arming works again')
 
@@ -756,6 +759,7 @@ class Run:
         """Pixhawk power-cycles on the ground: the server notices, reconnects and streams again."""
         n0 = self.rig.server_log().count('Pixhawk connected')
         t0 = time.time()
+        self.v.stop()                       # the replacement below leaves this one reading a dead socket
         self.rig.power_cycle_sitl()
         end = time.time() + 60
         while time.time() < end and self.rig.server_log().count('Pixhawk connected') <= n0:
