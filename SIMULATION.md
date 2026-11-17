@@ -29,6 +29,30 @@ Ports: simulator MAVLink 15760; telemetry 18765; commands 18767; camera placehol
 
 Start the existing local Docker SITL and SIM backend, serve this directory locally, then open `fly-local.html`. Local simulation endpoints remain loopback ports 8765/8767. The local bootstrap is blocked on public hostnames. The hosted simulation account uses the normal server-verified login instead.
 
+## Safety-path suite simulator
+
+`tests/sitl/run.py` uses a **different simulator from everything above**, and the two are not interchangeable. The hosted and local demo simulators run the `radarku/ardupilot-sitl` image, which carries **ArduCopter 4.0.3 (January 2021)**. That is acceptable for a demo. It is not acceptable for a safety gate: the firmware we fly is 4.6.3, and failsafe behaviour and parameter names moved substantially across those releases.
+
+The suite also cannot attach to any already-running SITL. It spawns the `arducopter` binary itself, wipes its EEPROM for a fresh start, and kills and restarts the process to simulate pulling the Pixhawk's power, so it needs a binary it owns. Pointing it at a container's MAVLink port fails with `FileNotFoundError: .../build/sitl/bin/arducopter`.
+
+So the suite ships its own image, pinned to the firmware under test:
+
+```bash
+bash tests/sitl/docker_run.sh                    # all scenarios, ~15 min
+bash tests/sitl/docker_run.sh --only s_geofence  # one, or a comma-separated list
+AIRSENT_SITL_REBUILD=1 bash tests/sitl/docker_run.sh   # rebuild from scratch
+```
+
+`tests/sitl/Dockerfile` builds ArduCopter from source at tag `Copter-4.6.3` (override with `AIRSENT_COPTER_TAG`) and installs only the three hard third-party imports on the `--sim` path: `numpy`, `pymavlink`, `websockets`. The camera stack (`depthai`, `cv2`, `pupil_apriltags`, `gi`) is imported inside functions `--sim` never calls, so it is deliberately absent.
+
+The first build takes 30–45 minutes; afterwards the layer cache makes startup immediate. The repo is bind-mounted so `last_report.json` lands back in the working tree.
+
+**Why a container at all:** the native macOS build hangs — `./waf configure` succeeds, then `./waf copter` sits producing zero object files indefinitely. The same build is fine on Linux, so building in a container fixes the cause rather than working around it. Before this existed the suite had no machine it could run on, and flight-logic changes shipped ungated.
+
+**Keep the pin honest.** If the Pixhawk is flashed to a different firmware, bump `COPTER_TAG` in the Dockerfile to match and rebuild, or the gate silently tests the wrong thing.
+
+Architecture does not matter for correctness: SITL at `--speedup 1` is not CPU-bound. Measured at **1.00x real-time on 5% of one core** even while emulating x86 on Apple Silicon, so timing-sensitive scenarios behave the same either way. Native architecture only builds faster.
+
 ## Intentional limits
 
 All simulation users share one simulated aircraft; do not issue conflicting commands from multiple browsers. There are no real camera images, hardware ESC RPM/current, physical RC receiver, or physical rangefinder readings. Shared launch countdown controls are disabled in simulation; operator/viewer presence counters track the real console sessions, not simulated operators. ArduCopter's simulated parameter state resets when its service restarts.

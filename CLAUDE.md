@@ -29,17 +29,22 @@ python airsent_server.py --sim         # sim backend: TCP MAVLink, no camera, lo
 
 **Two SITL paths, and they are not interchangeable.**
 
-The Docker rig gives you a MAVLink endpoint on `tcp:127.0.0.1:5760` and nothing else:
+The safety-path suite brings its own simulator, pinned to the firmware we fly:
+
+```bash
+bash tests/sitl/docker_run.sh                    # all 21 scenarios, ~15 min
+bash tests/sitl/docker_run.sh --only s_geofence  # one, or a comma-separated list
+```
+
+It builds ArduCopter 4.6.3 from source on first run (30–45 min, then cached) and runs `run.py` inside that image. Don't reach for `~/airsent-sitl` here: that image is ArduCopter **4.0.3 from 2021**, five years off the firmware we fly, and `run.py` can't attach to a running container anyway — it spawns the binary itself and kills it mid-test to simulate a Pixhawk power cut. Details and the version-pin rule in `SIMULATION.md`, "Safety-path suite simulator".
+
+The other path is a bare MAVLink endpoint, which is all `tests/vps_relay_client.py` needs:
 
 ```bash
 cd ~/airsent-sitl && docker compose up -d     # not ./run.sh — it needs a TTY
 ```
 
-That is enough for `tests/vps_relay_client.py`, which only needs something to talk MAVLink to.
-
-It is **not** enough for `tests/sitl/run.py`, which spawns `$ardupilot/build/sitl/bin/arducopter` itself, wipes its EEPROM for a fresh start, and kills and restarts the process to simulate pulling the Pixhawk's power. It needs a native binary it owns, so it cannot attach to the container and fails with `FileNotFoundError: .../build/sitl/bin/arducopter`.
-
-The native build (`cd ~/ardupilot && ./waf configure --board sitl --disable-DroneCAN && ./waf copter`) hangs on macOS: configure succeeds, then `waf copter` sits producing zero object files indefinitely. **So on macOS the safety-path suite cannot be run at all.** Run it on the Jetson or another Linux box, and say plainly when a change shipped without it.
+Don't try to build ArduPilot natively on macOS: `./waf configure` succeeds, then `./waf copter` sits producing zero object files indefinitely. That hang is why the suite is containerised.
 
 **`--sim` does not exercise the VPS relays** — it disables them by design (see `SIMULATION.md`, "Backend isolation"). So `tests/sitl/run.py` cannot cover `vps_telem_relay()` or `vps_cmd_relay()`, the code that carries telemetry and commands to the ground in flight. Use `tests/vps_relay_client.py` for those.
 
