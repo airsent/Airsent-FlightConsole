@@ -22,24 +22,35 @@ On every real switch it also calls `redial_tunnel()`, which restarts `airsent-tu
 
 `deploy/modem_bands.py` excludes the 2.3-2.7 GHz TDD bands (38, 40, 41) on both NR and LTE. The setting lives in the modem's NV memory, so it is run once per modem, not per boot. `--revert --apply` puts them back.
 
-Measured on 2026-11-16, same sky, minutes apart:
+Measured on 2026-11-16, same sky, over a few hours:
 
-| Modem | GPS satellites |
-|---|---|
-| Off the USB bus | **26-30** |
-| Attached, serving n41 | **3-8** |
-| Attached, serving n25 (after this change) | **0-7** |
+| Modem | USB | Serving band | GPS satellites |
+|---|---|---|---|
+| Off the USB bus | — | — | **26-30** |
+| Attached, transmitting | **3.0 (SuperSpeed)** | n41 (2.5 GHz) | **3-8** |
+| Attached, idle | 2.0 | n25 (1.9 GHz) | 21-25 |
+| **Attached, transmitting on cellular** | **2.0** | **n71 (600 MHz)** | **23-26, and RTK FIX** |
 
-**Excluding n41 did not fix GPS, and that is the important result.** Any band the RM520N transmits on at this distance deafens the GNSS receiver. It is front-end overload, not a harmonic: a ~200 mW transmitter tens of centimetres from an antenna listening for -130 dBm satellites is about 150 dB of dynamic range. n25's uplink (1850-1915 MHz) is in fact *closer* to L1 at 1575.42 than n41 was. The fix for GPS is physical — antenna separation, putting the modem antennas below the GNSS ground plane, and an inline SAW filter on the GNSS feed — not band selection.
+**It works now: RTK FIX on 5G, with no shielding and no extra antenna separation.**
 
-What the change did buy, and why it is kept:
+**Three things changed between the first row and the last, and this data cannot rank them.** Do not read the table as proof that any one of them was the cause:
+
+1. **USB 3.0 -> USB 2.0** (`AT+QCFG="usbspeed","20"`, and the modem moved to the 480 Mbps bus). USB 3.0's 5 Gbps signalling radiates broadband noise centred around 2.4-2.5 GHz and is a documented GNSS and WiFi offender — it needs no transmitting at all to do harm.
+2. **Bands 38/40/41 excluded** by this script.
+3. **The serving band became n71** (600 MHz). Its uplink is 663-698 MHz, whose second harmonic (1326-1396 MHz) falls below L1 at 1575.42 and misses it, and which is nowhere near 2.4 GHz WiFi. n71 is close to the friendliest band this modem can pick.
+
+An earlier revision of this file concluded that band selection was irrelevant and only physical fixes could work. That was wrong: it extrapolated from an *idle* measurement to the transmitting case. The 21-25 idle row says nothing about what happens under load, and the test that mattered was done on the aircraft afterwards.
+
+**So do not revert the band exclusion casually.** It may be load-bearing — n41 is the band that was present when GPS was dead. If you revert it to recover video throughput, re-check that RTK survives before flying.
+
+What the change also bought:
 
 - **Cellular got better**, because n25 FDD beats a congested n41 here: RSRP -83 -> -74 dBm, SINR 10 -> 19, 47 ms RTT at 0% loss.
 - **WiFi stopped flapping.** n41 starts at 2496 MHz, about 13 MHz above the top of 2.4 GHz WiFi, and the aircraft's WiFi is on channel 6 (2437 MHz). Under n41 the WiFi probe to the VPS was failing and `airsent-netlink` logged 8 switches; afterwards the probe runs 0% loss at 40 ms and the counter stopped climbing. A WiFi link at -52 dBm negotiating MCS 3 is the signature — strong signal, collapsed rate, so the loss is interference and not range.
 
 This also explains an asymmetry that went unexplained for a day: 110 telemetry drops in 103 minutes on 2.4 GHz WiFi against 3 in 78 minutes on 5 GHz. Prefer 5 GHz for the ground WiFi; it is free and it sits far from every band this modem uses.
 
-**The cost:** n41 is T-Mobile's capacity layer, so peak uplink throughput drops. The video stream is what needs that headroom, so measure the uplink and lower the video ceiling to match.
+**The cost, and it is now the live question:** n41 is T-Mobile's capacity layer, and the modem has settled on n71 — a 600 MHz low band with excellent reach and little capacity. Expect poor uplink throughput, which is exactly what the video stream needs. Measure the uplink and lower the video ceiling to match, and treat "RTK or video bitrate" as a real trade on this airframe until the GNSS feed is filtered and the antennas are separated. Those physical fixes are what would let the modem use a fast band again.
 
 ## airsent-route — the default route
 
