@@ -1,0 +1,20 @@
+[Unit]
+Description=Airsent reverse SSH tunnel (makes this Jetson reachable through the VPS)
+After=network-online.target airsent-netlink.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 0 = restart even when the very first connection fails (no link yet at boot).
+Environment=AUTOSSH_GATETIME=0
+ExecStart=/usr/bin/autossh -M 0 -N \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile=/etc/airsent/tunnel_known_hosts \
+  -o IdentitiesOnly=yes -i /etc/airsent/tunnel_key \
+  -R 127.0.0.1:2222:127.0.0.1:22 tunnel@146.190.50.189
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

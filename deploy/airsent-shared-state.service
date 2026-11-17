@@ -1,0 +1,16 @@
+[Unit]
+Description=Airsent shared console settings
+After=network.target
+[Service]
+User=airsent
+WorkingDirectory=/opt/airsent
+EnvironmentFile=/etc/airsent-presence.env
+ExecStart=/usr/bin/python3 /opt/airsent/shared_state_server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/airsent-shared
+[Install]
+WantedBy=multi-user.target

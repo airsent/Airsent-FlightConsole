@@ -30,8 +30,25 @@ if systemctl is-active --quiet ModemManager; then
   sudo systemctl disable --now ModemManager >/dev/null 2>&1 && echo "Stopped ModemManager (the link manager reads the modem directly)"
 fi
 sudo install -m 644 deploy/airsent-netlink.service /etc/systemd/system/airsent-netlink.service
+# Every unit this machine runs, so a rebuilt Jetson comes up from the repo rather than
+# from memory. These three used to exist only on the SD card; airsent-server.service in
+# particular is how the flight server starts, and nothing in git described it.
+sudo install -m 644 deploy/airsent-server.service /etc/systemd/system/airsent-server.service
+# airsent-route.service runs this script; it was on the SD card but never installed by
+# this script, so a rebuilt Jetson would have had the unit enabled and the script missing.
+sudo install -m 755 deploy/airsent-route.sh /usr/local/bin/airsent-route.sh
+sudo install -m 644 deploy/airsent-route.service  /etc/systemd/system/airsent-route.service
+# The tunnel needs its key and known_hosts, which deploy/install_reverse_tunnel.py sets up.
+# Install the unit either way, but only enable it once the key exists, or boot logs fill
+# with autossh failures on a machine that was never given one.
+sudo install -m 644 deploy/airsent-tunnel.service /etc/systemd/system/airsent-tunnel.service
 sudo systemctl daemon-reload
-sudo systemctl enable --quiet airsent-netlink
+sudo systemctl enable --quiet airsent-netlink airsent-server airsent-route
+if sudo test -f /etc/airsent/tunnel_key; then
+  sudo systemctl enable --quiet airsent-tunnel
+else
+  echo "ℹ airsent-tunnel installed but not enabled — no /etc/airsent/tunnel_key yet. Set it up: sudo python3 deploy/install_reverse_tunnel.py"
+fi
 sudo systemctl restart airsent-netlink
 sleep 3
 systemctl is-active --quiet airsent-netlink && echo "✓ airsent-netlink running: $(python3 -c 'import json;d=json.load(open("/run/airsent-netlink/status.json"));print("active link =", d.get("active"), "| wifi", d["wifi"].get("iface"), "| cellular", d["cellular"].get("iface") or "none")' 2>/dev/null)" || echo "⚠ airsent-netlink is not running — journalctl -u airsent-netlink"
