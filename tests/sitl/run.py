@@ -502,6 +502,56 @@ class Run:
         again = run('--apply')
         self.expect('nothing to do' in again.stdout, f'second run should be a no-op: {again.stdout[-200:]}')
         self.note(done.stdout.strip().splitlines()[-3])
+        # INS_LOG_BAT_MASK only takes effect after a reboot, and until then ArduPilot
+        # refuses to arm with "PreArm: Batch sampling requires reboot". Leaving that behind
+        # cost every later scenario its arming: 13 failures from this one line, all of them
+        # looking like flight bugs. Power-cycle here so the next scenario starts armable.
+        self.rig.power_cycle_sitl()
+        self.c.ping()
+        self.note('power-cycled the Pixhawk so INS_LOG_BAT_MASK takes effect and arming works again')
+
+    def s_gps_degrades(self):
+        """Satellites collapse mid-flight: ASC's gps_degraded catches it where the absolute checks cannot, and a total loss lands it."""
+        # SITL defaults to 10 satellites, below ASC's sats_baseline_min, so give it a real
+        # baseline while disarmed — ASC freezes the baseline at arming on purpose.
+        self.v.set_param('SIM_GPS_NUMSATS', 26)
+        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 30),
+                    f"SITL never reported 26 satellites (got {self.v.get('sats')})")
+        self.takeoff(10)
+
+        # 26 -> 11 is 58% gone. Every absolute check passes: 11 is above ASC's min_sats of
+        # 10, so this is exactly the collapse that used to go unreported.
+        self.v.set_param('SIM_GPS_NUMSATS', 11)
+        rows = []
+        end = time.time() + 30
+        while time.time() < end:
+            self.c.ping()
+            rows = [r for r in (self.asc().get('live') or []) if r[0] == 'gps_degraded']
+            if rows and rows[0][1] >= 3:                 # CRIT
+                break
+            time.sleep(1)
+        deg = rows[0] if rows else None
+        sats_row = [r for r in (self.asc().get('live') or []) if r[0] == 'gps_sats']
+        self.v.set_param('SIM_GPS_NUMSATS', 26)          # restore before asserting
+        self.expect(deg is not None, 'ASC has no gps_degraded check in its live view')
+        self.expect(deg[1] >= 3, f'gps_degraded did not reach critical on a 58% loss: {deg}')
+        self.expect(any('interference' in str(x) for x in deg),
+                    f'gps_degraded message does not name the suspected cause: {deg}')
+        self.note(f"26 -> 11 satellites: gps_degraded {deg}; absolute gps_sats row {sats_row} "
+                  f"(11 is above min_sats, which is the point)")
+
+        # A total loss is the other half: the EKF gives up and FS_EKF_ACTION=1 lands it.
+        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 30), 'satellites did not recover')
+        t0 = time.time()
+        self.v.set_param('SIM_GPS_DISABLE', 1)
+        landed = self.v.wait(lambda s: s['mode'] in ('LAND', 'RTL', 'SMART_RTL') or not s['armed'], 60)
+        texts = self.v.texts_since(t0)
+        self.v.set_param('SIM_GPS_DISABLE', 0)           # restore before asserting
+        self.expect(landed, f"total GPS loss did not land it (mode {self.v.get('mode')}, texts {texts[-4:]})")
+        self.note(f"GPS disabled → {self.v.get('mode')}; Pixhawk said "
+                  f"{[x for x in texts if 'ekf' in x.lower() or 'gps' in x.lower()][:2]}")
+        self.expect(self.v.wait(lambda s: not s['armed'], 90), 'did not disarm after landing')
+        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 60), 'satellites did not come back')
 
     def s_writes_blocked_when_armed(self):
         """Parameter writes and mission uploads are refused while armed."""
@@ -658,6 +708,12 @@ class Run:
 
     def s_motor_test_full(self):
         """Motor test: any throttle, long runs kept alive by the Jetson, stop cuts it, mapping learned."""
+        # The server refuses a motor test while armed, which is correct. The previous
+        # scenario can land and still be armed for a few seconds, so wait for disarm
+        # rather than reading the refusal as a product bug.
+        self.ensure_ground()
+        self.expect(self.v.wait(lambda s: not s['armed'], 30),
+                    'still armed, so the motor test would be refused (correctly)')
         self.expect(self.v.wait(lambda s: s['servo'], 10), 'no servo output from SITL')
         base = max((self.v.get('servo') or {0: 0}).values())
         t0 = time.time()
@@ -725,7 +781,8 @@ class Run:
     SCENARIOS = ['s_configure_like_zd650', 's_launch_sequence', 's_flight1_profile', 's_flight2_profile', 's_motor_test_full', 's_params_roundtrip', 's_flight1_setup_script', 's_basic_flight_and_recording', 's_mission_upload_auto', 's_estop_in_air',
                  's_normal_disarm_refused_in_air', 's_writes_blocked_when_armed', 's_joystick_and_stale_stop', 's_goto_and_rtl',
                  's_console_loss_hold_then_rtl', 's_console_back_cancels', 's_jetson_heartbeat_failsafe',
-                 's_geofence', 's_estop_while_uploading', 's_battery_failsafe', 's_pixhawk_reboot_reconnect']
+                 's_geofence', 's_estop_while_uploading', 's_battery_failsafe', 's_gps_degrades',
+                 's_pixhawk_reboot_reconnect']
 
 
 def main():
