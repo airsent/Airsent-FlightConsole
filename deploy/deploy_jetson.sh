@@ -42,6 +42,12 @@ sudo install -m 644 deploy/airsent-route.service  /etc/systemd/system/airsent-ro
 # Install the unit either way, but only enable it once the key exists, or boot logs fill
 # with autossh failures on a machine that was never given one.
 sudo install -m 644 deploy/airsent-tunnel.service /etc/systemd/system/airsent-tunnel.service
+# Drop-ins carry the Pixhawk baud and which RC channel is the kill switch. These were
+# on the SD card only; a rebuilt Jetson would have come up with no kill switch configured.
+if [ -d deploy/airsent-server.service.d ]; then
+  sudo install -d -m 755 /etc/systemd/system/airsent-server.service.d
+  sudo install -m 644 deploy/airsent-server.service.d/*.conf /etc/systemd/system/airsent-server.service.d/
+fi
 sudo systemctl daemon-reload
 sudo systemctl enable --quiet airsent-netlink airsent-server airsent-route
 if sudo test -f /etc/airsent/tunnel_key; then
