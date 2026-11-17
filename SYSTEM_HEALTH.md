@@ -24,8 +24,15 @@ Confirmed mappings:
   an open track with no ongoing video does not remain STREAMING indefinitely.
 
 The telemetry socket clears every telemetry-backed field and reconnects after
-3.5 seconds without valid data, or seven seconds without an initial frame.
-Camera activity remains independently monitored.
+12 seconds without valid data, or 30 seconds without an initial frame
+(`STALE_FEED_MS` / `NO_FIRST_FRAME_MS` in `telemetry.js`).
+
+These were 3.5 s and 7 s until 2026-11-16. The aircraft routinely goes quiet for
+2-3 seconds on a congested link, so the old thresholds tore down healthy sockets
+and turned a 2 s gap into a ~4 s blackout — every telemetry-backed field blanked,
+including the GPS FIX label. A reading that matters across a brief gap, such as
+RTK FLOAT / RTK FIX, now survives it. Camera activity remains independently
+monitored.
 
 Optional ground sources (not supplied by the current Jetson):
 - ground_computer: {connected:true, age:<5, cpu, ram, temp,
