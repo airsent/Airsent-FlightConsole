@@ -155,6 +155,19 @@ class Run:
             time.sleep(0.5)
         raise Failed('vehicle never became ready (EKF/GPS/home)')
 
+    def sats(self):
+        """Satellites as the server sees them — the number ASC's checks are fed."""
+        return (self.c.telem or {}).get('sats')
+
+    def wait_sats(self, at_least, timeout):
+        end = time.time() + timeout
+        while time.time() < end:
+            if (self.sats() or 0) >= at_least:
+                return True
+            self.c.ping()
+            time.sleep(1)
+        return False
+
     def ensure_ground(self, timeout=120):
         if self.v.get('armed'):
             self.c.send('set_mode', mode='LAND')
@@ -518,8 +531,10 @@ class Run:
         # SITL defaults to 10 satellites, below ASC's sats_baseline_min, so give it a real
         # baseline while disarmed — ASC freezes the baseline at arming on purpose.
         self.v.set_param('SIM_GPS_NUMSATS', 26)
-        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 30),
-                    f"SITL never reported 26 satellites (got {self.v.get('sats')})")
+        # Satellites come from the SERVER's telemetry, not self.v: the harness Vehicle does
+        # not track them, and ASC reads the server's sample anyway, so this is the view that
+        # decides whether the check fires.
+        self.expect(self.wait_sats(24, 40), f"SITL never reported 26 satellites (server saw {self.sats()})")
         self.takeoff(10)
 
         # 26 -> 11 is 58% gone. Every absolute check passes: 11 is above ASC's min_sats of
@@ -544,7 +559,7 @@ class Run:
                   f"(11 is above min_sats, which is the point)")
 
         # A total loss is the other half: the EKF gives up and FS_EKF_ACTION=1 lands it.
-        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 30), 'satellites did not recover')
+        self.expect(self.wait_sats(24, 40), 'satellites did not recover')
         t0 = time.time()
         self.v.set_param('SIM_GPS_DISABLE', 1)
         landed = self.v.wait(lambda s: s['mode'] in ('LAND', 'RTL', 'SMART_RTL') or not s['armed'], 60)
@@ -554,7 +569,7 @@ class Run:
         self.note(f"GPS disabled → {self.v.get('mode')}; Pixhawk said "
                   f"{[x for x in texts if 'ekf' in x.lower() or 'gps' in x.lower()][:2]}")
         self.expect(self.v.wait(lambda s: not s['armed'], 90), 'did not disarm after landing')
-        self.expect(self.v.wait(lambda s: (s.get('sats') or 0) >= 24, 60), 'satellites did not come back')
+        self.expect(self.wait_sats(24, 60), 'satellites did not come back')
 
     def s_writes_blocked_when_armed(self):
         """Parameter writes and mission uploads are refused while armed."""
@@ -714,9 +729,18 @@ class Run:
         # The server refuses a motor test while armed, which is correct. The previous
         # scenario can land and still be armed for a few seconds, so wait for disarm
         # rather than reading the refusal as a product bug.
+        #
+        # Wait on the SERVER's view, not self.v's. motor_test() gates on the server's own
+        # telem['armed'], fed by its own MAVLink link; self.v is a second connection on
+        # port 5762. Waiting on self.v returned immediately while the server still
+        # believed the aircraft was armed, and the refusal looked like a product bug.
         self.ensure_ground()
-        self.expect(self.v.wait(lambda s: not s['armed'], 30),
-                    'still armed, so the motor test would be refused (correctly)')
+        end = time.time() + 40
+        while time.time() < end and (self.c.telem or {}).get('armed'):
+            self.c.ping()
+            time.sleep(1)
+        self.expect(not (self.c.telem or {}).get('armed'),
+                    'the server still reports armed, so the motor test is refused (correctly)')
         self.expect(self.v.wait(lambda s: s['servo'], 10), 'no servo output from SITL')
         base = max((self.v.get('servo') or {0: 0}).values())
         t0 = time.time()
@@ -745,6 +769,17 @@ class Run:
                     f"still turning after stop (servo {self.v.get('servo')})")
         self.c.ping()
         self.expect(not ((self.c.telem or {}).get('motor_test') or {}).get('active'), 'still reported active after stop')
+        # The server gates every motor test on its own telem['armed']. Record what it says
+        # here and wait for it to clear: a back-to-back test was being refused as "blocked
+        # while armed", and which of the two is wrong is only answerable with the value.
+        self.note(f"between tests the server reports armed={(self.c.telem or {}).get('armed')!r}, "
+                  f"pixhawk said {self.v.texts_since(t0)[-3:]}")
+        end2 = time.time() + 20
+        while time.time() < end2 and (self.c.telem or {}).get('armed'):
+            self.c.ping(); time.sleep(1)
+        self.expect(not (self.c.telem or {}).get('armed'),
+                    f"server still reports armed between motor tests, so the next one is refused; "
+                    f"pixhawk said {self.v.texts_since(t0)[-4:]}")
         # a short run ends by itself
         self.ok(self.c.send('motor_test', motor=3, throttle=30, seconds=4, props_off_confirmed=True, timeout=10), 'short run')
         self.expect(self.v.wait(lambda s: [i for i, v in (s['servo'] or {}).items() if v > base + 50], 5), 'position C did not spin')

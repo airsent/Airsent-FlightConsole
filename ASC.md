@@ -27,7 +27,9 @@ Each check is a `Check(id, group, label, fn, when, sustain, fault)`. `fn(sample,
 
 Why: 26 satellites falling to 12 is a collapse that `min_sats = 10` never sees. On 2026-11-16 the 5G modem was measured taking this aircraft from 26-30 satellites down to 3-8, so a large relative drop is a known shape here, not a hypothetical. Motor and ESC noise produces the same shape and scales with current — see MOTOR_EMI.md.
 
-The baseline is taken **while disarmed and frozen at arming**. If it kept rising it would track the signal down as ESC noise pulled it, and the check would never fire. It runs `when='armed'`, so it covers motors at idle before take-off as well as flight.
+The baseline is taken **while the aircraft is on the ground, and frozen at take-off**. If it kept rising it would track the signal down as ESC noise pulled it, and the check would never fire.
+
+Not "while disarmed", which is what this first did and what did not work: ASC opens its session when `armed or stage in (...)`, so a direct arm-and-take-off begins the session **already armed** and a disarmed-only baseline is never captured at all — the check sat at OK with a null value. On the ground the motors are at idle at most, which is a fair baseline and covers the countdown and direct-arm paths alike. It runs `when='armed'`, so it covers motors at idle before take-off as well as flight.
 
 Overridable: `AIRSENT_ASC_SATS_DROP_WARN`, `AIRSENT_ASC_SATS_DROP_CRIT`, `AIRSENT_ASC_SATS_BASELINE_MIN`.
 

@@ -174,6 +174,7 @@ def build_checks(cfg):
         from whatever the aircraft had while sitting still — not as a dip below a fixed
         floor. 26 -> 12 passes min_sats=10 in silence; this is the check that sees it.
         Armed rather than flying, so it covers motors at idle before take-off too.
+        The baseline is captured on the ground and frozen at take-off; see where it is set.
         """
         base, now_sats = c.get('sats_baseline'), s.get('sats')
         if not (_num(base) and _num(now_sats)) or base < cfg['sats_baseline_min']:
@@ -645,10 +646,16 @@ class ASC:
         pos = (s['lat'], s['lon']) if _num(s.get('lat')) and _num(s.get('lon')) and (s['lat'] or s['lon']) else None
         home_dist = _dist_m((home['lat'], home['lon']), pos) if home.get('set') and pos else None
         self.hist.append({k: s.get(k) for k in ('roll', 'lat', 'lon', 'spd', 'voltage', 'battery')})
-        # The session's best satellite count, set before the motors have any say. Once the
-        # aircraft is armed it stops rising, so ESC noise cannot drag the baseline down with it.
+        # The session's best satellite count, taken while the aircraft is still on the
+        # ground and frozen at take-off, so ESC noise in flight cannot drag the baseline
+        # down with the signal it is supposed to measure.
+        #
+        # Not "while disarmed": ASC opens its session when `armed or stage in (...)`, so a
+        # direct arm-and-take-off begins the session ALREADY armed and a disarmed-only
+        # baseline is never captured at all. On the ground the motors are at idle at most,
+        # which is a fair baseline and covers both the countdown and direct-arm paths.
         sats_now = s.get('sats')
-        if _num(sats_now) and not armed and (self.sats_baseline is None or sats_now > self.sats_baseline):
+        if _num(sats_now) and not flying and (self.sats_baseline is None or sats_now > self.sats_baseline):
             self.sats_baseline = sats_now
         console_age = (now - self.console_seen_at) if self.console_seen_at else None
         ctx = {'hist': self.hist, 'dt': dt, 'armed': armed, 'flying': flying, 'real': self.real, 'home_dist': home_dist,

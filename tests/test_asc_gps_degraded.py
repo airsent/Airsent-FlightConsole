@@ -8,7 +8,9 @@ silence. On this aircraft the modem was measured taking 26-30 satellites to 3-8,
 relative collapse is a shape we know happens here, not a hypothetical.
 """
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,13 +73,71 @@ class TestGpsDegraded(unittest.TestCase):
         self.assertEqual(lost, -5)
 
 
-class TestBaselineTracking(unittest.TestCase):
-    """The baseline must freeze at arming, or ESC noise drags it down with the signal."""
+class TestBaselineCapture(unittest.TestCase):
+    """Drive the real ASC so the CAPTURE is covered, not just the comparison.
 
-    def test_baseline_is_exposed_and_resets(self):
-        a = asc.ASC(root='/tmp/asc-test-unused')
-        self.assertIsNone(a.sats_baseline)
+    The first version of this check only captured a baseline `while not armed`. Every test
+    above still passed, because they hand the baseline in. On the aircraft ASC opens its
+    session when `armed or stage in (...)`, so a direct arm-and-take-off begins ALREADY
+    armed, nothing was ever captured, and the check sat at OK with a null value through a
+    58% satellite collapse. These tests exist so that cannot come back.
+    """
 
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.t = 1000.0
+        self.a = asc.ASC(root=self.tmp, clock=lambda: self.t, real=False)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def tick(self, sats, armed=False, alt=0.0, n=4):
+        """Feed n samples; ASC needs a few to settle a check's sustain window."""
+        for _ in range(n):
+            self.t += 1.0
+            self.a.tick({'armed': armed, 'alt': alt, 'sats': sats, 'fix_type': 'RTK FIX',
+                         'hdop': 0.7, 'flight_mode': 'GUIDED', 'ekf_healthy': True},
+                        now=self.t, mission={'stage': 'armed' if armed else 'prearm'})
+
+    def level_of(self, cid):
+        row = [r for r in self.a.live() if r[0] == cid]
+        return row[0][1] if row else None
+
+    def test_baseline_is_captured_when_the_session_starts_already_armed(self):
+        """The arm-and-take-off path: no disarmed samples ever arrive."""
+        self.tick(26, armed=True, alt=0.0)          # armed, still on the ground
+        self.assertEqual(self.a.sats_baseline, 26, 'nothing captured on a direct arm')
+
+    def test_baseline_is_captured_on_the_ground_while_disarmed(self):
+        self.tick(27, armed=False, alt=0.0)
+        self.assertEqual(self.a.sats_baseline, 27)
+
+    def test_baseline_freezes_once_flying(self):
+        """Or ESC noise drags the baseline down with the signal it should measure."""
+        self.tick(26, armed=True, alt=0.0)
+        self.tick(30, armed=True, alt=10.0)         # airborne; must not raise the baseline
+        self.assertEqual(self.a.sats_baseline, 26)
+        self.tick(8, armed=True, alt=10.0)          # collapse; must not lower it either
+        self.assertEqual(self.a.sats_baseline, 26)
+
+    def test_a_collapse_in_flight_reaches_critical(self):
+        self.tick(26, armed=True, alt=0.0)
+        self.tick(10, armed=True, alt=10.0, n=10)   # 62% gone, past the 3 s sustain
+        self.assertEqual(self.level_of('gps_degraded'), asc.CRIT)
+
+    def test_a_steady_flight_raises_nothing(self):
+        self.tick(26, armed=True, alt=0.0)
+        self.tick(25, armed=True, alt=10.0, n=10)
+        self.assertEqual(self.level_of('gps_degraded'), asc.OK)
+
+    def test_baseline_resets_between_sessions(self):
+        self.tick(26, armed=True, alt=0.0)
+        self.assertEqual(self.a.sats_baseline, 26)
+        self.a.reset()
+        self.assertIsNone(self.a.sats_baseline, 'each flight is judged on its own')
+
+
+class TestConfig(unittest.TestCase):
     def test_config_thresholds_are_sane(self):
         self.assertLess(CFG['sats_drop_warn'], CFG['sats_drop_crit'])
         self.assertGreater(CFG['sats_baseline_min'], CFG['min_sats'])
