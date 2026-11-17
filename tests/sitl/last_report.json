@@ -9,179 +9,30 @@
     "golden check: MATCH ",
     "battery reads 12.6 V; LiDAR 0.11 m; flow quality 51"
    ],
-   "seconds": 59
-  },
-  {
-   "scenario": "s_launch_sequence",
-   "result": "PASS",
-   "error": "",
-   "notes": [
-    "Mission started: 2026-11-16_2357_sitl-run",
-    "GO at stage gonogo: GO recorded",
-    "T-0 takeoff done, hovering at 4.9 m in GUIDED",
-    "mission folder 2026-11-16_2357_sitl-run: ['asc', 'checks_handover.json', 'checks_t0.json', 'events.jsonl', 'faults.jsonl', 'mission.json', 'params_at_arm.json', 'pixhawk.bin', 'pixhawk_bin.json', 'summary.json', 'telemetry.jsonl']"
-   ],
-   "seconds": 96
-  },
-  {
-   "scenario": "s_flight1_profile",
-   "result": "PASS",
-   "error": "",
-   "notes": [
-    "profile steps seen: ['hold_low', 'climb', 'hold_high', 'landing', 'done']; low hover 1.9\u20132.0 m, high hover 5.0\u20135.0 m, max 5.0 m"
-   ],
-   "seconds": 130
-  },
-  {
-   "scenario": "s_flight2_profile",
-   "result": "PASS",
-   "error": "",
-   "notes": [
-    "steps ['hold', 'climb', 'yaw', 'leg', 'home', 'hold_home']; max alt 20.0 m; box reach 7.1 m; turned 336\u00b0",
-    "held over home at 20.0 m for 8.0 s, then landed on command"
-   ],
-   "seconds": 210
+   "seconds": 58
   },
   {
    "scenario": "s_motor_test_full",
-   "result": "FAIL",
-   "error": "short run: Motor test is blocked while armed",
-   "notes": [],
-   "seconds": 6
-  },
-  {
-   "scenario": "s_params_roundtrip",
    "result": "PASS",
    "error": "",
    "notes": [
-    "read ['ARMING_CHECK', 'BATT_LOW_VOLT', 'FS_GCS_ENABLE', 'FS_THR_ENABLE', 'RTL_ALT', 'WPNAV_SPEED']; not on this firmware: ['RTL_ALT_M', 'WP_SPD']",
-    "Wrote and confirmed 3 parameter(s) on the Pixhawk",
-    "unknown parameter: Wrote 0/1 \u2014 stopped: NOT_A_PARAM_X does not exist on this Pixhawk",
-    "param_rev broadcast: rev 2 by SITL"
+    "between tests the server reports armed=True, pixhawk said ['finished motor test', 'starting motor test', 'finished motor test']",
+    "idle 1000; position 2 drives output M1; kept alive past the 2.2 s window; learned map {'2': 1, '3': 4}"
    ],
-   "seconds": 13
+   "seconds": 16
   },
   {
-   "scenario": "s_flight1_setup_script",
+   "scenario": "s_gps_degrades",
    "result": "PASS",
    "error": "",
    "notes": [
-    "Read back:  {\"RTL_ALT\": 2000, \"INS_LOG_BAT_MASK\": 1} \u2192 OK"
+    "26 -> 11 satellites: gps_degraded ['gps_degraded', 3, 15, 'Lost 15 of 26 satellites \u2014 likely motor/ESC interference']; absolute gps_sats row [['gps_sats', 0, 11]] (11 is above min_sats, which is the point)",
+    "GPS disabled \u2192 LAND; Pixhawk said ['EKF variance', 'EKF Failsafe: changed to LAND Mode']"
    ],
-   "seconds": 20
-  },
-  {
-   "scenario": "s_basic_flight_and_recording",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_mission_upload_auto",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [
-    "Uploaded and verified 4 waypoints on the Pixhawk",
-    "vehicle_mission state: None"
-   ],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_estop_in_air",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_normal_disarm_refused_in_air",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_writes_blocked_when_armed",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_joystick_and_stale_stop",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 3
-  },
-  {
-   "scenario": "s_goto_and_rtl",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_console_loss_hold_then_rtl",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_console_back_cancels",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_jetson_heartbeat_failsafe",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [
-    "Wrote and confirmed 2 parameter(s) on the Pixhawk"
-   ],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_geofence",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_estop_while_uploading",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_battery_failsafe",
-   "result": "FAIL",
-   "error": "arm: ARM refused by Pixhawk: FAILED \u2014 PreArm: Batch sampling requires reboot",
-   "notes": [],
-   "seconds": 0
-  },
-  {
-   "scenario": "s_pixhawk_reboot_reconnect",
-   "result": "PASS",
-   "error": "",
-   "notes": [
-    "reconnected 7 s after the power cut"
-   ],
-   "seconds": 46
+   "seconds": 48
   }
  ],
  "server_errors": [
-  "[MAV] Error: [Errno 111] Connection refused",
-  "Traceback (most recent call last):",
-  "BrokenPipeError: [Errno 32] Broken pipe",
-  "Traceback (most recent call last):",
-  "AttributeError: 'NoneType' object has no attribute 'connect'",
   "[MAV] Error: [Errno 111] Connection refused",
   "Traceback (most recent call last):",
   "BrokenPipeError: [Errno 32] Broken pipe",

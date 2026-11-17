@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="demo-isolation.js?v=viewer-1"></script>
+<script src="viewer-access.js?v=shared-2"></script>
+<script src="shared-state.js?v=1"></script>
+<script src="console-local.js"></script>
+<script src="console-config.js?v=simulation-map-4"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Airsent — ASC Monitor</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<script src="fit-screen.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0: #060c12;
+  --bg1: #0a131c;
+  --bg2: #0e1a26;
+  --line: rgba(255,255,255,.06);
+  --green: #4ade80;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --blue: #60a5fa;
+  --muted: #4b6275;
+  --text: #e2eaf0;
+  --text2: #7a95a8;
+}
+
+body { background: var(--bg0); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; }
+
+/* ── verdict banner: the one thing a monitor must never have to hunt for ───── */
+.asc-top { display: flex; align-items: stretch; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.asc-verdict { flex: 0 0 340px; padding: 18px 22px; background: var(--bg1); display: flex; flex-direction: column; justify-content: center; }
+.asc-verdict .v { font: 700 30px/1 'DM Sans', sans-serif; letter-spacing: 1px; }
+.asc-verdict .vs { margin-top: 6px; font: 400 11px/1.5 'DM Mono', monospace; color: var(--text2); letter-spacing: .5px; }
+.asc-verdict.ok .v { color: var(--green); }
+.asc-verdict.warn .v { color: var(--amber); }
+.asc-verdict.crit .v { color: var(--red); }
+.asc-verdict.na .v { color: var(--muted); }
+.asc-verdict.crit { animation: ascAlarm 1s steps(1) infinite; }
+@keyframes ascAlarm { 50% { background: #26090f; } }
+
+.asc-stats { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--line); }
+.asc-stat { background: var(--bg1); padding: 14px 16px; }
+.asc-stat b { display: block; font: 500 9px/1 'DM Mono', monospace; letter-spacing: 1.4px; color: var(--muted); text-transform: uppercase; }
+.asc-stat span { display: block; margin-top: 7px; font: 500 17px/1 'DM Mono', monospace; color: var(--text); }
+.asc-stat span.dim { color: var(--muted); }
+.asc-stat span.bad { color: var(--red); }
+
+.asc-tools { display: flex; align-items: center; gap: 14px; padding: 9px 22px; background: var(--bg1); border-bottom: 1px solid var(--line);
+             font: 400 11px 'DM Mono', monospace; color: var(--text2); }
+.asc-tools label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.asc-tools .note { margin-left: auto; color: var(--muted); }
+
+/* ── check grid ────────────────────────────────────────────────────────────── */
+.asc-body { display: grid; grid-template-columns: 1fr 380px; gap: 1px; background: var(--line); align-items: start; }
+@media (max-width: 1100px) { .asc-body { grid-template-columns: 1fr; } }
+.asc-groups { background: var(--bg0); padding: 4px 0 40px; }
+.asc-group { margin: 14px 22px 0; }
+.asc-group > h2 { font: 500 9px/1 'DM Mono', monospace; letter-spacing: 1.6px; color: var(--muted);
+                  text-transform: uppercase; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.asc-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1px; background: var(--line); margin-top: 1px; }
+.asc-row { background: var(--bg1); padding: 10px 13px; display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: center; }
+.asc-row.lvl-warn { background: #1d1705; }
+.asc-row.lvl-crit { background: #220a10; }
+.asc-row.lvl-na { opacity: .42; }
+.asc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.lvl-ok .asc-dot { background: var(--green); }
+.lvl-warn .asc-dot { background: var(--amber); }
+.lvl-crit .asc-dot { background: var(--red); animation: ascBlink 1s infinite; }
+@keyframes ascBlink { 50% { opacity: .3; } }
+.asc-name { min-width: 0; }
+.asc-name b { display: block; font: 400 12px/1.3 'DM Sans', sans-serif; color: var(--text); }
+.asc-name i { display: block; margin-top: 3px; font: 400 9.5px/1.3 'DM Mono', monospace; font-style: normal; color: var(--muted); }
+.asc-name u { display: block; margin-top: 4px; font: 500 10px/1.3 'DM Mono', monospace; text-decoration: none; }
+.lvl-warn .asc-name u { color: var(--amber); }
+.lvl-crit .asc-name u { color: var(--red); }
+.asc-val { text-align: right; font: 500 15px/1 'DM Mono', monospace; white-space: nowrap; }
+.asc-val small { font-size: 9px; color: var(--muted); margin-left: 2px; }
+.asc-val svg { display: block; width: 62px; height: 15px; margin-top: 5px; }
+
+/* ── event timeline ────────────────────────────────────────────────────────── */
+.asc-side { background: var(--bg1); border-left: 1px solid var(--line); min-height: 60vh; }
+.asc-side h2 { font: 500 9px/1 'DM Mono', monospace; letter-spacing: 1.6px; color: var(--muted); text-transform: uppercase;
+               padding: 16px 18px 10px; border-bottom: 1px solid var(--line); }
+.asc-events { max-height: 72vh; overflow-y: auto; }
+.asc-ev { padding: 9px 18px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 58px 1fr; gap: 10px; align-items: baseline; }
+.asc-ev time { font: 400 10px/1.4 'DM Mono', monospace; color: var(--muted); }
+.asc-ev p { font: 400 11.5px/1.45 'DM Sans', sans-serif; color: var(--text2); }
+.asc-ev.ev-warn p { color: var(--amber); }
+.asc-ev.ev-crit p { color: var(--red); }
+.asc-ev.ev-info p { color: var(--text2); }
+.asc-empty { padding: 20px 18px; font: 400 11px 'DM Mono', monospace; color: var(--muted); }
+</style>
+<script src="console-navigation.js" defer></script>
+</head>
+<body class="console-fit">
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="logo-dropdown">
+      <button class="logo-dropdown-btn"><img src="logo-topbar.png" style="width:190px;height:32px;max-height:32px;object-fit:contain;object-position:left center;display:block;" alt="Airsent"></button>
+      <div class="logo-dropdown-menu">
+        <a href="dashboard.html">Main Dashboard</a>
+        <a href="mission.html">Mission Planner</a>
+        <a href="preflight.html">Pre-Flight Checklist</a>
+        <a href="parameters.html">Parameters</a>
+        <a href="logs.html">Flight Logs</a>
+        <a href="launch.html">Launch Sequencer</a>
+        <a href="pilot.html">Pilot</a>
+        <a href="health.html">System Health</a>
+        <a href="failsafe.html">Failsafe Systems</a>
+        <a href="asc.html">ASC Monitor</a>
+        <a href="sensor-status.html">Sensor Status</a>
+        <a href="actuators.html">Actuators</a>
+      </div>
+    </div>
+  </div>
+  <div class="topbar-divider"></div>
+  <span class="topbar-label">ASC Monitor</span>
+  <div class="topbar-divider"></div>
+  <span class="topbar-label">State</span>&nbsp;<span class="topbar-val" id="ascTopState">--</span>
+</div>
+
+<div class="asc-top">
+  <div class="asc-verdict na" id="ascVerdict">
+    <span class="v" id="ascVerdictText">NO DATA</span>
+    <span class="vs" id="ascVerdictSub">waiting for the aircraft</span>
+  </div>
+  <div class="asc-stats">
+    <div class="asc-stat"><b>Checks/s</b><span id="ascRate" class="dim">--</span></div>
+    <div class="asc-stat"><b>Checks</b><span id="ascCount" class="dim">--</span></div>
+    <div class="asc-stat"><b>Recording</b><span id="ascRec" class="dim">--</span></div>
+    <div class="asc-stat"><b>Flying</b><span id="ascFlying" class="dim">--</span></div>
+    <div class="asc-stat"><b>Worst so far</b><span id="ascWorst" class="dim">--</span></div>
+    <div class="asc-stat"><b>Telemetry</b><span id="ascFresh" class="dim">--</span></div>
+  </div>
+</div>
+
+<div class="asc-tools">
+  <label><input type="checkbox" id="ascSound"> audible alert on a new critical</label>
+  <label><input type="checkbox" id="ascHideIdle"> hide not-active</label>
+  <span class="note">ASC checks, records and warns. It does not act, except to hold and return home if the operator console link is lost in GUIDED/AUTO.</span>
+</div>
+
+<div class="asc-body">
+  <div class="asc-groups" id="ascGroups"></div>
+  <aside class="asc-side">
+    <h2>Event log</h2>
+    <div class="asc-events" id="ascEvents"><div class="asc-empty">No events yet.</div></div>
+  </aside>
+</div>
+
+<script src="console-navigation.js" defer></script>
+<script src="presence.js?v=sitl-1" defer></script>
+<script src="nav-toggle.js?v=1" defer></script>
+<script src="mission-client.js?v=16" defer></script>
+<script src="mission-ui.js?v=16" defer></script>
+<script src="asc-monitor.js?v=1" defer></script>
+</body>
+</html>

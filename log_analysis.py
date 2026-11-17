@@ -278,6 +278,63 @@ def gyro_spectrum(batch, flying, hover):
             'peaks': picked, 'shape': shape, '_curve': curve}
 
 
+CURRENT_BANDS = ((0, 5), (5, 15), (15, 30), (30, 45), (45, 1e9))
+
+
+def gps_vs_current(d):
+    """Satellite count and HDOP bucketed by motor current — does the aircraft's own
+    power system deafen its GNSS receiver?
+
+    ESC switching noise is the classic cause of GPS loss on a multirotor and it scales
+    with current, so the honest test is a real flight, not a bench run: props off at full
+    throttle draws a fraction of hover current (measured 1.8 A peak across four ground
+    tests against 30-45 A expected at hover on the ZD650). A props-off sweep can look
+    clean while flight still breaks the fix.
+
+    Needs a log with real current in it. Returns {'available': False, 'why': ...} when the
+    motors never spun, rather than a table of noise.
+    """
+    gps = [x for x in d['GPS'] if getattr(x, 'I', 0) == 0]
+    bat = [b for b in d['BAT'] if getattr(b, 'Inst', 0) == 0 and getattr(b, 'Curr', None) is not None]
+    if not gps or not bat:
+        return {'available': False, 'why': 'log has no GPS or no current records'}
+    peak = max(b.Curr for b in bat)
+    if peak < 5:
+        return {'available': False, 'peak_current_a': _r(peak, 1),
+                'why': f'motors never spun (peak {peak:.1f} A) — fly it, or this says nothing about EMI'}
+
+    # Nearest current sample to each GPS fix. Both are time-ordered, so walk them together.
+    out = {f'{lo:g}-{hi:g}A' if hi < 1e9 else f'{lo:g}A+': [] for lo, hi in CURRENT_BANDS}
+    j = 0
+    for x in gps:
+        while j + 1 < len(bat) and abs(bat[j + 1].TimeUS - x.TimeUS) <= abs(bat[j].TimeUS - x.TimeUS):
+            j += 1
+        c = bat[j].Curr
+        for lo, hi in CURRENT_BANDS:
+            if lo <= c < hi:
+                key = f'{lo:g}-{hi:g}A' if hi < 1e9 else f'{lo:g}A+'
+                out[key].append((x.NSats, x.HDop))
+                break
+
+    table = {}
+    for k, rows in out.items():
+        if not rows:
+            continue
+        sats = [s for s, _ in rows]
+        hdop = [h for _, h in rows]
+        table[k] = {'samples': len(rows), 'sats_mean': _r(sum(sats) / len(sats), 1),
+                    'sats_min': min(sats), 'hdop_mean': _r(sum(hdop) / len(hdop))}
+
+    # Compare the quietest band we actually have against the busiest.
+    keys = [k for k, _ in zip(out.keys(), range(99)) if k in table]
+    drop = None
+    if len(keys) >= 2:
+        drop = _r(table[keys[0]]['sats_mean'] - table[keys[-1]]['sats_mean'], 1)
+    return {'available': True, 'peak_current_a': _r(peak, 1), 'bands': table, 'sats_lost_at_high_current': drop,
+            'reading': 'a drop of more than ~3 satellites between the quietest and busiest bands points at '
+                       'ESC or power-lead noise reaching the GNSS antenna'}
+
+
 def analyse(path, progress=None):
     t0 = time.time()
     d, params, batch = read_log(path, progress)
@@ -397,6 +454,7 @@ def analyse(path, progress=None):
     if g:
         r['gps'] = {'min_sats': min(x.NSats for x in g), 'max_hdop': _r(max(x.HDop for x in g)),
                     'worst_fix': min(x.Status for x in g), 'fix_names': '3=3D 4=DGPS 5=RTK float 6=RTK fixed'}
+    r['gps_vs_current'] = gps_vs_current(d)
 
     # ── events ─────────────────────────────────────────────────────────────
     # ECode 0 means "that error has cleared" — not a problem in itself
@@ -602,6 +660,23 @@ def rules(r):
         add('warning', 'gps', f'GPS dropped to {g["min_sats"]} satellites in flight.')
     if (g.get('max_hdop') or 0) > 1.5:
         add('warning', 'gps', f'GPS HDOP reached {g["max_hdop"]} in flight.')
+    # Does the aircraft's own power system deafen its GNSS receiver? Only a real flight
+    # can answer it — props-off bench runs draw a fraction of hover current.
+    gc = r.get('gps_vs_current') or {}
+    if gc.get('available'):
+        lost = gc.get('sats_lost_at_high_current')
+        if lost is not None and lost >= 6:
+            add('critical', 'gps', f'GPS lost {lost:.0f} satellites on average as motor current rose (peak '
+                                   f'{gc["peak_current_a"]:.0f} A) — ESC or power-lead noise is reaching the GNSS '
+                                   f'antenna. Move the GPS further from the ESCs and power leads, keep its cable '
+                                   f'away from motor wiring, and expect RTK to be unusable in flight until it is fixed.')
+        elif lost is not None and lost >= 3:
+            add('warning', 'gps', f'GPS lost {lost:.1f} satellites on average as motor current rose (peak '
+                                  f'{gc["peak_current_a"]:.0f} A) — borderline ESC noise reaching the receiver.')
+    elif gc.get('peak_current_a') is not None:
+        add('info', 'gps', f'Motor EMI not assessed: peak current was only {gc["peak_current_a"]:.1f} A, so the '
+                           f'motors never really spun in this log. A props-off bench run cannot clear this — '
+                           f'interference scales with current, so it takes a real flight.')
     for e in (r.get('events') or {}).get('errors', []):
         add('warning', 'errors', f'ArduPilot error at T+{e["t"]} s: {e["subsys"]} (code {e["code"]}).')
     sp = r.get('spectrum') or {}

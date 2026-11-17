@@ -55,6 +55,13 @@ def default_config():
         'max_current': env_f('AIRSENT_ASC_MAX_CURRENT', 70), 'sag_volts': 1.5,
         'vib_warn': env_f('AIRSENT_MAX_VIBRATION', 30), 'vib_crit': 60,
         'min_sats': 10, 'max_hdop': 1.5,
+        # Satellites lost against this session's own best, as a fraction. Absolute floors
+        # miss the thing that matters: ESC noise taking 26 satellites down to 12 is a
+        # collapse, and min_sats=10 never sees it. Needs sats_baseline_min before it can
+        # judge, so a flight that only ever had a weak fix does not trip it.
+        'sats_drop_warn': env_f('AIRSENT_ASC_SATS_DROP_WARN', 0.35),
+        'sats_drop_crit': env_f('AIRSENT_ASC_SATS_DROP_CRIT', 0.50),   # more than half of them gone
+        'sats_baseline_min': env_f('AIRSENT_ASC_SATS_BASELINE_MIN', 12),
         'motor_high_pwm': 1900, 'motor_spread_pct': 25, 'esc_spread': 0.25,
         'max_jetson_temp': 85, 'min_disk_gb': 20, 'keep_free_gb': 30,
         'flow_quality_min': 50, 'low_agl': 5.0,
@@ -158,6 +165,28 @@ def build_checks(cfg):
         allowed = (max(s.get('spd') or 0, h[-2].get('spd') or 0) + 3) * dt + 3
         return (WARN, f'Position jumped {d:.0f} m', d) if d and d > allowed else (OK, '', d)
     add('gps_jump', 'GPS', 'Position jumps', gps_jump, when='flying', sustain=0)
+
+    def gps_degraded(s, c):
+        """Satellites lost against this session's own best, which is what EMI looks like.
+
+        ESC switching noise scales with motor current, so it appears the moment the
+        motors spin and gets worse with throttle. It shows up as the count falling away
+        from whatever the aircraft had while sitting still — not as a dip below a fixed
+        floor. 26 -> 12 passes min_sats=10 in silence; this is the check that sees it.
+        Armed rather than flying, so it covers motors at idle before take-off too.
+        The baseline is captured on the ground and frozen at take-off; see where it is set.
+        """
+        base, now_sats = c.get('sats_baseline'), s.get('sats')
+        if not (_num(base) and _num(now_sats)) or base < cfg['sats_baseline_min']:
+            return OK, '', None
+        lost = base - now_sats
+        frac = lost / base
+        if frac >= cfg['sats_drop_crit']:
+            return CRIT, f'Lost {lost:.0f} of {base:.0f} satellites — likely motor/ESC interference', lost
+        if frac >= cfg['sats_drop_warn']:
+            return WARN, f'Down {lost:.0f} satellites from {base:.0f} this flight', lost
+        return OK, '', lost
+    add('gps_degraded', 'GPS', 'Satellites lost in flight', gps_degraded, when='armed', sustain=3)
     add('home', 'GPS', 'Home position', lambda s, c: (WARN, 'Home not set — RTL has nowhere to go', 0)
         if c['armed'] and not (s.get('home') or {}).get('set') else (OK, '', 1), when='armed', sustain=2)
 
@@ -311,6 +340,7 @@ def display_meta(cfg):
         'tilt': ('°', f"warn {cfg['max_tilt_warn']}° · crit {cfg['max_tilt_crit']}°"), 'oscillation': ('°σ', 'warn > 6°σ roll'),
         'vspeed': ('m/s', f"climb ≤ {cfg['max_climb']} · descent ≤ {cfg['max_descent']}"), 'speed': ('m/s', f"warn > {cfg['max_speed']:.0f}"),
         'gps_fix': ('text', 'needs 3D fix or better'), 'gps_sats': ('', f"warn < {cfg['min_sats']}"), 'gps_hdop': ('', f"warn > {cfg['max_hdop']}"),
+        'gps_degraded': ('', f"warn -{cfg['sats_drop_warn'] * 100:.0f}% · critical -{cfg['sats_drop_crit'] * 100:.0f}% of this flight's best"),
         'gps_jump': ('m', 'per tick vs speed'), 'home': ('flag', 'home set before flight'),
         'fence_alt': ('m', f"warn within 10% (≥ 2.5 m) of the ceiling ({cfg['fence_alt']:.0f} m default)"), 'fence_dist': ('m', f"warn at 90% of radius ({cfg['fence_radius']:.0f} m default)"),
         'lidar_agree': ('m', 'LiDAR vs altitude · warn > 2.5 m'), 'lidar_low': ('m', 'reading below 6 m'), 'flow': ('', f"warn < {cfg['flow_quality_min']} below {cfg['low_agl']:.0f} m"),
@@ -428,6 +458,7 @@ class ASC:
 
     def reset(self):
         self.session = None            # dict while watching
+        self.sats_baseline = None      # best satellite count this session (see the gps_degraded check)
         self.rec = None
         self.state = {}                # check id -> {'level','since','raised','msg','value'}
         self.hist = deque(maxlen=200)
@@ -512,6 +543,7 @@ class ASC:
                         'max_alt': 0.0, 'max_dist': 0.0, 'min_volt': None, 'max_current': 0.0, 'mah': 0.0,
                         'max_vib': 0.0, 'actions': [], 'failsafes': [], 'console_losses': 0, 'flying_s': 0.0,
                         'start_pct': None, 'end_pct': None, 'dist_m': 0.0, 'last_pos': None, 'rec_bytes': 0}
+        self.sats_baseline = None      # each flight is judged against its own best
         self.console_seen_in_session = bool(self.console_seen_at and now - self.console_seen_at < 5)
         self._event('session', f'ASC recording to {os.path.basename(folder)}/asc', INFO)
         self.pending_param_dump = True
@@ -614,8 +646,20 @@ class ASC:
         pos = (s['lat'], s['lon']) if _num(s.get('lat')) and _num(s.get('lon')) and (s['lat'] or s['lon']) else None
         home_dist = _dist_m((home['lat'], home['lon']), pos) if home.get('set') and pos else None
         self.hist.append({k: s.get(k) for k in ('roll', 'lat', 'lon', 'spd', 'voltage', 'battery')})
+        # The session's best satellite count, taken while the aircraft is still on the
+        # ground and frozen at take-off, so ESC noise in flight cannot drag the baseline
+        # down with the signal it is supposed to measure.
+        #
+        # Not "while disarmed": ASC opens its session when `armed or stage in (...)`, so a
+        # direct arm-and-take-off begins the session ALREADY armed and a disarmed-only
+        # baseline is never captured at all. On the ground the motors are at idle at most,
+        # which is a fair baseline and covers both the countdown and direct-arm paths.
+        sats_now = s.get('sats')
+        if _num(sats_now) and not flying and (self.sats_baseline is None or sats_now > self.sats_baseline):
+            self.sats_baseline = sats_now
         console_age = (now - self.console_seen_at) if self.console_seen_at else None
         ctx = {'hist': self.hist, 'dt': dt, 'armed': armed, 'flying': flying, 'real': self.real, 'home_dist': home_dist,
+               'sats_baseline': self.sats_baseline,
                'console_age': console_age, 'console_seen': self.console_seen_in_session and bool(self.session),
                'vps': extras.get('vps'), 'disk': extras.get('disk'), 'fence_alt': extras.get('fence_alt'),
                'fence_radius': extras.get('fence_radius'), 'loop_ms': self.loop_ms, 'drain_pct_per_s': self._drain_rate()}
