@@ -192,6 +192,30 @@ def choose(active, wifi, cell, prefer='auto', back_needed=None):
 
 
 # ── applying ───────────────────────────────────────────────────────────────
+def redial_tunnel():
+    """Re-dial the reverse SSH tunnel on the new link.
+
+    autossh takes 90 s (ServerAliveInterval 30 x 3) to notice a link change, and the
+    socket it then abandons can stay ESTABLISHED on the VPS the whole time: the old
+    interface is usually still up, so the VPS's ClientAlive probes keep being answered
+    and nothing releases 127.0.0.1:2222. The fresh ssh meanwhile exits on
+    ExitOnForwardFailure and backs off further each time. That is how one wifi->cellular
+    switch cost 27 autossh retries and ~35 minutes with no remote access on 2026-11-16.
+
+    Restarting the unit kills the old ssh child now; its FIN reaches the VPS over the
+    still-up old interface, the port is released, and the next dial binds.
+    """
+    # --no-block: systemd queues the job and returns at once. This runs inside the link
+    # manager's main loop, and a restart that waited could stall route decisions for
+    # seconds while the aircraft is flying. Nothing here is worth that.
+    try:
+        subprocess.run(['systemctl', 'restart', '--no-block', 'airsent-tunnel'], timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        print('[NETLINK] re-dialled the reverse SSH tunnel on the new link', flush=True)
+    except Exception as e:                       # never let this stop link management
+        print(f'[NETLINK] tunnel re-dial failed: {e}', flush=True)
+
+
 def apply_route(iface):
     if not iface:
         sh(['ip', 'route', 'del', f'{VPS}/32', 'metric', str(METRIC)])
@@ -514,6 +538,8 @@ def main():
                     switches += 1
                     last_switch = {'at': t0, 'from': active, 'to': new, 'reason': reason}
                     print(f'[NETLINK] {active} → {new}: {reason}', flush=True)
+                    if active is not None:       # not the first link of this boot
+                        redial_tunnel()
                 active = new
         if active == 'wifi' and back_needed > BACK_TO_WIFI and t0 - to_wifi_at > 600:
             back_needed = BACK_TO_WIFI                                        # stable for 10 min: forgive

@@ -45,7 +45,11 @@ It installs `autossh`, generates `/etc/airsent/tunnel_key`, writes and starts `a
 Already provisioned:
 
 - **User `tunnel`** — system user, shell `/usr/sbin/nologin`, exists only to hold the forwarded port.
-- **`/etc/ssh/sshd_config.d/70-airsent-tunnel.conf`** — `ClientAliveInterval 30`, `ClientAliveCountMax 3`, `TCPKeepAlive yes`. Without these a dead tunnel leaves `127.0.0.1:2222` bound and the Jetson cannot re-bind when it comes back; `ExitOnForwardFailure=yes` on the Jetson side then makes the retry fail forever.
+- **`/etc/ssh/sshd_config.d/70-airsent-tunnel.conf`** — `ClientAliveInterval 15`, `ClientAliveCountMax 2`, `TCPKeepAlive yes`, so a dead peer drops in ~30 s. Without it a dead tunnel leaves `127.0.0.1:2222` bound, the Jetson cannot re-bind, and `ExitOnForwardFailure=yes` makes each retry fail.
+
+  **These probes are not sufficient on their own, and it took losing access to learn why.** They were `30`/`3` until 2026-11-16. On a wifi→cellular handoff the abandoned socket is usually *not* dead: the old interface is still up, so it keeps answering the probes and is never reaped. One orphan was measured at **21 minutes** holding the port while `autossh` dialled 27 times, each retry backing off further — about 35 minutes with no remote access.
+
+  The actual fix is on the aircraft: `netlink.py` calls `redial_tunnel()` the moment it changes link, which kills the old `ssh` child immediately. Its FIN reaches the VPS over the still-up old interface, the port is released, and the next dial binds. The shortened probe interval is the backstop for the case where the old interface really is gone.
 
   No `Match` block, deliberately. `Include /etc/ssh/sshd_config.d/*.conf` sits at line 12 of the main `sshd_config`, so a `Match` in a drop-in would capture every directive below it in the main file.
 
